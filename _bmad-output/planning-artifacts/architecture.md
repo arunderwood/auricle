@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [1, 2, 3, 4]
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/brainstorming/brainstorming-session-2026-04-23-1644.md
@@ -7,6 +7,9 @@ workflowType: 'architecture'
 project_name: 'auricle'
 user_name: 'arunderwood'
 date: '2026-04-26'
+lastStep: 8
+status: 'complete'
+completedAt: '2026-04-28'
 ---
 
 # Architecture Decision Document
@@ -705,7 +708,8 @@ CREATE INDEX idx_retention_pending_fires_at ON retention_timers(fires_at) WHERE 
 -- Per-meeting telemetry rollup; one row populated incrementally via UPSERT (different stages contribute different columns)
 CREATE TABLE telemetry (
     meeting_id TEXT PRIMARY KEY REFERENCES meetings(id) ON DELETE CASCADE,
-    time_to_notification_seconds INTEGER,
+    time_to_attribution_ready_seconds INTEGER,  -- machine-time only: awaiting_attribution.entered_at - capture.completed_at (the part NFR-P1 budgets)
+    time_to_vault_note_seconds INTEGER,         -- user-perceived end-to-end: notify.completed_at - capture.completed_at (includes user-paced attribute time)
     transcription_wer_estimate REAL,
     quote_validation_drop_count INTEGER,
     attribution_completion_path TEXT,          -- 'inline_ui'|'cli_speakers_flag'|'publish_anyway'
@@ -993,6 +997,23 @@ State machine additions (folded back into Decision 1.2):
 - **CLI:** when `auricle run <id>` is invoked in a foreground TTY and a retry is in flight, SIGINT (Ctrl-C) cancels the in-flight request and transitions to `summarization_failed`. Exit code 130 (standard for SIGINT). When `auricle run <id>` is non-interactive (piped, scripted), full budget applies; SIGTERM from the parent process is honored.
 - **Subprocess token billing risk on crash:** if the summarize subprocess crashes after the request reaches Anthropic but before the response arrives, those tokens were billed; the retry pays again. Anthropic's API does not support idempotency-key headers (verify on every release). This is an accepted rare double-bill risk; logged in telemetry as a known cost edge case.
 
+**Wall-clock budgets and stale-active-state detection (Round-2 roundtable lock-in — addresses Sally's silent-spinner UX P0):**
+
+The retry-policy table above defines retry budgets *within* a stage. A separate, coarser budget defines the maximum wall-clock time a stage can remain in its active "_ing" state before the GUI synthesizes a failure transition. Without this, an in-session subprocess SEGFAULT (no Txn B written, no exit-code observed in time, e.g. parent paused or busy) leaves the chip showing "in-flight" indefinitely — the spinner-that-lies failure mode.
+
+| Active state | Wall-clock stale-detection budget | Synthesized transition on stale |
+|---|---|---|
+| `transcribing` | 2 × NFR-P3 transcribe budget (≈ 60s for typical 30-min meeting; configurable) | `transcription_failed` (transient — `auricle run <id>` resumes) |
+| `attributing` | None — user-paced; no auto-failure | n/a |
+| `summarizing` | 2 × NFR-P5 summarize budget (≈ 12 min — covers the 5-min retry budget × 2) | `summarization_failed` (transient — queues for resume) |
+| `published` (waiting for notify) | 30s | `notify` retry path; if still stuck, log warn and proceed to `awaiting_verification` (notify failure is non-blocking per below) |
+
+**Implementation:** the `Orchestrator` runs a periodic stale-detection sweep (every 10s while the GUI is foreground, every 60s when backgrounded). For each meeting in an active "_ing" state, it computes `now - meetings.updated_at` and compares against the budget for that state. On exceedance, it calls `StageRunner.synthesizeFailure(meetingID:reason: .staleActiveState(budget:))` which writes a `stage_events` row with `event='failed'`, `error_class='stale_active_state'`, and transitions the meeting to the corresponding `*_failed` state. The synthesized transition is just like a normal failure for downstream UX (chip flips to amber, banner surfaces, `auricle list` re-sorts).
+
+**Why budget × 2 rather than budget × 1:** the inner-stage retry budget is the legitimate ceiling for a healthy execution. Budget × 2 gives one full retry-budget of grace for slow-but-real progress (laptop on battery, ANE thermal throttle, cold model load) before declaring stale. False-positive stale detection would punish slow but correct execution; budget × 2 is a conservative cushion.
+
+**The GUI parent observing a subprocess `Process.terminationStatus` is a complementary path** (faster detection when termination IS observed) but the stale-detection sweep is the load-bearing safety net — it works even when the parent missed the termination event, force-quit and relaunched, hibernated, etc. Crash recovery on next launch (Decision 1.2) handles the cross-launch case; stale-detection handles in-session.
+
 **Notify policy clarification — the most-flagged gap (Sally + Mary):**
 
 Notify failure does NOT block the pipeline (the meeting moves to `awaiting_verification` regardless), BUT silent skip is unacceptable — users were demonstrated to lose track of meetings entirely. Required compensating surfaces:
@@ -1165,7 +1186,8 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 
 | Column | Populated by | Source |
 |---|---|---|
-| `time_to_notification_seconds` | `notify` stage on completion | `notify.completed_at - capture.completed_at` |
+| `time_to_attribution_ready_seconds` | `notify` stage on completion (or backfilled at `awaiting_attribution` entry, whichever fires first) | machine-time only: `awaiting_attribution.entered_at - capture.completed_at`. **This is the column NFR-P1's 2-min P50 budget applies to** (the part the architecture controls). |
+| `time_to_vault_note_seconds` | `notify` stage on completion | user-perceived end-to-end: `notify.completed_at - capture.completed_at`. **Includes user-paced `attribute` time.** No hard budget; this is the headline number in `auricle stats` (v1.1) and the user's mental model of "how long did auricle take." |
 | `transcription_wer_estimate` | (v1.1) bootstrapped from divergence between transcript and corrected summary | Calculated post-summarize, written by a v1.1 module |
 | `quote_validation_drop_count` | `summarize` stage | From the grounding validator's dropped-item count |
 | `attribution_completion_path` | `attribute` stage | One of `inline_ui` / `cli_speakers_flag` / `publish_anyway` |
@@ -1208,6 +1230,7 @@ Group 4 was nearly silent on how failure states are shown to the user; this deci
 | **On-launch banner** | App launch when any `awaiting_verification` > 24h OR any `*_failed` exists | Non-modal banner with count + click-through to highlighted meetings |
 | **`auricle doctor`** (per Decision 4.4) | On-demand | Includes failure / pending counts in the summary |
 | **`auricle list` default sort** | On-demand | Non-terminal-stale meetings at top with state annotation |
+| **Stale-active-state synthesized failure** (Round-2 lock-in) | Active "_ing" state held longer than 2 × stage budget (per Decision 4.2 wall-clock budgets table) | `Orchestrator` periodic sweep calls `StageRunner.synthesizeFailure(...)` → `stage_events.failed` row written, meeting transitions to `*_failed`, chip flips blue → amber, on-launch banner picks it up. **This is the load-bearing fix for the silent-spinner UX failure mode** — the user never sees an "in-flight" chip lying about a dead subprocess for longer than 2 × budget. |
 
 **v1.1 additions:**
 - **Dock badge** (FR16): numeric count of stale-pending items
@@ -1451,3 +1474,1115 @@ Forward-compat. The `OllamaSummarizer` (and a possible future `MLXSummarizer`) i
 - Latency target: comparable to or better than Claude path (otherwise no v1.1 promotion)
 
 The v1.1 build phase determines whether local LLMs hit the quality bar; if yes, the strategy ships and becomes a config option (NFR-I8). Until then, only the Claude strategies exist; the protocol is shaped to accommodate the future arrival without architectural change.
+
+## Implementation Patterns & Consistency Rules
+
+This section codifies the cross-cutting consistency rules that prevent AI-agent drift across stories. Many patterns were already locked in the Group 1–4 decision tables; this section names them as a single set, fills the gaps where AI agents could otherwise differ, and defines the enforcement layer (build-time, CI, and code-review).
+
+### Conflict Points Identified
+
+11 areas where AI agents could otherwise make different choices, addressed below: Swift naming, file naming, SwiftPM target layout, JSON dialect (snake_case vs camelCase), Codable conventions, error typing, async/actor/class discipline, markdown output formatting, helper-bypass discipline, composition-root discipline, and the test-organization split.
+
+### Naming Patterns
+
+#### Swift Code Naming
+
+Standard Swift API Design Guidelines apply. Project clarifications:
+
+- **Types** (struct / class / enum / actor / protocol): `PascalCase`. Example: `SummarizerOrchestrator`, `MeetingID`, `FailureCategory`.
+- **Functions, properties, parameters, locals**: `camelCase`. Example: `markVerified(meetingId:)`, `transcriptStart`.
+- **Constants**: `camelCase` (Swift convention; never `SCREAMING_SNAKE_CASE` even for module-level constants).
+- **Enum cases**: `camelCase`. Example: `case transient`, `case publicSafe`.
+- **Protocols**: noun- or role-based, no `-able` suffix unless purely behavioral. `SummarizerStrategy`, `CalendarSource` ✓ ; `Summarizable` ✗.
+- **Acronyms**: Swift API Design Guidelines (capitalize all letters when leading, all-lowercase when trailing): `urlString`, `meetingID`, `parseJSON()`. Two-letter and longer acronyms are treated uniformly: `idResolver`, `urlSession`.
+- **Generic parameters**: single capital letter (`T`, `U`, `V`) for fully generic; descriptive PascalCase (`Strategy`, `Source`) when the parameter has a domain role.
+- **Boolean properties / accessors**: positive form, prefixed with `is`/`has`/`should`/`can`: `isVerified`, `hasGroundedQuote`. Avoid double negatives.
+
+#### File Naming
+
+- One **primary** type per file; filename matches the primary type's name: `SummarizerOrchestrator.swift`, `MeetingIDResolver.swift`. (Closely-coupled secondary types — small Codable payload structs, internal enums — may live in the same file.)
+- **Extensions** in their own file when ≥10 lines or when they conform a project type to an external protocol: `Meeting+Codable.swift`, `URL+VaultPath.swift`.
+- **Test files**: `<TypeUnderTest>Tests.swift`. Example: `SummarizerOrchestratorTests.swift`.
+- **Snapshot fixtures**: `Tests/<Target>Tests/Snapshots/<TestName>.txt` (or `.json`).
+- **Non-Swift files in the repo**: `kebab-case` for shell scripts, certs, asset catalogs, JSON fixtures. Example: `scripts/setup-trust.sh`, `assets/auricle-root-ca.cer`.
+
+#### SwiftPM Target Names
+
+- Targets: `PascalCase`, named for their concern. `Capture`, `Transcribe`, `Summarize`, `Persist`, `SummarizerInterface`, `ClaudeSummarizer`, `WhisperKitDiarizer`, `GoogleCalendarSource`.
+- Test targets: `<Target>Tests`. Example: `CaptureTests`, `SummarizeTests`.
+- Source directory mirrors target: `Sources/Capture/...` ↔ target `Capture`. Test directory mirrors test target: `Tests/CaptureTests/...`.
+- Protocol-only ("interface") targets are named `<Concern>Interface`: `SummarizerInterface`, `DiarizerInterface`, `TranscriberInterface`, `CalendarInterface`.
+- Concrete strategy targets are named `<Vendor><Concern>`: `ClaudeSummarizer`, `WhisperKitTranscriber`, `WhisperKitDiarizer`, `GoogleCalendarSource`. (`Vendor` is whatever uniquely identifies the implementation — API name, library name, or runtime.)
+
+#### Database Naming
+
+Locked in Decision 2.1 (`snake_case` SQL, plural table names for entity collections, `idx_<table>_<columns>` indexes, `<table>_<event>` triggers). No additions in this section.
+
+#### CLI Verb / Flag Naming
+
+Locked in Decision 1.5 (lowercase verbs, `kebab-case` flags, `<verb>` `<id>` `[--flags]` shape, JSON `schemaVersion` field). No additions in this section.
+
+#### JSON Field Naming — the dialect rule
+
+The project uses **two** JSON dialects, intentionally. AI agents MUST honor the dialect rule:
+
+| Surface | Dialect | Rationale |
+|---|---|---|
+| Cache-dir artifacts (`transcript.json`, `diarization.json`, `summary.json`, `attribution.json`, `calendar.json`, `glossary.json`, `state.json`) | `snake_case` | Matches SQLite columns, Anthropic API conventions, and the `jq` / terminal-inspection workflow. |
+| Vault frontmatter under the `auricle:` key (`meeting_id`, `schema_version`, `supersedes`) | `snake_case` | Same; consumed by tools (Obsidian Bases, Dataview) where snake_case is conventional. |
+| `stage_events.metadata_json` payloads stored in SQLite | `snake_case` | Same context as cache artifacts; matches surrounding SQL columns. |
+| All `auricle <verb> --json` responses | `camelCase` (`schemaVersion`, `meetingId`, etc.) | Consumed primarily by Swift code (the user's own scripts via `JSONDecoder` default key strategy); matches Swift property names directly. Locked in Decision 1.5. |
+| Structured error JSON (CLI `--json` mode and `os_log` payloads) | `camelCase` | Same surface as CLI output. |
+| Notification `userInfo` payload | `snake_case` (`meeting_id`, `schema_version`, `payload_version`) | Treated as a "system" artifact (cross-process, persists across Sparkle upgrades); consistent with cache-artifact convention. Locked in Decision 4.3. |
+
+**Codable strategy:**
+- **CLI output types**: use Swift's default property names (camelCase); no `CodingKeys` required.
+- **Cache-artifact, frontmatter, and notification-payload types**: declare `enum CodingKeys: String, CodingKey` to map snake_case JSON to camelCase Swift properties.
+- Round-trip tests (encode → decode → equality) are **required** for every JSON-shaped contract type; missing tests are a code-review reject.
+
+#### Logging Categories
+
+- Subsystem: `com.auricle.app` (single value, locked).
+- Category: lowercase, matches the stage or module name. Stage categories: `capture`, `transcribe`, `attribute`, `summarize`, `persist`, `notify`, `verify`, `discard`. Module categories: `orchestrator`, `state`, `telemetry`, `permissions`, `vault-glossary`, `verifier`.
+- Convention: one `Log` instance per file, declared at file top: `private let log = Log(category: "summarize")`.
+
+#### Notification / URL Scheme Names
+
+- URL scheme: `auricle://` (registered in `Info.plist`).
+- Scheme path patterns: `auricle://attribute/<meeting-id>`, `auricle://status/<meeting-id>`. Verbs match CLI verb names where applicable; new schemes follow the same `auricle://<verb>/<arg>` shape.
+- Notification action identifiers (when v1.1 adds inline notification actions): dot-namespaced and bundle-prefixed: `com.auricle.app.notification.verify`, `com.auricle.app.notification.discard`.
+
+### Structural Patterns
+
+#### Repository Layout
+
+```
+auricle/
+├── Package.swift                       # SwiftPM manifest — module-boundary truth
+├── Sources/
+│   ├── Capture/                        # one library target per concern
+│   ├── Transcribe/
+│   ├── Summarize/
+│   ├── ...
+│   ├── auricle-cli/                    # CLI executable target
+│   └── ...
+├── Tests/
+│   ├── CaptureTests/
+│   ├── SummarizeTests/
+│   │   ├── Fixtures/                   # small audio clips, JSON goldens
+│   │   └── Snapshots/                  # snapshot-test outputs
+│   └── ...
+├── App/
+│   └── Auricle.xcodeproj/              # Xcode project for GUI .app bundle
+├── scripts/
+│   └── setup-trust.sh                  # per-Mac trust setup, etc.
+├── assets/
+│   └── auricle-root-ca.cer         # public CA cert (no private key)
+└── _bmad-output/                       # planning artifacts
+```
+
+#### Within a Target
+
+- Source files live at the target root. **Subdirectories within a target** are introduced only when a target exceeds ~15 source files OR holds ~3+ logically distinct sub-concerns. Default: flat.
+- Subdirectory naming when introduced: `PascalCase` matching the conceptual cluster (e.g., `Sources/Summarize/Strategies/ClaudeSubstringSummarizer.swift`). Subdirectories DO NOT change the import path — they're pure file-system organization.
+- If a target needs deeper structure than 1 level of subdirectories, **break it into a smaller target** instead. The rule: target boundaries are the architecture; subdirectories are housekeeping.
+
+#### Test Organization
+
+- One test target per source target. Source-only targets without tests are explicitly justified in `Package.swift` comments (e.g., interface-only targets where there's nothing to test).
+- **Swift Testing** (`@Test` macro, `#expect`) for new test code — including unit, integration, and contract tests.
+- **XCTest** only where Swift Testing's coverage hasn't reached parity (today: performance tests via `XCTMetric`, `XCTPerformanceMetric`). Mark these explicitly with a comment: `// XCTest: performance — Swift Testing has no @Test perf equivalent yet.`
+- Tests use the same library target's types directly (no separate "test helpers" target unless ≥3 test targets need to share fixtures, in which case introduce a `TestSupport` target).
+- Fixtures live under `Tests/<Target>Tests/Fixtures/`. Large recordings (>5 MB) stay outside the repo, referenced by absolute path in environment variables for local-only tests, marked `.serialized` and skipped on CI.
+
+#### Composition Roots
+
+- Exactly one composition root per binary:
+  - GUI: `App/Auricle/AuricleApp.swift` (the `@main`-annotated `App` struct)
+  - CLI: `Sources/auricle-cli/main.swift` (the swift-argument-parser `AsyncParsableCommand`'s top-level type)
+- Composition roots are the **only** places that instantiate concrete strategies (`ClaudeCitationsSummarizer`, `WhisperKitTranscriber`, `GoogleCalendarSource`, etc.) and inject them into the orchestrator.
+- Tests use a third entry point per test target — typically a helper named `makeTestOrchestrator(...)` or a `TestComposition` struct — that wires stub strategies. Stubs live under `Tests/<Target>Tests/Stubs/`.
+- **No type outside a composition root may instantiate a concrete strategy by name.** Code review rejects `let summarizer = ClaudeCitationsSummarizer(...)` in any non-composition-root file. This is the mechanical version of DIP from §Code-Design Discipline (SOLID).
+
+### Format Patterns
+
+#### Swift Type Discipline
+
+- **Value types by default**: `struct` for data, `enum` for sums, `actor` for mutable shared state. `class` is reserved for: subclasses of Apple framework types (e.g., `NSDocument`, `NSWindowController`) and reference-identity-required cases (rare; flagged in code review).
+- **Errors are typed enums** conforming to `Error`. One enum per error domain: `CaptureError`, `TranscribeError`, `SummarizerError`, `PersistError`, `VerifierError`. Cases carry associated values for context (`.permissionDenied(category: TCCCategory)`, `.streamInterrupted(reason: String)`).
+- **`NSError` bridging**: only at Apple-framework callback boundaries; immediately translated into a typed Swift error before propagating further.
+- **Optionals over sentinels**: `String?` not `""`; `Int?` not `-1`. Never use 0 to mean "absent" for an Int that could legitimately be 0.
+- **Strong typing for IDs**: `MeetingID` wraps a ULID `String`; the type system rejects accidental string substitution. Same pattern for any cross-cutting identifier (`CalendarEventID`, `StageEventID`).
+
+#### API Contract Formats
+
+- Every JSON-shaped contract carries a top-level `schema_version` (snake_case dialect) or `schemaVersion` (camelCase dialect) per the dialect rule.
+- ISO8601 UTC `YYYY-MM-DDTHH:MM:SSZ` (or `…SS.fffZ` for sub-second precision) is the only timestamp format anywhere in the system **except** filename slugs (per Decision 2.1, 2.4).
+- ULIDs are stored as 26-char Crockford-base32 `String` in SQLite and notification payloads; wrapped as `MeetingID` in Swift. Conversion is type-checked at the boundary, not scattered through the code.
+
+#### Markdown Output (Vault Notes)
+
+- Frontmatter under `---` fences (YAML), exactly the schema in Decision 2.2.
+- Section headers: **`## ` only** (two-hash) for sections; **never `# `** (the filename owns the document title); **never beyond `### `** (three-hash). Obsidian outline depth stays shallow — this is a deliberate constraint to keep notes scannable.
+- Wikilinks: `[[Display Name]]` for people, projects, concepts (per FR38 + the user's global Second Brain rule).
+- Verbatim quotes: `> ` blockquote prefix, single space after `>`. One quote per line in the source markdown; soft-wrapping handled by the renderer.
+- **No** emoji, **no** horizontal rules (`---` outside frontmatter), **no** tables (Obsidian renders tables inconsistently across themes; bullet lists are universal).
+- File ends with a single trailing newline; UTF-8 encoded; LF line endings.
+
+### Communication Patterns
+
+#### Async / Concurrency Discipline
+
+- `async`/`await` everywhere for project code. **No completion-handler callbacks** for new code; existing Apple-framework callback APIs are wrapped immediately into async (`withCheckedContinuation` or `withCheckedThrowingContinuation`) at the boundary.
+- `actor` for any type holding mutable state shared across tasks. Examples: `Verifier` (Decision 4.3), `SummarizerOrchestrator` (Decision 3.3), `StateStore`, `Telemetry`.
+- **No manual locking** (`NSLock`, `os_unfair_lock`, `DispatchSemaphore`) in project code — actors are the project pattern. Apple-framework callbacks that require a lock-equivalent get an actor wrapper.
+- **`@MainActor`** for SwiftUI views and the AppKit-touching layer of the GUI. Backend types (`Orchestrator`, strategies, etc.) are not `@MainActor`-bound.
+
+#### Cross-Process Communication
+
+- Cross-process IPC mechanisms allowed: **SQLite writes** (Decision 2.1) and **cache-dir artifacts** (Decision 1.3). That's the entire surface.
+- **Forbidden**: XPC, Mach ports, named pipes, shared memory, pasteboard, distributed objects. If a future need arises, surface it as an architecture decision (revising Decision 1.2's "no other coordination layer beyond SQLite for state and the cache-dir for artifacts").
+- Subprocess invocations use `Process` (Swift's `Foundation.Process`) with structured I/O: subprocess writes JSON to stdout, text/JSON-error to stderr per Decision 1.5.
+
+#### Error Propagation
+
+- Stages and strategies **throw typed errors** (per type-discipline rules above).
+- The `Orchestrator` catches typed errors and routes to `FailureCategory` (Decision 4.1) for retry vs surface.
+- User-facing error messages are produced by the CLI / GUI layer — never by stage code. Stage code throws; the layer above translates.
+- Internal-only details (Swift `Error` `description`, stack traces) are emitted to `os_log` at the catch site and never surface to the user. `auricle status <id>` provides the discovery path (Decision 4.5).
+
+#### State Management
+
+- **Single source of truth**: SQLite for state, cache-dir for artifacts (Decision 1.2).
+- **No in-memory shadow state**. All state reads go through the `StateStore` module's typed API. Direct `db.read { ... }` outside `StateStore` is a code-review reject — types funnel through `StateStore.fetchMeeting(id:)`, `StateStore.fetchPending()`, etc.
+- The `Orchestrator` re-reads state on every dispatch; it never carries a `Meeting` object across stage boundaries between subprocess invocations. (Within one subprocess invocation, holding a `Meeting` value across the stage's logic is fine; that subprocess writes back via `StateStore` at exit.)
+- GUI state observation via GRDB `ValueObservation` for in-process changes + `DispatchSource.makeFileSystemObjectSource` on `db.sqlite3-wal` for cross-process changes (per Decision 2.1 — `ValueObservation` is in-process only).
+
+#### Idempotency & Two-Transaction Pattern
+
+- Every stage is idempotent (NFR-R5).
+- The **two-transaction pattern** (Decision 1.2: Txn A = "started" + active state; Txn B = "completed/failed" + target state) is enforced by a **`StageRunner.run { ... }` helper** in the `Orchestrator` target. Stages never write to `meetings.state` or `stage_events` directly — they call into `StageRunner`, which owns both transactions and the failure handling.
+- Direct `db.write { ... }` on `meetings` or `stage_events` outside `StageRunner` is a code-review reject.
+
+### Process Patterns
+
+#### Helper Discipline (the bypass-prohibition rule)
+
+The project has several **single-implementation primitives**, each owned by exactly one target. AI agents MUST go through the helper, not around it:
+
+| Primitive | Owner target | Used for | Bypass = code-review reject |
+|---|---|---|---|
+| `AtomicWriter` | `Core` | Every artifact write (cache JSON, vault markdown) | Direct `Data.write(to:)`, `String.write(to:atomically:encoding:)` |
+| `VaultWriter` | `Persist` | Vault markdown writes (wraps `AtomicWriter` + path resolution + collision handling) | Any direct write under `vault_path/meetings_subdir/` |
+| `CacheArtifactWriter` | `Core` | Cache-dir JSON writes (wraps `AtomicWriter` + `schema_version` injection) | Any direct write under `~/Library/Caches/com.auricle.app/<id>/` |
+| `Verifier` (actor) | `Verify` | Marking a meeting verified + arming retention timer | Any direct write to `meetings.verified_at` or insert to `retention_timers` |
+| `Log` (facade) | `Core` | Every log call | Direct `os_log(...)`; direct `print(...)` outside CLI bare-output paths |
+| `Telemetry.record(...)` | `Telemetry` | All telemetry inserts | Direct SQL on the `telemetry` table |
+| `StageEventLogger.record(...)` | `Telemetry` | All `stage_events` inserts | Direct SQL on `stage_events` |
+| `StageRunner.run { ... }` | `Orchestrator` | Stage execution wrapping (the two-transaction pattern) | Direct writes to `meetings.state` |
+| `PermissionChecker` | `Permissions` | All permission checks | Direct `AVCaptureDevice.authorizationStatus(for:)`, etc. |
+| `MeetingIDResolver` | `Core` | Every `<id>` argument resolution | Custom ULID-prefix matching code |
+
+The helpers have one implementation, one test, one set of edge-case decisions. Reinventing them in stage code creates inconsistency and reopens fixed bugs.
+
+#### Atomic-Write Enforcement (Reinforcing #3 from Cross-Cutting Concerns)
+
+- `AtomicWriter.write(_ data: Data, to path: URL)` is the only filesystem-write primitive. It implements `temp → fsync → rename` per NFR-R1 and FR36.
+- All higher-level writers (`VaultWriter`, `CacheArtifactWriter`) compose on top of `AtomicWriter`.
+- A repo-level grep CI check fails the build if `Data.write(to:)`, `String.write(to:atomically:encoding:)`, or `FileManager.createFile(...)` appears anywhere outside `AtomicWriter.swift` itself.
+
+#### Permission Detection
+
+- Single `PermissionChecker` type owned by the `Permissions` target. All callers go through it.
+- Checks are memoized for the lifetime of the process; refresh on AppKit-broadcast settings-change notifications (`NSWorkspace.shared.notificationCenter`).
+- Detection points (Decision 4.4): app launch, before stage entry, on revocation events. Each detection point calls `PermissionChecker.refresh()` first to invalidate the memoized cache.
+
+#### Telemetry & Logging Convention
+
+(Locked mostly in Decision 4.5; rules restated here as enforcement language.)
+
+- Every log call is `log.info(...)` / `log.warn(...)` / `log.error(...)` / `log.debug(...)` on a `Log` instance — never `os_log(...)` directly.
+- Every call site **must** specify sensitivity at the field level: `log.info("transcribe completed", duration: .publicSafe(durationMs), audioPath: .sensitive(path))`. Defaulting to `publicSafe` is a code-review reject; defaulting to `sensitive` is permissible (conservative is fine).
+- Log levels:
+  - `debug` — build-time only, stripped in release via compile-time flag
+  - `info` — default; every stage emits one `info` line per state transition (paired with the `stage_events` row)
+  - `warn` — potential issue surfaced to user (e.g., quote-validation drops, calendar enrichment failure-but-publish-anyway)
+  - `error` — failure paired with a state transition into `*_failed`
+- API keys, OAuth tokens, transcript content, attendee emails, and Anthropic response bodies are **never** passed to the `Log` facade in any form. They're scrubbed at the source (the HTTP-client layer wraps the response so log-emitters see only redacted metadata).
+
+### Enforcement Guidelines
+
+**All AI agents MUST:**
+
+1. Honor SwiftPM target boundaries — accidental cross-target imports are a build error and must remain so.
+2. Use the helper APIs (table above) instead of their underlying primitives.
+3. Match every binding-contract surface (CLI verb/flag names per Decision 1.5; frontmatter schema per Decision 2.2; cache-dir filenames per Decision 1.3; SQLite columns per Decision 2.1).
+4. Honor the JSON dialect rule (snake_case for system surfaces, camelCase for CLI surfaces).
+5. Use typed Swift error enums; never raise `NSError` from project code, never use string error codes.
+6. Treat every stage as idempotent and every artifact write as atomic.
+7. Use Swift Testing for new tests, XCTest only where coverage hasn't reached parity (commented justification).
+8. Place concrete-strategy instantiation only inside composition roots.
+
+**Pattern Enforcement (mechanical):**
+
+- **Build-time**: SwiftPM rejects cross-target imports per `Package.swift` declarations.
+- **Lint-time (`swiftformat`/`swiftlint` config in repo root)**:
+  - Naming rules (PascalCase types, camelCase functions/properties, kebab-case flags via `swiftlint` custom rules)
+  - File-layout rules (one primary type per file, extension-file naming)
+  - Helper-bypass detection (custom `swiftlint` rules grepping for `Data.write(to:`, direct `os_log(`, direct `JSONDecoder().decode(... transcript ...)` outside the canonicalization layer, etc.)
+- **CI-time tests**:
+  - JSON contract round-trip tests for every `Codable` conformance representing a contract type
+  - Snapshot tests on `SummarizationPromptBuilder` outputs (Decision 3.2 — fail build on prompt drift)
+  - Canonicalization invariant tests (Decision 3.4 — fail build on offset divergence between Citations and substring strategies)
+  - Cross-mode fixture tests (Decision 3.4 — same input, both strategies, byte-identical renderer output)
+  - GRDB migration round-trip tests (every migration applies cleanly to an empty DB and to the prior version's DB)
+- **Code-review checklist** (the human layer for what tooling can't catch):
+  - Helper-bypass patterns (any direct call to a wrapped primitive)
+  - String-typed errors / `NSError` bridges escaping their introduction site
+  - Concrete-strategy instantiation outside a composition root
+  - State writes outside `StateStore` / `StageRunner` / `Verifier`
+  - JSON dialect violations (snake_case in CLI output, or camelCase in cache artifacts)
+  - Markdown output features outside the allowed set (extra header depth, tables, emoji)
+  - Logging sensitivity defaults
+
+**Pattern Updates:**
+
+- Updates to these patterns require (a) a paragraph in this document explaining the change and rationale, and (b) either a CI-verifiable enforcement update or an explicit note that enforcement is human-only.
+- Patterns that turn out to be wrong are revised in place — this document is not append-only.
+
+### Pattern Examples
+
+**Atomic vault write — good:**
+
+```swift
+public func persist(meeting: Meeting, summary: SummaryWithGrounding) throws {
+    let path = vaultWriter.resolvePath(for: meeting)
+    let markdown = FrontmatterRenderer.render(meeting: meeting, summary: summary)
+    try vaultWriter.write(markdown, to: path)  // wraps AtomicWriter
+}
+```
+
+**Atomic vault write — anti-pattern:**
+
+```swift
+try markdown.write(to: path, atomically: false, encoding: .utf8)
+// REJECT: bypasses AtomicWriter; loses fsync; may leave partial file on crash
+```
+
+**Typed error — good:**
+
+```swift
+public enum CaptureError: Error {
+    case permissionDenied(category: TCCCategory)
+    case streamInterrupted(reason: String)
+    case permissionRevokedMidstream
+}
+throw CaptureError.permissionDenied(category: .screenCapture)
+```
+
+**Typed error — anti-pattern:**
+
+```swift
+throw NSError(domain: "auricle.capture", code: 1,
+              userInfo: [NSLocalizedDescriptionKey: "permission denied"])
+// REJECT: not pattern-matchable; loses category; doesn't compose with FailureCategory
+```
+
+**Actor-protected state — good:**
+
+```swift
+public actor Verifier {
+    public func markVerified(meetingId: MeetingID) async throws { ... }
+}
+```
+
+**Actor-protected state — anti-pattern:**
+
+```swift
+public final class Verifier {
+    private let lock = NSLock()
+    public func markVerified(meetingId: MeetingID) throws {
+        lock.lock(); defer { lock.unlock() }
+        // ...
+    }
+}
+// REJECT: actors are the project pattern; manual locks reintroduce bugs actors prevent
+```
+
+**JSON dialect — good (cache artifact, snake_case):**
+
+```swift
+struct TranscriptArtifact: Codable {
+    let schemaVersion: Int
+    let segments: [Segment]
+    let modelId: String
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case segments
+        case modelId = "model_id"
+    }
+}
+```
+
+**JSON dialect — good (CLI output, camelCase):**
+
+```swift
+struct StatusResponse: Codable {
+    let schemaVersion: Int  // serializes as "schemaVersion" — default keys
+    let meeting: MeetingStatus
+}
+```
+
+**JSON dialect — anti-pattern:**
+
+```swift
+// camelCase in a cache artifact
+struct TranscriptArtifact: Codable {
+    let schemaVersion: Int
+    let segments: [Segment]
+    let modelId: String
+    // REJECT: cache artifacts use snake_case dialect — see dialect rule
+}
+```
+
+**Stage execution — good:**
+
+```swift
+try await stageRunner.run(stage: .transcribe, meetingId: id) { db in
+    let audioPath = try StateStore.fetchAudioPath(meetingId: id, db)
+    let transcript = try await whisperKit.transcribe(audio: audioPath)
+    try CacheArtifactWriter.write(transcript, for: id, named: "transcript.json")
+    return .completed(metadata: .transcribe(.init(...)))
+}
+```
+
+**Stage execution — anti-pattern:**
+
+```swift
+try db.write { db in
+    try db.execute(sql: "UPDATE meetings SET state = 'transcribing' WHERE id = ?", arguments: [id])
+}
+// ... do transcription ...
+try db.write { db in
+    try db.execute(sql: "UPDATE meetings SET state = 'awaiting_attribution' WHERE id = ?", arguments: [id])
+    try db.execute(sql: "INSERT INTO stage_events ...")
+}
+// REJECT: bypasses StageRunner; misses Txn A; misses error handling; loses metadata typing
+```
+
+**Helper bypass — anti-pattern:**
+
+```swift
+os_log("transcribe completed in %lld ms", log: .default, type: .info, durationMs)
+// REJECT: bypasses Log facade; no sensitivity tagging; uses default subsystem instead of com.auricle.app
+```
+
+## Project Structure & Boundaries
+
+This section is the concrete, file-and-directory-level realization of every decision above. AI agents implementing stories should treat the target list as the single source of truth for "where does this code live" — every concern below maps to exactly one target.
+
+### Complete Project Directory Structure
+
+```
+auricle/
+├── Package.swift                          # SwiftPM manifest — the module-boundary truth
+├── Package.resolved                       # SwiftPM lockfile, committed
+├── README.md
+├── LICENSE
+├── .gitignore
+├── .swiftformat                           # naming + layout rules (see step-05 enforcement)
+├── .swiftlint.yml                         # custom rules including helper-bypass detection
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                         # swift test + xcodebuild + lint + contract tests
+│       └── release.yml                    # tag-triggered .app build, sign, Sparkle appcast
+│
+├── Sources/                               # SwiftPM library targets
+│   ├── Core/                              # shared primitives — depended on by nearly everything
+│   │   ├── AtomicWriter.swift             # the only filesystem-write primitive
+│   │   ├── CacheArtifactWriter.swift      # cache-dir JSON writes (wraps AtomicWriter)
+│   │   ├── CanonicalTranscript.swift      # NFC-normalized transcript representation (Dec 3.4)
+│   │   ├── Codable+Dialects.swift         # JSON dialect helpers (snake/camel coding-key strats)
+│   │   ├── Config.swift                   # config-file load/save, tilde expansion
+│   │   ├── FailureCategory.swift          # enum (Dec 4.1)
+│   │   ├── Log.swift                      # logging facade with sensitivity tagging
+│   │   ├── MeetingID.swift                # ULID wrapper
+│   │   ├── MeetingIDResolver.swift        # `<id>` argument resolution (Dec 1.5)
+│   │   ├── PipelineState.swift            # canonical state-name enum (Dec 1.2)
+│   │   ├── SchemaVersion.swift            # schema-version constants for every contract
+│   │   └── ULID.swift                     # ULID generation (Crockford base32)
+│   │
+│   ├── State/                             # SQLite layer
+│   │   ├── StateStore.swift               # public API — every state read/write goes through here
+│   │   ├── Meeting.swift                  # GRDB record type
+│   │   ├── StageEvent.swift               # GRDB record type
+│   │   ├── RetentionTimer.swift           # GRDB record type
+│   │   ├── Telemetry.swift                # GRDB record type for the telemetry table
+│   │   ├── Migrations/
+│   │   │   ├── Migration001_Initial.swift
+│   │   │   └── MigrationRegistrar.swift   # GRDB.DatabaseMigrator setup
+│   │   └── DatabasePoolFactory.swift      # GUI uses Pool, subprocess uses Queue (Dec 2.1)
+│   │
+│   ├── Telemetry/                         # telemetry + audit-event writers
+│   │   ├── TelemetryRecorder.swift        # Telemetry.record(...) public API
+│   │   ├── StageEventLogger.swift         # StageEventLogger.record(...) public API
+│   │   └── StageMetadata.swift            # the Codable enum from Dec 4.5
+│   │
+│   ├── Orchestrator/                      # state machine + subprocess dispatch
+│   │   ├── Orchestrator.swift             # the public façade (used by composition roots)
+│   │   ├── StageRunner.swift              # two-transaction pattern wrapper (Dec 1.2)
+│   │   ├── SubprocessDispatcher.swift     # spawns auricle-cli __internal-stage for subprocess stages
+│   │   ├── CrashRecovery.swift            # on-launch reconciliation (Dec 1.2 / FR62)
+│   │   └── RetentionScheduler.swift       # periodic retention-timer firing (FR46)
+│   │
+│   ├── Permissions/                       # TCC + Gatekeeper-trust checks
+│   │   ├── PermissionChecker.swift        # the public API
+│   │   ├── TCCCategory.swift              # enum mapping to deep-link URLs (Dec 4.4)
+│   │   └── GatekeeperTrust.swift          # spctl assessment-policy probe (Distribution Model)
+│   │
+│   ├── Capture/                           # FR1–FR10
+│   │   ├── CaptureSession.swift           # ScreenCaptureKit + AVAudioEngine pipeline
+│   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM (Dec 1.4)
+│   │   ├── WAVWriter.swift                # PCM16 WAV file writer
+│   │   ├── CaptureError.swift
+│   │   └── CaptureMetadata.swift          # StageMetadata.capture payload
+│   │
+│   ├── TranscriberInterface/              # protocol-only target
+│   │   ├── TranscriberStrategy.swift
+│   │   ├── TranscriptArtifact.swift       # cache-dir transcript.json shape
+│   │   └── TranscriberError.swift
+│   │
+│   ├── DiarizerInterface/                 # protocol-only target
+│   │   ├── DiarizerStrategy.swift
+│   │   ├── DiarizationArtifact.swift      # cache-dir diarization.json shape
+│   │   └── DiarizerError.swift
+│   │
+│   ├── SummarizerInterface/               # protocol-only target (Dec 3.1)
+│   │   ├── SummarizerStrategy.swift
+│   │   ├── SummaryWithGrounding.swift     # the normalized output shape
+│   │   ├── GroundedItem.swift
+│   │   ├── GroundingPointer.swift
+│   │   ├── GroundingMethod.swift
+│   │   ├── SummarizerConfig.swift
+│   │   └── SummarizerError.swift          # typed errors that drive Dec 3.3 fallback
+│   │
+│   ├── CalendarInterface/                 # protocol-only target
+│   │   ├── CalendarSource.swift
+│   │   ├── CalendarEvent.swift
+│   │   └── CalendarError.swift
+│   │
+│   ├── Transcribe/                        # FR17, FR19, FR20
+│   │   ├── TranscribeStage.swift          # consumes audio.wav → transcript.json + diarization.json
+│   │   └── TranscribeMetadata.swift
+│   │
+│   ├── Diarize/                           # FR18 — separate target for strategy-swap forward-compat
+│   │   ├── DiarizeStage.swift             # invoked from same subprocess as TranscribeStage
+│   │   ├── SnippetExtractor.swift         # writes snippets/speaker_N.wav (Dec 1.3)
+│   │   └── DiarizeMetadata.swift
+│   │
+│   ├── Attribute/                         # FR21–FR27
+│   │   ├── AttributionMapping.swift       # speaker_N → name; the cache-artifact reader/writer
+│   │   ├── AttributionStage.swift         # reads attribution.json; writes refined identities
+│   │   └── AttributionMetadata.swift
+│   │
+│   ├── Summarize/                         # FR28–FR34
+│   │   ├── SummarizeStage.swift           # the subprocess entry point for summarize
+│   │   ├── SummarizerOrchestrator.swift   # primary/fallback wiring (Dec 3.3)
+│   │   ├── SummarizationPromptBuilder.swift # shared prompt skeleton (Dec 3.5)
+│   │   ├── GlossaryInjector.swift         # FR56 vault-glossary scoping
+│   │   └── SummarizeMetadata.swift
+│   │
+│   ├── ClaudeSummarizer/                  # concrete strategy target
+│   │   ├── ClaudeCitationsSummarizer.swift
+│   │   ├── ClaudeSubstringSummarizer.swift
+│   │   ├── CitationGroundingValidator.swift
+│   │   ├── SubstringGroundingValidator.swift
+│   │   ├── AnthropicHTTPClient.swift      # URLSession wrapper; redacts response bodies pre-log
+│   │   └── KeychainAPIKey.swift           # reads anthropic key from macOS Keychain (NFR-S1)
+│   │
+│   ├── WhisperKitTranscriber/             # concrete strategy target
+│   │   ├── WhisperKitTranscriber.swift
+│   │   └── WhisperKitModelLoader.swift    # whisper-large-v3-turbo on ANE (Dec 1.4 PRD lock)
+│   │
+│   ├── WhisperKitDiarizer/                # concrete strategy target
+│   │   └── WhisperKitDiarizer.swift       # uses WhisperKit's built-in diarize (PRD-locked)
+│   │
+│   ├── GoogleCalendarSource/              # concrete strategy target
+│   │   ├── GoogleCalendarSource.swift
+│   │   ├── GoogleOAuthFlow.swift          # PKCE flow; refresh token in Keychain (NFR-S1)
+│   │   └── EventMatcher.swift             # active-event-at-capture-time logic
+│   │
+│   ├── VaultGlossary/                     # FR55–FR57
+│   │   ├── VaultGlossaryBuilder.swift     # scans vault for [[wikilink]]-target page names
+│   │   └── GlossaryCache.swift            # ~/Library/Caches/.../glossary-cache.json
+│   │
+│   ├── Persist/                           # FR35–FR41
+│   │   ├── PersistStage.swift
+│   │   ├── FrontmatterRenderer.swift      # data → markdown (with the Dec 2.2 schema)
+│   │   ├── VaultWriter.swift              # markdown → atomic write, path-resolution + collision
+│   │   ├── FilenameResolver.swift         # Dec 2.4 slug rules
+│   │   └── PersistMetadata.swift
+│   │
+│   ├── Verify/                            # the verification + retention-arm wiring
+│   │   ├── Verifier.swift                 # the actor (Dec 4.3)
+│   │   ├── ManualVerifyHandler.swift      # invoked by `auricle keep <id>` and GUI confirm
+│   │   └── NotificationClickHandler.swift # invoked by UNUserNotificationCenterDelegate
+│   │
+│   └── Notifications/                     # FR42–FR44
+│       ├── Notifier.swift                 # the public API
+│       ├── NotificationPayload.swift      # Codable, snake_case dialect (Dec 4.3)
+│       └── NotificationCategoryRegistrar.swift # registers UNNotificationCategory on launch
+│
+├── Tests/                                 # one test target per source target
+│   ├── CoreTests/
+│   │   ├── AtomicWriterTests.swift
+│   │   ├── CanonicalTranscriptTests.swift # the Dec 3.4 build-time invariant tests
+│   │   ├── LogRedactionTests.swift
+│   │   ├── MeetingIDResolverTests.swift
+│   │   └── ULIDTests.swift
+│   ├── StateTests/
+│   │   ├── MigrationTests.swift           # round-trip every migration (step-05 CI gate)
+│   │   ├── StateStoreTests.swift
+│   │   └── ConcurrencyTests.swift         # WAL + cross-process write contention
+│   ├── TelemetryTests/
+│   │   └── StageMetadataRoundTripTests.swift
+│   ├── OrchestratorTests/
+│   │   ├── StageRunnerTests.swift         # two-transaction pattern verification
+│   │   ├── CrashRecoveryTests.swift
+│   │   └── SubprocessDispatcherTests.swift
+│   ├── PermissionsTests/
+│   ├── CaptureTests/
+│   │   ├── AudioMixerTests.swift
+│   │   ├── WAVWriterTests.swift
+│   │   └── Fixtures/                      # tiny audio fixtures only
+│   ├── TranscribeTests/
+│   ├── DiarizeTests/
+│   ├── AttributeTests/
+│   ├── SummarizeTests/
+│   │   ├── PromptBuilderSnapshotTests.swift # Dec 3.2 prompt-drift CI gate
+│   │   ├── CrossModeFixtureTests.swift     # Dec 3.4 Citations/substring equivalence
+│   │   ├── Fixtures/
+│   │   │   ├── transcripts/                # canned transcripts for the smoke-test set
+│   │   │   └── stub-llm-responses/         # canned LLM responses for deterministic tests
+│   │   └── Snapshots/
+│   │       └── prompts/
+│   ├── ClaudeSummarizerTests/
+│   ├── WhisperKitTranscriberTests/
+│   ├── WhisperKitDiarizerTests/
+│   ├── GoogleCalendarSourceTests/
+│   ├── VaultGlossaryTests/
+│   ├── PersistTests/
+│   │   ├── FrontmatterRendererTests.swift  # snapshot tests over the Dec 2.2 variants
+│   │   ├── FilenameResolverTests.swift     # the Dec 2.4 slug-edge-case table
+│   │   └── VaultWriterTests.swift
+│   ├── VerifyTests/
+│   │   └── VerifierConcurrencyTests.swift  # Dec 4.3 idempotency under cross-process race
+│   ├── NotificationsTests/
+│   └── TestSupport/                        # shared fixtures + stub strategies (per step-05 rule)
+│       ├── StubSummarizerStrategy.swift
+│       ├── StubCalendarSource.swift
+│       ├── StubTranscriberStrategy.swift
+│       ├── StubDiarizerStrategy.swift
+│       └── TestComposition.swift           # makeTestOrchestrator(...) helper
+│
+├── App/
+│   ├── Auricle.xcodeproj/                  # the only Xcode project — produces both binaries
+│   │   └── ...                             # (GUI scheme + CLI scheme; both depend on SwiftPM lib)
+│   │
+│   ├── Auricle/                            # GUI executable target source
+│   │   ├── AuricleApp.swift                # @main App struct — composition root for GUI
+│   │   ├── MainWindow/
+│   │   │   ├── MainWindowView.swift        # meeting list + state chips (Dec 4.6)
+│   │   │   ├── MeetingRowView.swift
+│   │   │   └── OnLaunchBannerView.swift    # FR-derived stale-pending banner (Dec 4.2)
+│   │   ├── AttributionWindow/              # SwiftUI window for the attribute stage
+│   │   │   ├── AttributionWindowView.swift
+│   │   │   ├── SnippetPlayerView.swift     # AVPlayerView-wrapped snippet playback
+│   │   │   └── AttributionViewModel.swift
+│   │   ├── DoctorWindow/                   # GUI surface for `auricle doctor` (optional MVP+)
+│   │   │   └── DoctorView.swift
+│   │   ├── Settings/
+│   │   │   └── SettingsView.swift          # vault path, model, retention window
+│   │   ├── AppDelegate.swift               # NSApplicationDelegate adapter for SwiftUI
+│   │   ├── NotificationDelegate.swift      # UNUserNotificationCenterDelegate (Dec 4.3)
+│   │   ├── URLSchemeHandler.swift          # handles auricle:// URLs
+│   │   ├── Info.plist                      # NS*UsageDescription strings (Dec 4.4)
+│   │   ├── Auricle.entitlements            # Hardened Runtime; sandbox OFF
+│   │   └── Assets.xcassets/
+│   │
+│   └── auricle-cli/                        # CLI executable target source
+│       ├── main.swift                      # composition root for CLI
+│       ├── Verbs/                          # one file per swift-argument-parser subcommand
+│       │   ├── RecordVerb.swift            # binding contract (Dec 1.5)
+│       │   ├── StopVerb.swift
+│       │   ├── DiscardVerb.swift
+│       │   ├── RunVerb.swift
+│       │   ├── AttributeVerb.swift
+│       │   ├── KeepVerb.swift
+│       │   ├── ListVerb.swift
+│       │   ├── StatusVerb.swift
+│       │   ├── ConfigVerb.swift            # Get + Set nested subcommands
+│       │   ├── DoctorVerb.swift
+│       │   ├── BareInvocation.swift        # `auricle` (no args) status surface
+│       │   └── InternalStageWorker.swift   # hidden subcommand for GUI subprocess invocation
+│       │                                   # — NOT in NFR-I7 binding contract; see boundaries
+│       ├── Output/
+│       │   ├── HumanFormatter.swift        # plain text / TTY-color stderr
+│       │   └── JSONFormatter.swift         # camelCase dialect; schemaVersion-stamped
+│       └── ExitCodes.swift                 # Dec 1.5 exit-code mapping
+│
+├── scripts/
+│   ├── setup-trust.sh                      # per-Mac Gatekeeper trust setup (Distribution Model)
+│   ├── build-release.sh                    # xcodebuild + codesign + (v1.1) Sparkle appcast
+│   └── lint.sh                             # local swiftformat + swiftlint runner
+│
+├── assets/
+│   └── auricle-root-ca.cer             # public CA cert (no private key)
+│
+└── _bmad-output/                           # planning artifacts (this document, PRD, etc.)
+    ├── brainstorming/
+    └── planning-artifacts/
+        ├── architecture.md
+        ├── prd.md
+        └── ...
+```
+
+### Architectural Boundaries
+
+#### Module Boundaries (mechanical, build-time-enforced)
+
+`Package.swift` is the single declarative source of truth for module boundaries. The dependency graph (truncated to the load-bearing edges):
+
+```
+Core ←──────────────────── (depended on by every other library target)
+
+State          → Core
+Telemetry      → Core, State
+Permissions    → Core
+Orchestrator   → Core, State, Telemetry, Permissions
+
+SummarizerInterface → Core
+DiarizerInterface   → Core
+TranscriberInterface → Core
+CalendarInterface    → Core
+
+Transcribe     → Core, State, Telemetry, TranscriberInterface, DiarizerInterface
+Diarize        → Core, State, Telemetry, DiarizerInterface
+Capture        → Core, State, Telemetry, Permissions
+Attribute      → Core, State, Telemetry
+Summarize      → Core, State, Telemetry, SummarizerInterface, CalendarInterface, VaultGlossary
+Persist        → Core, State, Telemetry
+Verify         → Core, State, Telemetry, Notifications
+Notifications  → Core, State
+VaultGlossary  → Core
+
+ClaudeSummarizer        → Core, SummarizerInterface
+WhisperKitTranscriber   → Core, TranscriberInterface
+WhisperKitDiarizer      → Core, DiarizerInterface
+GoogleCalendarSource    → Core, CalendarInterface
+
+# Composition roots — only these may import concrete-strategy targets
+AuricleApp     → Orchestrator, ClaudeSummarizer, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, every UI dependency
+auricle-cli    → Orchestrator, ClaudeSummarizer, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, swift-argument-parser
+```
+
+**Critical edges that DO NOT exist** (rejected by `Package.swift`):
+- Stage targets do NOT depend on each other (Capture cannot import Transcribe; Transcribe cannot import Diarize even though they share a subprocess at runtime — the sharing is composed at the composition root, not via cross-target imports).
+- Strategy targets do NOT depend on each other (`ClaudeSummarizer` cannot import `WhisperKitTranscriber`).
+- The `Orchestrator` target does NOT import any concrete strategy — only the interface targets. Concrete wiring lives only in composition roots.
+- Test targets depend only on their own source target, the `TestSupport` target, and any required interface target. They do NOT import concrete strategies (tests use stubs).
+
+#### Subprocess Boundaries (runtime, not build-time)
+
+Per Decision 1.1, the subprocess boundary is a runtime decision dispatched by `Orchestrator/SubprocessDispatcher.swift`. Runtime boundaries in MVP:
+
+| Stage | Process | Spawned by | Bundled invocation |
+|---|---|---|---|
+| `record` / `capture` | GUI process (in-app) | N/A | direct call |
+| `transcribe` + `diarize` (combined) | Subprocess | `SubprocessDispatcher.spawn(.transcribe, meetingId:)` | `auricle-cli __internal-stage transcribe <id> --worker-protocol-version 1` |
+| `attribute` | GUI process (in-app, modal window) | N/A | direct call |
+| `summarize` | Subprocess | `SubprocessDispatcher.spawn(.summarize, meetingId:)` | `auricle-cli __internal-stage summarize <id> --worker-protocol-version 1` |
+| `persist` | GUI process (in-app) | N/A | direct call |
+| `notify` | GUI process (in-app) | N/A | direct call |
+| `verify` | GUI process or CLI process — wherever the call originates | N/A | direct call into `Verifier` actor |
+
+**The `__internal-stage` hidden subcommand** (Step-06 refinement, accepted from Advanced Elicitation):
+
+The GUI-spawned subprocess work uses a deliberately-hidden CLI subcommand — `auricle-cli __internal-stage <stage> <id> --worker-protocol-version <N>` — that is **NOT** part of the NFR-I7 binding contract. Distinguishing properties:
+
+- Implemented in `App/auricle-cli/Verbs/InternalStageWorker.swift` with `shouldDisplay: false` on its `CommandConfiguration`
+- Excluded from `auricle help` output and shell-completion scripts
+- Independently versioned via `--worker-protocol-version` flag (separate from CLI binding-contract version)
+- Direct-coupled to `SubprocessDispatcher` only; no documentation surface for users
+- May be renamed, restructured, or replaced wholesale across releases without violating NFR-I7
+
+**Why the separation:** Decision 1.5's user-facing CLI surface (`record`, `run`, `keep`, etc.) is a binding product contract — renames and removals require major-version bumps. The GUI-internal worker invocation has different evolutionary pressures (refactoring, telemetry-shape changes, future stage splits) and shouldn't drag the user-facing surface along. Splitting the worker into a hidden subcommand keeps the binding rule applying only where it should — to the verbs the user (or any future user) types in a terminal.
+
+**CLI exposure for users is independent and unchanged:** the user-facing `auricle run --only transcribe <id>` (Decision 1.5) still works for terminal users invoking the same stage. The two paths converge on the same `TranscribeStage` library code, but route through different CLI entry points (binding `RunVerb` vs hidden `InternalStageWorker`). Library code never knows which path invoked it.
+
+**Bundle layout for subprocess invocation:** the Xcode build process bundles the CLI executable inside the GUI `.app`:
+
+```
+Auricle.app/
+└── Contents/
+    ├── MacOS/
+    │   ├── Auricle              # the GUI binary
+    │   └── auricle-cli          # the CLI binary (for subprocess dispatch from GUI)
+    ├── Info.plist
+    ├── Resources/
+    │   └── Assets.car
+    └── _CodeSignature/
+```
+
+The GUI spawns the CLI via `Bundle.main.url(forAuxiliaryExecutable: "auricle-cli")`. The CLI binary is also installable on `$PATH` via a separate copy (e.g., to `~/.local/bin/auricle`) for terminal use.
+
+#### Data Boundaries
+
+| Data class | Storage | Read by | Written by |
+|---|---|---|---|
+| Meeting state, audit log, retention queue, telemetry rollup | SQLite at `~/Library/Application Support/com.auricle.app/auricle.sqlite3` (Dec 2.1) | Every stage via `StateStore` | Per Dec 2.1's write-authority matrix |
+| Per-meeting in-flight artifacts (audio, transcript, diarization, attribution, summary, calendar, glossary) | Cache-dir at `~/Library/Caches/com.auricle.app/<meeting-id>/` (Dec 1.3) | The next stage in the pipeline; CLI inspection verbs | The producing stage; via `CacheArtifactWriter` |
+| Vault notes (the user-facing output) | `<vault_path>/<meetings_subdir>/<filename>.md` (Dec 2.5) | Obsidian, the user; (read by `Persist` for `--reattribute`) | `Persist` via `VaultWriter` |
+| Secrets (Anthropic key, Google OAuth refresh token) | macOS Keychain (NFR-S1) | `ClaudeSummarizer/KeychainAPIKey`, `GoogleCalendarSource/GoogleOAuthFlow` | OAuth flow + first-run config setup |
+| Glossary cache | `~/Library/Caches/com.auricle.app/glossary-cache.json` | `Summarize`'s `GlossaryInjector` | `VaultGlossary/VaultGlossaryBuilder` |
+| Configuration | TOML or JSON at `~/Library/Application Support/com.auricle.app/config.toml` | All processes via `Core/Config` | GUI Settings UI; `auricle-cli config set` |
+| Logs | `os_log` (subsystem `com.auricle.app`) | `auricle status <id>` (`log show` invocation); macOS Console.app | `Core/Log` facade |
+
+**No data crosses these boundaries by any mechanism other than the ones in the table.** No XPC, no shared memory, no UserDefaults for cross-process state. (UserDefaults may be used for in-process GUI window state — geometry, last-selected meeting ID — but never for state that subprocesses also need to read.)
+
+#### Composition-Root Boundaries
+
+The two composition roots — `App/Auricle/AuricleApp.swift` and `App/auricle-cli/main.swift` — are the only places where concrete strategies are instantiated. Their bodies look structurally similar:
+
+```swift
+// App/Auricle/AuricleApp.swift (sketch)
+@main
+struct AuricleApp: App {
+    let orchestrator: Orchestrator = {
+        let summarizer = ClaudeCitationsSummarizer(/* with substring as fallback */)
+        let transcriber = WhisperKitTranscriber()
+        let diarizer = WhisperKitDiarizer()
+        let calendar = GoogleCalendarSource()
+        return Orchestrator(
+            summarizer: summarizer,
+            transcriber: transcriber,
+            diarizer: diarizer,
+            calendar: calendar,
+            stateStore: StateStore.production(),
+            telemetry: TelemetryRecorder.production()
+        )
+    }()
+    var body: some Scene { /* ... */ }
+}
+
+// App/auricle-cli/main.swift (sketch)
+@main
+struct AuricleCLI: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "auricle",
+        subcommands: [
+            RecordVerb.self, StopVerb.self, DiscardVerb.self,
+            RunVerb.self, AttributeVerb.self, KeepVerb.self,
+            ListVerb.self, StatusVerb.self, ConfigVerb.self,
+            DoctorVerb.self,
+            InternalStageWorker.self  // hidden — shouldDisplay: false
+        ],
+        defaultSubcommand: BareInvocation.self
+    )
+    // composition lives in a shared `Composition.shared` instance read by each verb
+}
+```
+
+Tests use a third composition root, `Tests/TestSupport/TestComposition.swift`'s `makeTestOrchestrator(...)`, which wires stub strategies.
+
+### Requirements to Structure Mapping
+
+#### FR-Cluster Mapping
+
+| FR cluster | PRD FRs | Primary target(s) | Supporting targets |
+|---|---|---|---|
+| Capture | FR1–FR10 | `Capture` | `Permissions`, `State` |
+| Transcribe + Diarize | FR17–FR20 | `Transcribe`, `Diarize` | `WhisperKitTranscriber`, `WhisperKitDiarizer`, `TranscriberInterface`, `DiarizerInterface`, `State` |
+| Attribute | FR21–FR27 | `Attribute` | `App/Auricle/AttributionWindow/`, `State` |
+| Summarize | FR28–FR34 | `Summarize` | `SummarizerInterface`, `ClaudeSummarizer`, `VaultGlossary`, `CalendarInterface`, `GoogleCalendarSource` |
+| Persist | FR35–FR41 | `Persist` | `Core/AtomicWriter`, `State` |
+| Notify | FR42–FR44 | `Notifications` | `App/Auricle/NotificationDelegate`, `Verify` |
+| Retention | FR45–FR50 | `Verify`, `Orchestrator/RetentionScheduler` | `State` |
+| Calendar | FR51–FR54 | `GoogleCalendarSource` | `CalendarInterface`, `Summarize` (consumer) |
+| Vault glossary | FR55–FR57 | `VaultGlossary` | `Summarize` (consumer) |
+| Config + Permissions | FR58–FR60 | `Core/Config`, `Permissions` | `App/Auricle/Settings`, `auricle-cli/Verbs/ConfigVerb` |
+| Logging | FR61 | `Core/Log` | every target (logging is cross-cutting) |
+| Crash recovery | FR62, NFR-R6 | `Orchestrator/CrashRecovery` | `State` |
+| Cmd-Q graceful exit | FR64 | `App/Auricle/AppDelegate` | — |
+| Sparkle (v1.1) | FR65 | `App/Auricle` (Sparkle SDK) | — |
+| Telemetry | FR66 | `Telemetry`, `State.telemetry` table | every stage (each contributes UPSERT columns) |
+| State machine + pending list | FR13–FR16 | `Orchestrator`, `State` | `auricle-cli/Verbs/ListVerb`, `App/Auricle/MainWindow` |
+| CLI surface | FR11–FR12 + Decision 1.5 binding contract | `auricle-cli` | every library target |
+
+#### Cross-Cutting Concern Mapping
+
+| Concern (from §Cross-Cutting Concerns Identified) | Lives in |
+|---|---|
+| 1. Pipeline state machine + SQLite schema | `State`, `Orchestrator` |
+| 2. Cache-dir handoff contract | `Core/CacheArtifactWriter`, `Core/CanonicalTranscript`, plus per-stage Codable types in each interface target |
+| 3. Atomic-write primitive | `Core/AtomicWriter` (single implementation; bypass-detection lint rule per step-05) |
+| 4. Quote-grounding validator | `ClaudeSummarizer/CitationGroundingValidator` + `ClaudeSummarizer/SubstringGroundingValidator` (validators are tightly coupled to their grounding strategy per Dec 3.1) |
+| 5. Frontmatter schema and versioning | `Persist/FrontmatterRenderer` (writer); `Persist/PersistStage`'s `--reattribute` reader (reader) |
+| 6. Structured logging convention | `Core/Log` (facade enforced by lint rule) |
+| 7. Notification → URL-scheme → retention-arm wiring | `Notifications/`, `Verify/Verifier`, `App/Auricle/NotificationDelegate`, `App/Auricle/URLSchemeHandler` |
+| 8. Permission detection and remediation | `Permissions/PermissionChecker`, `App/Auricle/DoctorWindow`, `auricle-cli/Verbs/DoctorVerb` |
+| 9. Configurable engine strategy | `SummarizerInterface` + composition-root wiring |
+| 10. Telemetry collection at stage boundaries | `Telemetry/StageEventLogger`, `Telemetry/TelemetryRecorder` (both wrapped by `StageRunner.run`) |
+| 11. Vault frontmatter for vault consumers; SQLite for operational state | architectural principle — enforced by `Persist/FrontmatterRenderer`'s narrow input shape (`MeetingForFrontmatter`) which intentionally excludes operational fields |
+
+### Integration Points
+
+#### Internal Communication
+
+- **Library-to-library** (within one process): direct Swift function calls through public APIs. No event bus, no notification center for project events (NotificationCenter is reserved for AppKit-system notifications).
+- **GUI ↔ subprocess**: spawn CLI via `Process` with `__internal-stage` args; SQLite + cache-dir for state and artifacts; subprocess exit code maps to retry/surface decision.
+- **Orchestrator ↔ stages**: `StageRunner.run { ... }` wraps every stage call, owning the two-transaction pattern + telemetry emission. Stages return a typed outcome value; the runner translates it to SQL.
+- **Notification ↔ Verifier**: `App/Auricle/NotificationDelegate` extracts payload, calls `verifier.markVerified(meetingId:)`. Same call path used by `auricle keep <id>` (CLI) and the in-window confirm button (GUI).
+- **`auricle://` URL scheme**: GUI registers handler at launch; CLI dispatches `NSWorkspace.shared.open(URL(string: "auricle://attribute/<id>"))` to invoke the GUI's attribution flow from a terminal.
+
+#### External Integrations
+
+| External system | Library target | Auth | Failure mode |
+|---|---|---|---|
+| WhisperKit | `WhisperKitTranscriber`, `WhisperKitDiarizer` | None (local) | Subprocess restart + 1 retry → `transcription_failed` (Dec 4.2) |
+| Anthropic Claude API | `ClaudeSummarizer/AnthropicHTTPClient` | API key from Keychain | Exponential backoff to 5min cap → `summarization_failed` (Dec 4.2); fallback strategy first (Dec 3.3) |
+| Google Calendar API v3 | `GoogleCalendarSource` | OAuth 2.0 PKCE; refresh token in Keychain | Graceful degradation: meeting publishes with `auricle/needs-calendar-enrichment` tag (FR54) |
+| ScreenCaptureKit + AVFoundation | `Capture` | TCC permissions (Screen Recording, Microphone) | `capture_failed` (permanent); permission revocation mid-stream saves partial audio (Dec 4.4) |
+| UNUserNotificationCenter | `Notifications`, `App/Auricle/NotificationDelegate` | TCC permission (Notifications) | Compensating surfaces in main window + `auricle list` (Dec 4.2) |
+| Obsidian (vault consumer) | `Persist/VaultWriter` (writer); `obsidian://open` URL scheme (notify click) | None (filesystem) | If Obsidian not installed, click handler still marks verified — open is a courtesy (Dec 4.3) |
+| macOS Keychain | `ClaudeSummarizer/KeychainAPIKey`, `GoogleCalendarSource/GoogleOAuthFlow` | TCC (implicit) | Missing key → `auricle doctor` flag; surfaced as user-actionable |
+| Sparkle (v1.1) | `App/Auricle` (Sparkle SPM dependency) | EdDSA-signed appcast (NFR-S9) | Update failure is non-fatal; user can ignore |
+
+#### Data Flow (a single happy-path meeting)
+
+```
+USER: clicks Record (or runs `auricle record`)
+  ↓
+[GUI process / CLI process]
+  Capture/CaptureSession → writes audio.wav to cache-dir
+  StateStore: meetings.state = 'recording' → 'captured'
+  StageEventLogger: capture started, capture completed
+  ↓
+USER: clicks Stop (or `auricle stop`)
+  ↓
+[GUI process spawns subprocess via __internal-stage; CLI process runs in-place via run --only]
+  SubprocessDispatcher → auricle-cli __internal-stage transcribe <id> --worker-protocol-version 1
+    Transcribe/TranscribeStage + Diarize/DiarizeStage (shared subprocess)
+    WhisperKitTranscriber → transcript.json
+    WhisperKitDiarizer → diarization.json + snippets/speaker_N.wav
+    StateStore: 'transcribing' → 'awaiting_attribution'
+  ↓
+[GUI process — interactive]
+  User opens AttributionWindow
+  Attribute/AttributionStage → attribution.json
+  StateStore: 'attributing' → 'summarizing'
+  ↓
+[GUI process spawns subprocess]
+  SubprocessDispatcher → auricle-cli __internal-stage summarize <id> --worker-protocol-version 1
+    Summarize/SummarizeStage
+    VaultGlossary/VaultGlossaryBuilder → glossary
+    GoogleCalendarSource → calendar.json (if reachable)
+    SummarizerOrchestrator(primary: ClaudeCitations, fallback: ClaudeSubstring)
+    Validator → summary.json
+    StateStore: 'summarizing' → 'published' (after persist)
+  ↓
+[GUI process]
+  Persist/PersistStage
+  FrontmatterRenderer → markdown
+  VaultWriter → atomic write to <vault>/<filename>.md
+  Notifications/Notifier → fires UNUserNotification
+  StateStore: 'published' → 'awaiting_verification'
+  ↓
+USER: clicks notification (or runs `auricle keep <id>`)
+  ↓
+[GUI process — NotificationDelegate]
+  Verify/Verifier.markVerified(...)
+    StateStore: meetings.verified_at = now()
+    StateStore: insert retention_timers row
+    StateStore: 'verified'
+  NSWorkspace.open("obsidian://open?file=<note>")
+  ↓
+[Background, after retention window]
+  Orchestrator/RetentionScheduler
+  StateStore: 'retention_expired'
+  Filesystem: cache-dir <meeting-id>/ deleted
+```
+
+Every arrow is either:
+- a public-API call (Swift function within one process)
+- a SQLite write read by another process via `StateStore`
+- a cache-dir artifact read by the next stage via `CacheArtifactWriter`
+
+### File Organization Patterns
+
+#### Configuration Files
+- Repo-level config: `Package.swift`, `.swiftformat`, `.swiftlint.yml`, `.github/workflows/*.yml`, `scripts/*.sh`
+- Per-target config: not used — targets self-describe via `Package.swift`
+- Runtime config (user): `~/Library/Application Support/com.auricle.app/config.toml` (managed by `Core/Config`)
+
+#### Source Organization
+Per step-05 structural rules: one primary type per file, flat layout within each target until a target exceeds ~15 source files. The targets above are sized to stay within that bound; if any exceeds it, it splits rather than introduces subdirectories.
+
+#### Test Organization
+One test target per source target, named `<Target>Tests`. Test fixtures under `Tests/<Target>Tests/Fixtures/`. Snapshot outputs under `Tests/<Target>Tests/Snapshots/`. Shared stubs and `makeTestOrchestrator(...)` in `Tests/TestSupport/`. Swift Testing for new code; XCTest only where commented.
+
+#### Asset Organization
+- Repo assets (cert, etc.): `assets/`
+- App bundle assets (icons, color sets): `App/Auricle/Assets.xcassets/`
+- Test fixtures: per-test-target `Fixtures/` and `Snapshots/` subdirectories
+
+### Development Workflow Integration
+
+#### Library Development
+`swift test` from the repo root runs all SwiftPM library-target tests without invoking Xcode. This is the dominant inner-loop iteration path for Capture/Transcribe/Summarize/Persist library code. The first ~10 implementation stories likely never need to open Xcode.
+
+#### Executable Development
+`xcodebuild -project App/Auricle.xcodeproj -scheme Auricle build` builds the GUI; `-scheme auricle-cli` builds the CLI. From Xcode's UI, both schemes are runnable from the scheme picker.
+
+#### Build Process
+- **CI (GitHub Actions)**:
+  1. `swift build` — verify SwiftPM library compiles
+  2. `swift test` — run all library tests including contract tests, snapshot tests, the canonicalization invariant test
+  3. `xcodebuild build` for both Xcode schemes — verify executables compile
+  4. `swiftformat --lint` and `swiftlint` — fail on naming or layout drift; fail on helper-bypass detections
+- **Release** (`scripts/build-release.sh`):
+  1. `xcodebuild archive` for the GUI scheme
+  2. `codesign` with the leaf cert chained to "Auricle Root CA" (per Distribution Model)
+  3. (v1.1) Generate Sparkle appcast entry with EdDSA signature
+  4. Output: `Auricle-<version>.dmg` (or `.zip`) ready for GitHub Releases
+
+#### Deployment Structure
+- GitHub Releases hosts the signed `.app`/`.dmg` and the Sparkle appcast XML (v1.1+)
+- Per-Mac install: download → `cp -R Auricle.app /Applications/` → run `scripts/setup-trust.sh` once (per Distribution Model). Subsequent updates flow through Sparkle without re-trust.
+
+### Reconciliation Notes
+
+**Step-05 path correction:** Step-05's "Composition Roots" referenced `Sources/auricle-cli/main.swift` for the CLI composition root. This step finalizes that path as `App/auricle-cli/main.swift` (the CLI is an Xcode "Command Line Tool" target inside the `App/Auricle.xcodeproj` project, per the Starter Template Evaluation). The substantive rule is unchanged — there is exactly one CLI composition root, and concrete strategies are instantiated only there — only the path is corrected. Step-05's other paths (`App/Auricle/AuricleApp.swift` for the GUI; `Tests/TestSupport/TestComposition.swift` for tests) are unchanged.
+
+**`__internal-stage` subcommand (step-06 Advanced Elicitation refinement):** GUI-spawned subprocess work uses a hidden `auricle-cli __internal-stage <stage> <id>` subcommand instead of repurposing the user-facing `auricle run --only <stage> <id>` verb. This decouples the GUI worker contract from the NFR-I7 user-facing binding contract — internal worker invocations can evolve (rename flags, restructure args, split stages) without forcing major version bumps. The user-facing `run --only <stage>` verb continues to work for terminal users invoking the same stage; both paths converge on the same library code.
+
+## Architecture Validation Results
+
+This validation pass combined a structured walk through coherence, requirements coverage, and implementation readiness with a multi-agent cynical-review roundtable (Winston/architect, Amelia/developer, Mary/analyst, Sally/UX in Round 1; Winston + John/PM in Round 2). The roundtable substantially changed the gap inventory from the initial structured walk; the final scope was driven by a "single-user dogfood reality" framing — the architecture is mental scaffolding for a tool the user is the engineer AND user of, not a product launch.
+
+### Coherence Validation ✓
+
+The 18 decisions across Groups 1–4 are internally consistent and do not contradict each other. The roundtable surfaced under-specification (not contradiction) in three places, all folded back into the relevant decisions in place rather than tracked as a delta list:
+
+- **Decision 4.2 — Wall-clock budgets and stale-active-state detection** added: in-session subprocess SEGFAULT no longer leaves the chip showing "in-flight" indefinitely. Detection runs in the `Orchestrator` periodic sweep; failure synthesis flows through `StageRunner.synthesizeFailure(...)`. (Round-1 finding from Sally + Winston.)
+- **Decision 4.5 + Decision 2.1 telemetry table** updated: NFR-P1 budget now applies to `time_to_attribution_ready_seconds` (machine-time only); a separate `time_to_vault_note_seconds` captures user-perceived end-to-end latency including `attribute` time. The original `time_to_notification_seconds` column is retired in favor of the dual columns. (Round-1 finding from Sally.)
+- **Decision 4.6 — Stale-active-state synthesized failure surface** added to the failure-visibility table: completes the "user never sees a lying spinner" guarantee. (Round-1 finding from Sally + Winston, mechanically wired by the new `StageRunner.synthesizeFailure` API.)
+
+### Requirements Coverage Validation ✓
+
+13 capability areas mapped to specific targets in step-06; MVP coverage 95%+. NFR coverage comprehensive after the NFR-P1 dual-column reframing above. Remaining FR27 gap (attribution confidence visualization) deferred to UX-design phase.
+
+### Implementation Readiness Validation — GREEN
+
+**Story 1 (project initialization):** unblocked. Scaffolding doesn't depend on any of the deferred items.
+
+**Story 2 (`Core` primitives):** unblocked. The `URLRouter`, `MeetingIDResolver` protocol, and other small API surfaces surfaced by Amelia get specified in this story, not the architecture.
+
+**Story 3+:** unblocked. The deferred items (cache durability relocation, orphan-subprocess lock-file, closed-loop trust-calibration substrate) are documented as known sharp edges; if any bites in dogfood, a future maintainer addresses it then.
+
+### Gap Disposition
+
+The Round-1 roundtable surfaced 11 gaps. After Round 2's scope-call, they sort into four categories. The `J1` reference in each category answers "does this break the user defaults to auricle by month 2?"
+
+**Folded into existing decisions in place (3 — the "preserve J1" set):**
+
+1. **Silent-spinner UX (Sally + Winston)** — wall-clock budgets in Decision 4.2; stale-detection synthesis row in Decision 4.6. The only Round-1 finding that genuinely threatens J1 trust on meeting #3.
+2. **NFR-P1 reframing (Sally)** — dual telemetry columns in Decision 2.1 + Decision 4.5. Honest measurement.
+3. **TOML config format** — confirmed (Starter Template Evaluation already accepts; one SPM dep, `TOMLKit` or similar).
+
+**Deferred to story-time specification (5 — too detailed for architecture, perfect for the story that touches them):**
+
+4. **`StageRunner.synthesizeFailure(meetingID:reason:)` API** (Amelia) — concrete signature and `metadata_json` shape land in Story 6 (Subprocess wiring). The architecture commits to the existence of the API (referenced in Decision 4.2 + 4.6 above); Story 6 specifies the implementation.
+5. **`URLRouter` in `Core` + `auricle://` URL grammar** (Amelia + Sally) — Story 2 (`Core` primitives) or Story 7 (CLI skeleton) lands the parser, route enum, and malformed-URL toast UX.
+6. **VM-factory pattern for SwiftUI views** (Amelia) — Story 8+ (first SwiftUI window) chooses between `EnvironmentObject`-injected factory vs. `@Observable` (Swift 5.9+) with manual subscription. Defer the choice until the first concrete view exists.
+7. **`MeetingIDResolver` protocol split** (Amelia) — Story 2 splits the type when the first test stub needs it.
+8. **Malformed `auricle://` URL toast** (Sally) — Story 8+ (GUI shell) lands the toast component.
+
+**Documented known sharp edges (defer with eyes open — N=1 dogfood absorbs them; revisit if they bite):**
+
+9. **Cache-dir durability domain mismatch (Winston)** — `~/Library/Caches/com.auricle.app/<meeting-id>/` is OS-evictable. Per-meeting JSON artifacts could theoretically vanish under disk pressure between an artifact write and the SQLite Txn B that marks the stage complete. **Mitigation accepted as known sharp edge:** the periodic-sweep stale-detection (Decision 4.2 lock-in above) catches this case as a normal failed transition; the meeting transitions to `*_failed` and `auricle run <id>` re-runs the stage. Idempotency holds. The non-determinism risk (LLM summarize re-running and producing a different summary than the first execution) is acknowledged; the user notices and accepts. If this proves disruptive in dogfood, a future maintainer relocates artifacts to Application Support — bounded refactor.
+10. **Orphan subprocess after GUI force-quit (Winston)** — same mitigation: stale-detection sweep + crash-recovery on next launch. Lock-file mechanism deferred until a concrete race shows up.
+11. **Closed-loop trust calibration is foreclosed for now (Mary)** — DP2 (no confidence flags in vault) + DP4 (re-publish writes a sibling, never modifies original) + the explicit decision NOT to add a fourth persistence layer for the diff substrate together mean the v1.1 closed-loop telemetry would need to instrument forward from when it's built (3 months of dogfood data after column addition) rather than retroactively. the user's `auricle stats` (v1.1) drop rates remain process metrics, not validated quality metrics, until that instrumentation exists. **This is an accepted scope choice**, not a hidden bug — Mary's diagnosis is preserved as a known limitation in this validation section. The fix (capture vault file hash on persist; v1.1 reads + diffs on a background job) is specified for v1.1; not pre-instrumented.
+
+**Deferred to UX-design phase (1):**
+
+12. **First-meeting onboarding (Sally)** — architecture supports it (the SwiftUI window state machine is exposed for whatever onboarding UI fills it); next BMad workflow (UX design, narrowly scoped to attribution UI + main-window state surfaces per the user's stated next step) defines the actual onboarding affordances.
+
+### Architecture Completeness Checklist
+
+**✓ Requirements Analysis** — project context analyzed, scale and complexity assessed, technical constraints identified, cross-cutting concerns mapped.
+
+**✓ Architectural Decisions** — 18 decisions across 4 groups, plus Round-2 lock-ins folded into Decisions 2.1, 4.2, 4.5, 4.6. Technology stack fully specified. Integration patterns defined.
+
+**✓ Implementation Patterns** — naming conventions, structure patterns, communication patterns, process patterns documented. Helper-discipline table covers 10 single-implementation primitives + lint enforcement.
+
+**✓ Project Structure** — complete directory structure, component boundaries, integration points, FR-cluster + cross-cutting-concern mapping. Five small specifications (`URLRouter`, `MeetingIDResolver` protocol, VM-factory, `StageRunner.synthesizeFailure` signature, malformed-URL toast) land in the stories that need them rather than carried in the architecture document.
+
+**✓ Validation** — coherence, coverage, readiness all green. Multi-agent roundtable findings disposed.
+
+### Architecture Readiness Assessment
+
+**Overall Status:** READY FOR IMPLEMENTATION (Story 1 + Story 2 unblocked today; subsequent stories unblocked in sequence).
+
+**Confidence Level:** High. The Round-2 scope-call by John (PM) reframed the validation against the actual J1 success criterion — "the user defaults to auricle by month 2" — rather than a generic "production-ready" rubric. Three architectural commitments earn their MVP weight (silent-spinner fix, NFR-P1 honesty, TOML config); five small specs defer to the stories that touch them; three findings document accepted scope (cache durability, orphan subprocess, closed-loop telemetry foreclosure). The architecture has not bloated to fix every theoretical concern — it has fixed the J1-blockers and named the rest honestly.
+
+**Key Strengths (validated by roundtable):**
+- Mechanical SOLID enforcement via SwiftPM target boundaries
+- Strong IPC contract decoupling (SQLite + cache-dir + URL scheme + `__internal-stage` subcommand)
+- Helper-discipline pattern (10 primitives + lint-rule enforcement)
+- Dual-strategy summarization with build-time canonicalization invariant (Decision 3.4)
+- CLI as first-class product surface with hidden worker subcommand for binding-contract isolation
+- Stale-active-state detection (new) closes the silent-spinner UX gap with a single periodic-sweep mechanism
+
+**Accepted Limitations (named honestly, not hidden):**
+- N=1 dogfood absorbs cache-dir eviction and orphan-subprocess edge cases until they prove disruptive
+- v1.1 closed-loop trust calibration instruments forward from build-time, not retroactively
+- First-meeting onboarding deferred to UX-design phase
+
+**Areas for Future Enhancement:**
+- Streaming pipeline (deliberate one-way door per step-02)
+- Cross-meeting voice-print embeddings (v2+, FR26)
+- Local-LLM summarization (v1.1+, Decision 3.9 protocol-shaped accommodation)
+- Closed-loop trust calibration via vault-edit detection (v1.1+)
+
+### Implementation Handoff
+
+**Pre-Story-1 actions:** none. The architecture document is the handoff artifact. Decisions 2.1, 4.2, 4.5, 4.6 carry the Round-2 lock-ins in place; downstream stories read those decisions as authoritative.
+
+**Story 1 — Project Initialization:**
+
+```bash
+mkdir auricle && cd auricle
+swift package init --type library --name AuricleKit
+# Edit Package.swift to declare the modular target list from step-06.
+# SPM dependencies: WhisperKit, GRDB.swift, swift-argument-parser, TOMLKit (config), Sparkle (v1.1, deferred).
+# Initialize App/Auricle.xcodeproj with two targets (AuricleApp + auricle-cli) depending on the SwiftPM library.
+# Configure: Hardened Runtime ON, Sandbox OFF, Info.plist (NS*UsageDescription strings, CFBundleURLTypes for auricle://),
+#            entitlements (com.apple.security.device.audio-input, notifications), code-signing identity per Distribution Model.
+# Run scripts/setup-trust.sh on the dev Mac.
+# CI: .github/workflows/ci.yml runs swift build, swift test, xcodebuild build, swiftformat --lint, swiftlint.
+# Verify: empty swift test passes; xcodebuild build passes for both schemes.
+```
+
+**Story sequence (locked):**
+
+1. **Story 1**: Project initialization (above).
+2. **Story 2**: `Core` primitives — `AtomicWriter`, `Log` facade, `MeetingID`, `MeetingIDResolver` (+ protocol split when test stubs need it), `URLRouter` + `auricle://` grammar, `CacheArtifactWriter`, `CanonicalTranscript`.
+3. **Story 3**: `State/StateStore` + GRDB migration #1 (with the dual NFR-P1 telemetry columns from Decision 4.5 lock-in) + `Orchestrator/StageRunner` (with `synthesizeFailure(...)` API per Decision 4.2 lock-in).
+4. **Story 4**: `Persist` + `FrontmatterRenderer` + `VaultWriter` + golden-fixture snapshot tests.
+5. **Story 5**: `Summarize` + `SummarizerInterface` + `ClaudeSummarizer` (both validators) + canonicalization invariant tests + Decision 3.6 smoke-test execution.
+6. **Story 6**: `Transcribe` + `Diarize` + `WhisperKit*` + `Orchestrator/SubprocessSupervisor` (integrates `synthesizeFailure(...)` and stale-detection sweep per Decision 4.2 + 4.6 lock-ins).
+7. **Story 7**: `auricle-cli` skeleton (binding-contract verbs + hidden `__internal-stage` worker subcommand).
+8. **Story 8+**: `Capture` + `Permissions` + `App/Auricle` GUI shell (with amber-chip stale-state UX + VM-factory pattern + malformed-URL toast + first-meeting onboarding handed off to UX-design phase) + `AttributionWindow` + `Notifications` + `Verify` + `Calendar` + `VaultGlossary`.
+
+This sequence preserves the brainstorm's risk-front-loaded ordering: the pipeline-plumbing libraries (Stories 2–5) and the CLI executable (Story 7) can be built and dogfooded against pre-existing audio recordings before Story 8's SwiftUI app shell or any ScreenCaptureKit code exists.
