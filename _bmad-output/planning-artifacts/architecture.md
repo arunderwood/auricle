@@ -3,6 +3,7 @@ stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/brainstorming/brainstorming-session-2026-04-23-1644.md
+  - _bmad-output/planning-artifacts/ux-design-specification.md  # Step 9 Principle 8, Step 10 Consolidated Attribution + Round-2 + AI Correction Phased Roadmap, Step 11 Component Strategy — surgical amendments applied 2026-05-01
 workflowType: 'architecture'
 project_name: 'auricle'
 user_name: 'Andrewunderwood'
@@ -10,6 +11,13 @@ date: '2026-04-26'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-04-28'
+amendments:
+  - date: '2026-05-01'
+    source: 'ux-design-specification.md'
+    summary: 'UX-design-workflow amendments: single-window architecture (Attribution sheet), reviewing_diarization pipeline state, AIReviewerStrategy family (new Decision Group 5), NFR-C1 cost-ceiling tiers, telemetry schema extension for AI-correction category.'
+  - date: '2026-05-01'
+    source: 'bmad-party-mode review (Sally / Mary / Amelia)'
+    summary: 'Second-pass clarifications surfaced by multi-agent review: transcript-pane disclosure collapsed-by-default + label text; AIHintChip + ThisIsMeButton accessibility contracts (NFR-A1/A3/A5); false_positive_count explicitly marked v1.1 forward-instrumentation (gap #11); 30-day cost-widget SQL aggregation specified; divide-by-zero handling for kill criteria (suggestions_count=0 → insufficientSignal, not pass); renderTranscript signature + resolution order + golden-fixture matrix; subprocess→GUI handoff race-free contract (state-advance is canonical signal, file-watch is latency optimizer); cache-dir file-watch vs SQLite WAL distinction (two independent watchers); telemetry UPSERT writer-partitioning rule (subprocess writes count/cost/model; GUI writes applied/rejected; no overlap); NFR-P9 explicit memory budget table for Attribution sheet open-state. PRD-coherence findings deferred to a separate PRD review.'
 ---
 
 # Architecture Decision Document
@@ -33,13 +41,13 @@ The PRD organizes capability into 13 areas. Architecturally, they cluster into s
 
 The architecture-shaping NFRs:
 
-- **Performance budgets are tight and reference-hardware-pinned.** End-to-end P50 ≤2 min and P95 ≤5 min for a 30-min meeting on M5 Max (NFR-P1); transcribe ≤30s (NFR-P3); summarize P50 ≤60s (NFR-P5); idle CPU ≤1% (NFR-P11); peak memory ≤4 GB (NFR-P10); cold start ≤1.5s (NFR-P12). These constraints lock WhisperKit-on-ANE for transcription and force model-load isolation into the subprocess.
+- **Performance budgets are tight and reference-hardware-pinned.** End-to-end P50 ≤2 min and P95 ≤5 min for a 30-min meeting on M5 Max (NFR-P1); transcribe ≤30s (NFR-P3); summarize P50 ≤60s (NFR-P5); idle CPU ≤1% (NFR-P11); idle GUI memory ≤200 MB (NFR-P9); peak memory ≤4 GB (NFR-P10); cold start ≤1.5s (NFR-P12). These constraints lock WhisperKit-on-ANE for transcription and force model-load isolation into the subprocess. NFR-P9 is the binding ceiling for the Attribution sheet's open-state memory (Decision 5.3 adopts ~98 MB as the working target — shared `AVAudioFile` for paragraph playback + ~5 MB pre-loaded speaker-snippet buffers + view model state — leaving headroom for SwiftUI overhead).
 - **Reliability NFRs use "zero events tolerated" framing.** Atomic vault writes (NFR-R1), zero unverified-audio-deletion (NFR-R3), quote-grounding hard gate (NFR-R7). These elevate the vault-write path, the retention-arm path, and the QuoteValidator to load-bearing correctness boundaries.
 - **Security/privacy posture is local-first by construction.** Keychain-only secrets (NFR-S1), no plaintext persistence, no telemetry endpoint exists (NFR-S8, NFR-Pr2), audio never sent to any API (NFR-Pr4). Architecturally this means there is no remote-observability plane to design — only structured `os_log` and local SQLite.
 - **Maintainability NFRs lock language stack.** Swift / SwiftUI / AppKit only in MVP (NFR-M1); subprocess isolation per stage (NFR-M2); structured logging per stage (NFR-M3); CI-runnable smoke test (NFR-M5); reproducible builds (NFR-M7). Pyannote sidecar in v2+ is the deliberately-scoped exception.
 - **Integration NFRs name binding contracts.** Frontmatter schema is versioned and migration-aware (NFR-I4); CLI argument signatures are stable, breaking changes require major bump (NFR-I7); summarization model identifier is configurable (NFR-I6).
 - **Accessibility NFRs apply to the attribution UI in particular** — keyboard navigability with Spacebar snippet playback (NFR-A2), VoiceOver labels (NFR-A1), color-not-sole-conveyor for the recording indicator and calendar-attendee priority badge (NFR-A3).
-- **Cost ceiling pins the Claude prompt design.** ≤$0.10/30-min meeting at MVP (NFR-C1), ≤$0.05 at v1.1 via prompt caching + glossary scoping (NFR-C2). The summarization architecture must be cache-friendly.
+- **Cost ceiling pins the Claude prompt design.** Tiered per Decision 5.6: NFR-C1 default ≤$0.50/30-min meeting at MVP (Opus summarize only; jargon correction inline within the same call); ≤$0.60 ceiling kicks in only when the user opts into diarization review (Haiku review pass + Opus summarize); ≤$0.05 at v1.1 via prompt caching + glossary scoping (NFR-C2). Local-LLM strategy (FR33) drops all of these to $0. The summarization architecture must be cache-friendly; the AI-reviewer category (Decision Group 5) reuses the same `cache_control` discipline.
 
 **Scale & Complexity:**
 
@@ -308,27 +316,31 @@ These decisions are organized into four thematic groups. Each group resolves a c
 
 **Critical (block MVP implementation):**
 - Subprocess vs in-process boundary per stage (Group 1)
-- Pipeline state machine canonical states (Group 1)
-- Cache-dir handoff layout + JSON contract names (Group 1)
+- Pipeline state machine canonical states (Group 1) — including `reviewing_diarization` per Group 5
+- Cache-dir handoff layout + JSON contract names (Group 1) — including `diarization_suggestions.json` per Group 5
 - Audio file format (Group 1)
 - CLI argument surface (Group 1)
-- SQLite schema for state, retention, telemetry (Group 2)
+- SQLite schema for state, retention, telemetry (Group 2) — telemetry columns include AI-reviewer category per Group 5
 - Frontmatter schema for the vault note (Group 2)
 - Re-publish semantics (Group 2)
 - Filename convention rules (Group 2)
 - Claude API output schema and grounding mechanism (Group 3 — depends on Citations spike outcome)
 - Error / failure-state taxonomy (Group 4)
+- AI-reviewer strategy family + `attribution.json` schema extension (`segment_overrides` + `segment_splits`) (Group 5)
 
 **Important (shape architecture, drafted iteratively):**
 - Claude system prompt structure and glossary injection format (Group 3)
-- Retry / backoff policies per stage (Group 4)
+- Retry / backoff policies per stage (Group 4) — including 90s wall-clock budget for `reviewing_diarization` per Group 5
 - Notification → retention-arm wiring + manual `verify` fallback (Group 4)
 - Telemetry collection points and event schema (Group 4)
 - Permission detection and remediation flow (Group 4)
+- Pre-committed kill criteria + trust-calibration surfaces for AI category (Group 5)
 
 **Deferred (post-MVP):**
 - Sparkle update flow concrete config (v1.1)
 - Local-LLM `SummarizerStrategy` impl details (v1.1+)
+- `ClaudeTranscriptionReviewer` impl (Phase 3, v1.x — interface declared per Decision 5.5)
+- Phase 4 unified reviewer (single Claude call producing all three correction types) (v1.x+)
 - Pyannote sidecar `DiarizerStrategy` impl details (v2+)
 - Cross-meeting voice-print embeddings + persistence (v2+)
 
@@ -350,12 +362,14 @@ Canonical state names persisted as strings in SQLite (grep-friendly, version-sta
 
 **Linear happy path:**
 ```
-recording → captured → transcribing → awaiting_attribution
+recording → captured → transcribing → reviewing_diarization → awaiting_attribution
   → attributing → summarizing → published → awaiting_verification
   → verified → retention_expired
 ```
 
 (`transcribing` covers the combined transcribe+diarize subprocess from Decision 1.1 — they share a WhisperKit model load and run in one subprocess; one state name reflects one subprocess.)
+
+**`reviewing_diarization` (UX spec Step 10 lock-in, MVP, flag-controlled):** an AI sub-stage that runs the `DiarizationReviewerStrategy` (Decision Group 5) over `transcript.json` + `diarization.json` and writes `diarization_suggestions.json` to the cache-dir. Spawned as its own short-lived subprocess (per Decision 5.3) immediately after the WhisperKit subprocess terminates — sequencing is "WhisperKit subprocess exits → memory freed → AI reviewer subprocess starts → AI reviewer subprocess exits → state advances to `awaiting_attribution`." When `diarization_review.enabled = false` (MVP default per Path C), the state is still entered but passes through in <100ms (no Claude call; an empty stub `diarization_suggestions.json` is written). Failure is non-blocking: a malformed Claude response or network unreachability transitions through the state with an empty suggestions file and a `stage_events.failed` row tagged `category: 'benign_terminal'`-equivalent at the stage level (the meeting still advances to `awaiting_attribution`; the Attribution sheet renders without AI hints). The wall-clock stale budget is 90s (Decision 4.2 lock-in).
 
 **Terminal / error branches:**
 - `silent` — VAD halted, v1.1 only (FR9 / FR10). **Benign-terminal** category per Decision 4.1.
@@ -380,7 +394,7 @@ Each stage execution writes SQLite in two small transactions:
 
 If a subprocess crashes between Txn A and Txn B, the database state is unambiguous: `meetings.state` is stuck in an active "_ing" form, and the most recent `stage_events` row for that meeting has `event='started'` with no matching `completed` or `failed`. The active state itself IS the reconciliation signal — no separate sweep table is needed.
 
-**Crash recovery (NFR-R6, FR62):** on launch (GUI or CLI), the Orchestrator runs `SELECT id FROM meetings WHERE state IN ('transcribing','attributing','summarizing','published')` (the active states) and re-dispatches the corresponding stage. NFR-R5 idempotency means the second run overwrites the cache artifact and Txn B commits cleanly. Orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail (consistent with the append-only nature of the events log).
+**Crash recovery (NFR-R6, FR62):** on launch (GUI or CLI), the Orchestrator runs `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','published')` (the active states) and re-dispatches the corresponding stage. NFR-R5 idempotency means the second run overwrites the cache artifact and Txn B commits cleanly. Orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail (consistent with the append-only nature of the events log).
 
 **`auricle pending` (FR15) gets live visibility for free:** a single `SELECT * FROM meetings WHERE state NOT IN ('verified','discarded','retention_expired',<all *_failed states>)` returns every in-flight meeting including those currently being processed.
 
@@ -393,10 +407,12 @@ Per-meeting directory at `~/Library/Caches/com.auricle.app/<meeting-id>/`:
 | File | Owner | Purpose |
 |---|---|---|
 | `audio.wav` | `capture` | Captured audio (see Decision 1.4) |
-| `transcript.json` | `transcribe` | WhisperKit transcript output (versioned schema) |
-| `diarization.json` | `diarize` | Speaker segments with timestamps + per-segment confidence (versioned schema) |
+| `transcript.json` | `transcribe` | WhisperKit transcript output (versioned schema). **Immutable** post-write — AI corrections never modify this file (Decision 5.3 cache-immutability invariant). |
+| `diarization.json` | `diarize` | Speaker segments with timestamps + per-segment confidence (versioned schema). **Immutable** post-write — AI corrections never modify this file (Decision 5.3). |
 | `snippets/speaker_N.wav` | `diarize` (or `attribute --emit-snippets`) | Per-speaker representative clips, 5–10s each, for attribution UI |
-| `attribution.json` | `attribute` | User's speaker→name mapping after attribution stage |
+| `diarization_suggestions.json` | `reviewing_diarization` (`DiarizationReviewerStrategy`, Decision Group 5) | AI-proposed speaker corrections (per-segment splits + over/under-segmentation hints). Empty stub when `diarization_review.enabled = false`. Schema is consumed by the Attribution sheet (UX spec Step 10). |
+| `transcription_suggestions.json` | (declared schema, no MVP impl — Decision 5.5 Phase 3) | AI-proposed word/phrase transcription corrections. Slot reserved for v1.x; not written in MVP. |
+| `attribution.json` | `attribute` | User's speaker→name mapping after attribution stage; carries `segment_overrides` (manual reassignment) and `segment_splits` (AI-applied splits) per Decision 5.4. |
 | `calendar.json` | `summarize` (preceded by calendar enrichment) | Calendar event metadata when enrichment succeeded |
 | `glossary.json` | `summarize` (preceded by vault-glossary build) | Vault-glossary terms injected into the prompt (for debugging) |
 | `summary.json` | `summarize` | Constrained output from Claude, post-validation (groundings retained per Group 3) |
@@ -716,7 +732,19 @@ CREATE TABLE telemetry (
     summarization_path TEXT,                   -- 'claude_api'|'local_llm'
     summarization_model TEXT,                  -- 'claude-opus-4-7'|'claude-sonnet-X'|'ollama:...'
     summarization_effort_budget TEXT,          -- 'minimal'|'low'|'moderate'|'high' or numeric token count
-    cost_usd REAL,
+    cost_usd REAL,                             -- summarize stage cost only (Opus); see *_cost_usd siblings below for AI-reviewer costs
+    -- AI-reviewer category telemetry (Decision Group 5; sparse — populated only when corresponding feature runs)
+    diarization_suggestions_count INTEGER,         -- count of AI-proposed corrections emitted by reviewer
+    diarization_suggestions_applied_count INTEGER, -- count user accepted (per-suggestion Apply or Apply all)
+    diarization_suggestions_rejected_count INTEGER,-- count user explicitly rejected
+    diarization_review_cost_usd REAL,              -- Haiku cost for the review pass; '0' for local-LLM impls (Decision 5.6)
+    diarization_review_model TEXT,                 -- 'claude-haiku-4-5' | 'local:<name>' (Decision 5.6 telemetry contract)
+    -- Transcription review category (Decision 5.5 Phase 3 — declared, sparse in MVP)
+    transcription_suggestions_count INTEGER,
+    transcription_suggestions_applied_count INTEGER,
+    transcription_suggestions_rejected_count INTEGER,
+    transcription_review_cost_usd REAL,
+    transcription_review_model TEXT,
     audio_retention_status_at_30d TEXT         -- backfilled by a periodic retention scheduler
 );
 
@@ -769,6 +797,9 @@ END;
 | `telemetry.transcription_wer_estimate` | `transcribe` subprocess | UPSERT |
 | `telemetry.quote_validation_drop_count`, `summarization_path`, `summarization_model`, `summarization_effort_budget`, `cost_usd` | `summarize` subprocess | UPSERT (row may not exist yet) |
 | `telemetry.attribution_completion_path` | GUI `attribute` stage | UPSERT |
+| `telemetry.diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` subprocess (`DiarizationReviewerStrategy`) | UPSERT; written even when flag is off (count=0, cost=0, model=`'flag_off'`) for sparse-but-explicit telemetry |
+| `telemetry.diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | GUI `attribute` stage (Attribution sheet view model) | UPSERT; debounced incremental writes track user accept/reject actions during the sheet session |
+| `telemetry.transcription_suggestions_*` columns | (declared; no writer in MVP per Decision 5.5 Phase 3) | Slot reserved |
 | `telemetry.audio_retention_status_at_30d` | GUI retention scheduler | Backfilled at 30d mark |
 
 Read access is unscoped — any process may read any table. The write-authority discipline is enforced via narrow Orchestrator entry points, not SQLite ACLs.
@@ -1004,6 +1035,7 @@ The retry-policy table above defines retry budgets *within* a stage. A separate,
 | Active state | Wall-clock stale-detection budget | Synthesized transition on stale |
 |---|---|---|
 | `transcribing` | 2 × NFR-P3 transcribe budget (≈ 60s for typical 30-min meeting; configurable) | `transcription_failed` (transient — `auricle run <id>` resumes) |
+| `reviewing_diarization` | **90s fixed** (per-stage override; not 2× typical Haiku response) | Treated as benign timeout, NOT failure: an empty `diarization_suggestions.json` stub is written and the meeting advances to `awaiting_attribution`. A `stage_events.failed` row is recorded with `error_class='ai_reviewer_timeout'` for telemetry. The Attribution sheet renders without AI hints (acoustic warnings only, per UX spec Step 10 "AI review behavior — non-blocking"). Budget rationale: long-tail Anthropic latency (network stall, 503) drives a conservative ceiling; this is the first stage to use a per-stage override (the table previously assumed 2× of the inner-stage retry budget for every stage). |
 | `attributing` | None — user-paced; no auto-failure | n/a |
 | `summarizing` | 2 × NFR-P5 summarize budget (≈ 12 min — covers the 5-min retry budget × 2) | `summarization_failed` (transient — queues for resume) |
 | `published` (waiting for notify) | 30s | `notify` retry path; if still stuck, log warn and proceed to `awaiting_verification` (notify failure is non-blocking per below) |
@@ -1178,6 +1210,7 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 **Stage-specific `completed` metadata content:**
 
 - `transcribe`: `{"model_id": "whisper-large-v3-turbo", "audio_duration_s": 1827, "transcript_chars": 23847}`
+- `reviewing_diarization`: `{"model_id": "claude-haiku-4-5", "input_tokens": ..., "output_tokens": ..., "cost_usd": ..., "suggestions_count": ..., "review_skipped": false}` — when `diarization_review.enabled = false`, payload is `{"model_id": "flag_off", "cost_usd": 0, "suggestions_count": 0, "review_skipped": true}`. For future local-LLM impls (Decision 5.5 Phase 2/4): `{"model_id": "local:<name>", "cost_usd": 0, ...}`. The `cost_usd: 0` + `model_id: "local:<name>"` contract is locked in MVP telemetry schema so v1.1+ swap is a config change, not a schema migration (Winston's Round-2 lock).
 - `summarize`: `{"model_id": "claude-opus-4-7", "effort_budget": "moderate", "input_tokens": ..., "output_tokens": ..., "thinking_tokens": ..., "cost_usd": ..., "quote_validation_drop_count": ..., "grounding_method": "..."}` (`grounding_method` field becomes `"citations"` or `"substring"` post-spike)
 - `persist`: `{"vault_note_path": "...", "frontmatter_schema_version": 1}`
 - `notify`: `{"notification_id": "...", "delivered": true|false}`
@@ -1193,6 +1226,9 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 | `attribution_completion_path` | `attribute` stage | One of `inline_ui` / `cli_speakers_flag` / `publish_anyway` |
 | `summarization_path` | `summarize` stage | `claude_api` (MVP) or `local_llm` (v1.1+) |
 | `summarization_model`, `summarization_effort_budget`, `cost_usd` | `summarize` stage | From the Claude API response metadata |
+| `diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` stage (Decision Group 5) | Count of AI-emitted suggestions, Haiku cost (or `0` for local-LLM), model id (or `flag_off`/`local:<name>`) |
+| `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | `attribute` stage (Attribution sheet view model writes via UPSERT during sheet session) | Count of user-accepted/rejected AI suggestions; powers Mary's pre-committed kill criteria (Decision 5.7) and the trust-calibration footer (UX spec Step 10 Round-2) |
+| `transcription_suggestions_*` columns | (declared, no MVP writer per Decision 5.5 Phase 3) | Slot reserved for v1.x transcription reviewer |
 | `audio_retention_status_at_30d` | (v1.1) periodic background job | One of `deleted_after_grace` / `kept_explicit` / `unverified_held` |
 
 UPSERT pattern: `INSERT INTO telemetry(meeting_id, ...) VALUES (?, ...) ON CONFLICT(meeting_id) DO UPDATE SET ...`. SQLite + WAL handles cross-process UPSERT atomicity; verify GRDB busy-timeout setting handles the rare contention case (Decision 2.1 GRDB rules).
@@ -1221,16 +1257,23 @@ The facade routes `publicSafe` fields through `%{public}@` and `sensitive` field
 
 Group 4 was nearly silent on how failure states are shown to the user; this decision makes the surfaces explicit.
 
+**Window architecture (UX spec Step 9 Principle 8 lock-in):** auricle's primary surface is a **single main window**. Modal workflow tasks during the pipeline (notably speaker attribution) appear as **sheets attached to the main window** — never as separate `NSWindowController`-per-meeting windows that auto-foreground. Multi-meeting concurrency is handled by a **sheet queue + banner counter** (one sheet at a time; banner shows pending count; user dismisses or completes the current sheet, then summons the next via banner action or row click). Notifications fire for `awaiting_attribution` and `summary_ready` transitions; the GUI **never auto-foregrounds** — the user always initiates engagement. Rarely-used user-initiated surfaces (Settings via Cmd-, ; Doctor) remain conventional separate windows. This **supersedes** the prior assumption (carried in earlier project-structure trees) of a `App/Auricle/AttributionWindow/` separate-window target — see updated Project Structure tree below.
+
 **MVP failure-visibility surfaces:**
 
 | Surface | Trigger | Behavior |
 |---|---|---|
-| **Per-meeting state chip** in main window's meeting list | Always, for every meeting | Color-coded by `FailureCategory`: green (verified / retention-expired terminal-success), blue (in-flight active state like `transcribing`), yellow (any `awaiting_*`), amber (any `*_failed` transient — retryable), red (any `*_failed` permanent), grey (`silent`, `discarded`) |
+| **Per-meeting state chip** in main window's meeting list | Always, for every meeting | Color-coded by `FailureCategory`: green (verified / retention-expired terminal-success), blue (in-flight active state like `transcribing` / `reviewing_diarization`), yellow (any `awaiting_*`), amber (any `*_failed` transient — retryable), red (any `*_failed` permanent), grey (`silent`, `discarded`). Color is never the sole conveyor — chip carries glyph + label per NFR-A3. |
+| **Row-expand inline operations console** (UX spec Step 9 IA) | User clicks the chevron on a meeting row | In-row pipeline timeline (per-stage glyph for capture / transcribe / review-diarization / attribute / summarize / persist), contextual actions (Retry, Discard, Open attribution), retention countdown, copy-pasteable `log show` line. Replaces the prior assumption that drill-in required a separate window. |
+| **Attribution sheet** (UX spec Step 10 Consolidated Spec) | User clicks "Open attribution" in row-expand OR clicks the "Attribute next ›" banner action | `.sheet(item: $attributingMeetingID)` rises from the main window with the consolidated Attribution UI (calendar coverage strip, speaker rows as visual center of gravity, **transcript-pane disclosure collapsed by default with the label *"Review transcript paragraph-by-paragraph (N with hints)"*** per UX spec Step 10 Round-2 hierarchy refinement, AI hints rendered inside the disclosure when expanded, trust-calibration footer, asymmetric bottom-button hierarchy: `[Continue]` primary `.borderedProminent`, `[Save for later]` secondary `.bordered`, `[Publish unattributed]` tertiary text-link). Approximate sheet size 600×700, content-fit, non-resizable. Dismiss via `[Save for later]` / Esc / Cmd-W preserves partial state via incremental `attribution.json` writes (debounced 500ms). |
+| **Multi-meeting attribution banner** (UX spec Step 9) | ≥2 meetings simultaneously in `awaiting_attribution` | "⏳ N meetings awaiting your attribution — Attribute next ›". Click banner action OR a specific row → sheet rises; after dismissal, banner updates count. Never auto-foregrounds. |
 | **Inline "Retry now" button** per failed-state row | Meeting in any transient `*_failed` state | Triggers `auricle run <id>` equivalent; streams progress |
 | **On-launch banner** | App launch when any `awaiting_verification` > 24h OR any `*_failed` exists | Non-modal banner with count + click-through to highlighted meetings |
 | **`auricle doctor`** (per Decision 4.4) | On-demand | Includes failure / pending counts in the summary |
-| **`auricle list` default sort** | On-demand | Non-terminal-stale meetings at top with state annotation |
-| **Stale-active-state synthesized failure** (Round-2 lock-in) | Active "_ing" state held longer than 2 × stage budget (per Decision 4.2 wall-clock budgets table) | `Orchestrator` periodic sweep calls `StageRunner.synthesizeFailure(...)` → `stage_events.failed` row written, meeting transitions to `*_failed`, chip flips blue → amber, on-launch banner picks it up. **This is the load-bearing fix for the silent-spinner UX failure mode** — the user never sees an "in-flight" chip lying about a dead subprocess for longer than 2 × budget. |
+| **`auricle list` default sort** | On-demand | Non-terminal-stale meetings at top with state annotation. UI sort priority (UX spec Step 9): `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing|reviewing_diarization|summarizing > published > verified > retention_expired > silent|discarded`, then by `capture_started_at desc`. |
+| **Trust-calibration footer in Attribution sheet** (UX spec Step 10 Round-2) | Sheet open, `diarization_review.enabled = true`, telemetry has data | Subtle ambient line: "🤖 Reviewed N segments, flagged M · Accept rate: X/Y this week". Reads from `telemetry.diarization_suggestions_*` columns. Hidden when AI flag is off or no data. |
+| **Rolling 30-day cost widget** (UX spec Step 10 Round-2 Mary) | Always (small footer line beneath meeting list, in `RollingCostFooterView.swift`) | Aggregate API cost over rolling 30 days, broken down by stage (`summarize`, `reviewing_diarization`). Catches Opus drift, model-swap surprises, runaway summary-retry costs. **Aggregation contract:** view model issues two sibling queries against `telemetry` joined to `meetings` on `meeting_id`, filtered by `meetings.created_at > datetime('now', '-30 days')` (SQLite UTC-aware) — `SELECT SUM(cost_usd) FROM telemetry t JOIN meetings m ON t.meeting_id=m.id WHERE m.created_at > datetime('now','-30 days')` for summarize spend; `SELECT SUM(diarization_review_cost_usd), summarization_model || '|' || diarization_review_model AS combo FROM telemetry t JOIN meetings m ON t.meeting_id=m.id WHERE m.created_at > datetime('now','-30 days') GROUP BY combo` for the reviewer column with model-swap visibility. **Empty-state rendering:** if both sums are NULL or zero, footer reads *"$0.00 spent in last 30 days"* (NOT hidden — silence is a signal). **Refresh:** view-model recomputes on `meetings.updated_at` change via `GRDB.ValueObservation` (in-process, in-GUI; this is the one file-watch path that legitimately uses ValueObservation since it's GUI-process-local read-only telemetry). **Model-swap surprise display:** if more than one distinct `combo` value appears in the window, footer surfaces a "→" delimiter showing the most recent two (e.g. *"Last 30d: $14.20 — opus-4-7+haiku-4-5 → opus-5-0+haiku-4-5"*). |
+| **Stale-active-state synthesized failure** (Round-2 lock-in) | Active "_ing" state held longer than the per-stage budget (per Decision 4.2 wall-clock budgets table) | `Orchestrator` periodic sweep calls `StageRunner.synthesizeFailure(...)` → `stage_events.failed` row written, meeting transitions to `*_failed`, chip flips blue → amber, on-launch banner picks it up. For `reviewing_diarization` specifically, the "synthesis" is the benign-timeout pass-through to `awaiting_attribution` rather than a `*_failed` transition. **This is the load-bearing fix for the silent-spinner UX failure mode** — the user never sees an "in-flight" chip lying about a dead subprocess for longer than its budget. |
 
 **v1.1 additions:**
 - **Dock badge** (FR16): numeric count of stale-pending items
@@ -1367,7 +1410,7 @@ This is the single most important architectural detail of Group 3. Without it, t
 
 #### Decision 3.5: Claude prompt skeleton, glossary injection, prompt caching
 
-**Prompt caching strategy** (NFR-C1 cost ceiling depends on this):
+**Prompt caching strategy** (NFR-C1 cost ceiling depends on this — tiers per Decision 5.6):
 
 | Component | Cached? | Cache TTL | Why |
 |---|---|---|---|
@@ -1474,6 +1517,267 @@ Forward-compat. The `OllamaSummarizer` (and a possible future `MLXSummarizer`) i
 - Latency target: comparable to or better than Claude path (otherwise no v1.1 promotion)
 
 The v1.1 build phase determines whether local LLMs hit the quality bar; if yes, the strategy ships and becomes a config option (NFR-I8). Until then, only the Claude strategies exist; the protocol is shaped to accommodate the future arrival without architectural change.
+
+### Group 5: AI-Assisted Correction (the Product Category)
+
+This group treats AI-assisted correction as a **product category** (per UX spec Step 10 "AI Correction as a Product Category — Phased Roadmap"), not a single feature. The category has three siblings sharing one architectural pattern: **jargon correction** (Phase 1, MVP, enabled — already wired into the `summarize` stage via `GlossaryInjector`), **diarization correction** (Phase 1, MVP, behind flag default-off — the new architectural surface this group specifies), and **transcription correction** (Phase 3, v1.x — declared, no MVP impl). A future Phase 4 unifies all three into a single Claude call.
+
+The user's elected build path is **Path C: build all architectural slots in MVP, with the diarization-review feature behind a flag default-off** for iterative validation. This group locks the slots so the Phase 2 enable-flip is a config change, not a refactor.
+
+#### Decision 5.1: `AIReviewerStrategy` protocol family and shared output shape
+
+The reviewer family is a SOLID-I sibling of `SummarizerStrategy` (Group 3). Concrete reviewers consume cache-dir artifacts and produce a `*_suggestions.json` artifact that downstream UI views consume.
+
+```swift
+public protocol AIReviewerStrategy {
+    associatedtype Input: Codable
+    associatedtype Output: Codable & Suggestion
+
+    func review(
+        input: Input,
+        config: AIReviewerConfig
+    ) async throws -> AIReviewerResult<Output>
+}
+
+public protocol Suggestion: Codable {
+    var suggestionId: String { get }   // stable id for telemetry + per-suggestion Apply tracking
+    var reasoning: String { get }       // human-readable explanation rendered in expandable AI hint chip
+}
+
+public struct AIReviewerResult<O: Suggestion>: Codable {
+    public let schemaVersion: Int
+    public let suggestions: [O]
+    public let cost: AIReviewerCost     // input_tokens, output_tokens, cost_usd, model_id
+    public let reviewedSegmentCount: Int  // populates the trust-calibration footer "Reviewed N segments, flagged M"
+}
+```
+
+**Three sibling concrete protocols (declared in MVP, populated per-phase):**
+
+| Protocol | Input | Output `Suggestion` shape | Cache artifact | Phase |
+|---|---|---|---|---|
+| `DiarizationReviewerStrategy` | `(CanonicalTranscript, DiarizationArtifact)` | `DiarizationSuggestion { suggestionId, reasoning, kind: .underSegmentation/.overSegmentation, segmentId, proposedSplits[] }` | `diarization_suggestions.json` | Phase 1 (concrete: `ClaudeDiarizationReviewer`, Haiku-default, flag-controlled) |
+| `TranscriptionReviewerStrategy` | `(CanonicalTranscript, AudioFingerprint)` | `TranscriptionSuggestion { suggestionId, reasoning, charRange, proposedReplacement }` | `transcription_suggestions.json` | Phase 3 (declared interface only; no MVP impl) |
+| `JargonCorrectionStrategy` | `(SummaryDraft, Glossary)` | `JargonCorrection { suggestionId, reasoning, charRange, originalSpan, correctedSpan }` | (inline within `summary.json`; no separate file — corrections happen during the summarize call) | Phase 1 (wraps existing `GlossaryInjector`; no behavior change in MVP) |
+
+**Why a family rather than three independent strategies:** all three share (a) the same prompt-caching pattern with a stable system prompt + per-meeting variable input, (b) the same "user accept/reject + telemetry rollup" UX pattern, (c) the same `*_cost_usd` + `*_model` telemetry contract, and (d) the same suggestions-are-always-additive cache-immutability invariant (Decision 5.3). Naming the family makes the Phase 4 unification (single Claude call producing all three suggestion types) a contract-preserving evolution rather than a re-architecture.
+
+#### Decision 5.2: Concrete `ClaudeDiarizationReviewer` (Haiku-default, flag-controlled)
+
+The MVP concrete impl of `DiarizationReviewerStrategy`:
+
+- **Model:** `claude-haiku-4-5` by default (config: `diarization_review.model`). Haiku is the cost/latency target; Opus is overkill for "are these two segments the same voice?" pattern-matching.
+- **Feature flag:** `diarization_review.enabled` (config; default `false` per Path C). When off, the `reviewing_diarization` state is still entered but the strategy short-circuits in <100ms with an empty `AIReviewerResult` and a telemetry payload `{model_id: "flag_off", cost_usd: 0, suggestions_count: 0, review_skipped: true}`. The Phase 2 enable-flip is a single config change.
+- **Prompt skeleton:** structured prompt asking Claude to flag segments where (a) acoustic similarity hints two speakers labeled as one (under-segmentation) — propose splits; or (b) acoustic similarity hints one speaker labeled as two (over-segmentation) — propose merge.
+- **Prompt caching:** system prompt + diarization-review instructions are `cache_control`-marked (Anthropic API feature). Per-meeting transcript+diarization is the variable portion. Estimated cost: ~$0.02–0.05 per 30-min meeting (vs. ~$0.40–0.50 for Opus summarize); see Decision 5.6 cost contract.
+- **Output:** structured JSON with one suggestion per flagged segment. Each suggestion carries a stable `suggestionId` (so per-suggestion Apply telemetry survives sheet reopens).
+- **HTTP infrastructure reuse:** shares `AnthropicHTTPClient` and `KeychainAPIKey` with `ClaudeSummarizer` (target `ClaudeAIReviewers` depends on the same primitives; no duplicate HTTP layer).
+- **One-shot, not streaming (Amelia's MVP scoping):** Haiku response for ~80 segments is ~3s; render when complete. Streaming UI is a Phase 2+ refinement (~2 days saved at MVP).
+
+#### Decision 5.3: Subprocess isolation + cache-artifact immutability invariant
+
+**Subprocess isolation (Winston's Round-2 lock):** the `reviewing_diarization` stage runs in a **dedicated subprocess** spawned by the Orchestrator AFTER the WhisperKit transcribe+diarize subprocess terminates. Sequencing:
+
+```
+WhisperKit subprocess starts → transcript.json + diarization.json written → WhisperKit subprocess exits (frees ~2-4GB)
+  ↓
+AI Reviewer subprocess starts → reads transcript.json + diarization.json → calls Anthropic Haiku → writes diarization_suggestions.json → exits
+  ↓
+Orchestrator: meetings.state = 'awaiting_attribution'
+```
+
+**Why a separate subprocess (not in-GUI-process, not bundled with WhisperKit):**
+
+- Three independent failure modes — WhisperKit OOM, Anthropic network, malformed Claude response — get clean isolation. WhisperKit OOM cannot crash the AI reviewer mid-call; an Anthropic 503 cannot leave WhisperKit's 4GB resident.
+- Memory hygiene: WhisperKit's ~2-4GB working set is freed before the network call; ANE doesn't sit idle holding state during a slow HTTPS round-trip.
+- The reviewer subprocess is small and cheap to spawn (~50ms cold start; the 90s wall-clock budget per Decision 4.2 has plenty of headroom).
+- Bundled invocation: `auricle-cli __internal-stage review-diarization <id> --worker-protocol-version 1` (hidden subcommand pattern from Decision 1.1 / Subprocess Boundaries).
+
+**NFR-P9 memory contract (Attribution sheet open-state, ≤200 MB ceiling):**
+
+| Component | Budget | Notes |
+|---|---|---|
+| Shared `AVAudioFile` handle for paragraph playback | <5 MB | Single file; `framePosition` per play (Amelia: cold seek <20ms on SSD; meets NFR-P7 ≤200ms). NOT pre-loaded `AVAudioPCMBuffer` — that pattern blows the budget. |
+| Speaker representative snippet buffers | ~5 MB total | Pre-loaded `AVAudioPCMBuffer` per speaker; ~7 speakers × short clips. Worth caching since they're re-played frequently. |
+| `attribution.json` + `diarization_suggestions.json` view model state | <10 MB | In-memory `@Observable AttributionViewModel`; bounded by transcript size. |
+| SwiftUI view-tree + tokens + lazy paragraph rows | <70 MB | LazyVStack defers off-screen paragraph allocation. |
+| Headroom (system, Foundation, GRDB connections, AppKit shims) | balance to 200 | The remaining ~110 MB. |
+| **Working target** | **~98 MB** | Per Amelia's UX-spec Round-2 lock; comfortably under NFR-P9 ceiling. |
+
+The budget is enforced by a snapshot test in `Tests/AttributeTests/` that opens the sheet against a 30-min-meeting fixture and asserts `mach_task_basic_info.resident_size < 200 MB`. Builds fail on regression.
+
+**Cache-artifact immutability invariant (Winston's Round-2 lock):** `transcript.json` and `diarization.json` are **immutable** cache artifacts post-write (per Decision 1.3). AI-applied splits do **NOT** modify these files. Instead, the AI's proposals live in `diarization_suggestions.json` (read-only, written once by the reviewer); any user-applied splits live in `attribution.json` as a `segment_splits` field (Decision 5.4). The renderer composes the rendered transcript view as a **pure function** over `(diarization.json, attribution.overrides, attribution.splits)` — idempotent, fully testable, no hidden mutation chain.
+
+This invariant matters because:
+1. Re-running `reviewing_diarization` (e.g., on a model upgrade) must be safe — the stage reads `transcript.json` + `diarization.json`, not its own previous output.
+2. Re-running `attribute` (e.g., `auricle run <id> --reattribute`) must be safe — the attribution overrides + splits replay deterministically.
+3. The Phase 4 unified reviewer can produce a single `unified_suggestions.json` consuming the same immutable cache inputs without touching any prior artifact.
+
+A build-time test (`Tests/AIReviewerInterfaceTests/ImmutabilityContractTests.swift`) asserts that no reviewer or stage code path opens `transcript.json` or `diarization.json` for write; lint-rule enforcement supplements at code-review time.
+
+**Subprocess → GUI handoff contract (race-free, Amelia Round-2 lock-in):**
+
+The GUI Attribution sheet may open before, during, or after the `reviewing_diarization` subprocess finishes. The handoff must not depend on event-ordering luck.
+
+| Concern | Rule |
+|---|---|
+| **Subprocess write** | Reviewer subprocess writes `diarization_suggestions.json` via `AtomicWriter` (Cross-Cutting Concern #3 — `temp → fsync → rename`) so the file appears atomically. THEN, in the same Txn B as the stage-completion `stage_events` row, it bumps `meetings.updated_at` (the trigger handles this on any UPDATE) and transitions `meetings.state` to `awaiting_attribution`. **The SQLite write is the authoritative "ready" signal** — the file's existence on disk is the secondary signal. |
+| **GUI read at sheet-open** | Sheet view model `init` runs a single check-then-watch sequence: (a) read `meetings.state` — if it's `awaiting_attribution` or beyond, the suggestions file is guaranteed to exist (or be the empty-stub when flag-off); read it directly. (b) If the meeting is still `reviewing_diarization`, render the sheet with a "🤖 analyzing…" indicator at the top of the (collapsed) transcript pane and start watching. |
+| **File-watch target paths (two distinct watchers)** | **Watcher A — cache-dir `diarization_suggestions.json`:** `DispatchSource.makeFileSystemObjectSource` on the parent cache-dir for `.create`/`.delete` (file may not exist yet) AND on the file itself for `.write` once it appears. 100ms debounce. Triggered to re-read suggestions content. **Watcher B — SQLite `meetings.updated_at` for state transitions:** `GRDB.ValueObservation` on `meetings WHERE id = ?` (in-process, GUI-only — this is the one observation pattern that legitimately uses ValueObservation since it watches in-process DB writes from other GUI work AND cross-process subprocess writes via WAL; combined with `DispatchSource` on `db.sqlite3-wal` for cross-process change detection per Decision 2.1's GRDB rules). The two watchers are independent — Watcher A re-renders the suggestions content; Watcher B updates the sheet's "🤖 analyzing…" → "ready" affordance. |
+| **Race-loss fallback** | If Watcher A misses the `.create` event (DispatchSource race on parent-dir watching when the file is created near sheet-open), Watcher B catches state advance to `awaiting_attribution` and triggers a one-shot "read the file directly" path that bypasses the file watcher. Belt + suspenders: state advance is the canonical signal; file watch is the latency optimizer. |
+| **CLI parity** | `auricle attribute <id>` from a terminal session opens the GUI sheet (per Decision 1.5 — interactive default); the sheet's view-model init runs the same check-then-watch sequence. CLI's `--batch` mode reads the suggestions file directly off `meetings.state` advance and never starts a watcher. |
+
+**Telemetry write-authority partitioning (race-free UPSERT, Amelia Round-2 lock-in):**
+
+`telemetry` columns within the AI-reviewer category are split into two non-overlapping writer regions to avoid UPSERT conflicts between the subprocess and the GUI:
+
+| Column | Writer | Lifetime |
+|---|---|---|
+| `diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | **Reviewer subprocess only** (`reviewing_diarization` stage) | Written once at stage completion via UPSERT; never updated thereafter for that meeting |
+| `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | **GUI Attribute stage only** (Attribution sheet view model) | Written incrementally during sheet session via UPSERT; debounced 500ms; final write on sheet dismissal |
+
+Each column belongs to exactly one writer. `INSERT ... ON CONFLICT(meeting_id) DO UPDATE SET <only-this-writer's-columns>` ensures atomic per-writer updates without stomping the other writer's columns. SQLite + WAL handles cross-process UPSERT atomicity. The same partitioning rule applies to future correction-category siblings (`transcription_suggestions_*`): the reviewer subprocess writes count/cost/model; the GUI sheet writes applied/rejected. **No column has two writers.**
+
+#### Decision 5.4: `attribution.json` schema extension (`segment_overrides` + `segment_splits`)
+
+The Attribution sheet's three rename mechanics (default global rename, per-paragraph reassign, AI-applied splits — UX spec Step 10) require schema extensions to `attribution.json`. Schema is **additive** (existing readers ignore unknown fields per the additive-not-breaking rule from Decision 2.2's frontmatter versioning).
+
+```json
+{
+  "schemaVersion": 1,
+  "speakers": {
+    "Speaker_1": "[[Andrew Underwood]]",
+    "Speaker_2": "[[Ben]]",
+    "Speaker_3": "Speaker_3"
+  },
+  "segment_overrides": [
+    { "segment_id": 42, "speaker": "[[Sara]]", "applied_from": "manual" }
+  ],
+  "segment_splits": [
+    {
+      "original_segment_id": 87,
+      "applied_from": "ai_suggestion",
+      "suggestion_id": "abc123",
+      "splits": [
+        { "new_id": "87.0", "start": 4.15, "end": 4.32, "speaker": "[[Ben]]" },
+        { "new_id": "87.1", "start": 4.32, "end": 4.40, "speaker": "[[Sara]]" },
+        { "new_id": "87.2", "start": 4.40, "end": 4.55, "speaker": "[[Ben]]" }
+      ]
+    }
+  ]
+}
+```
+
+**Field semantics:**
+
+| Field | Source | Semantics |
+|---|---|---|
+| `speakers` | Default global rename mechanic | Speaker_N → `[[Wikilink]]` mapping; applies to all paragraphs of that speaker unless overridden. Empty / missing values mean "render as `Speaker_N` placeholder." |
+| `segment_overrides[]` | Per-paragraph reassign mechanic | One entry per paragraph the user reassigned to a different speaker than the default mapping. `applied_from: 'manual'` always for this array. |
+| `segment_splits[]` | AI-suggestion Apply mechanic (or future Cmd-Z-undoable manual split) | One entry per AI-applied split. `original_segment_id` references the immutable `diarization.json` segment; `splits[]` contains 2+ replacement sub-segments. `applied_from: 'ai_suggestion'` (with `suggestion_id` linking to `diarization_suggestions.json`) or `'manual'` (suggestion_id null). |
+
+**Renderer contract** (load-bearing for testability):
+
+```swift
+public struct RenderedTranscript {
+    public let segments: [RenderedSegment]   // ordered by start time
+}
+public struct RenderedSegment {
+    public let id: String                    // either the original segment_id from diarization.json, or "<orig>.N" sub-id from a split
+    public let startSeconds: Double
+    public let endSeconds: Double
+    public let speakerLabel: String          // wikilink-form (e.g. "[[Ben]]") or "Speaker_N" placeholder; resolved through (overrides → splits → speakers map → fallback)
+    public let text: String                  // verbatim from CanonicalTranscript[start..<end]; never edited
+    public let appliedFrom: AttributionSource? // .manual | .aiSuggestion(suggestionId) | nil if from default speaker map
+}
+
+public enum AttributionSource: Equatable {
+    case manual
+    case aiSuggestion(suggestionId: String)
+}
+
+public func renderTranscript(
+    diarization: DiarizationArtifact,
+    overrides: [SegmentOverride],
+    splits: [SegmentSplit],
+    speakers: [String: String]   // Speaker_N → "[[Wikilink]]" or original key for unattributed
+) -> RenderedTranscript
+```
+
+Pure function; no I/O; deterministic. **Resolution order per segment:** (1) check `splits[]` for a split replacing this `original_segment_id` — emit the sub-segments; (2) check `overrides[]` for a per-segment speaker override; (3) fall back to `speakers[Speaker_N]` mapping; (4) fall back to `Speaker_N` literal placeholder. Lives in `Sources/Attribute/AttributionRenderer.swift`. Golden fixtures at `Tests/AttributeTests/Fixtures/renderer/` covering every combination of `(no overrides, overrides only, splits only, both)` × `(all speakers attributed, partial, none)` × `(splits referencing valid segment ids, dangling split with no matching diarization segment — must be ignored not crash)`.
+
+**Atomic-write discipline:** writes are debounced 500ms via `Task.debounce` (or equivalent: cancellation-safe accumulation pattern; the wiring lands in **Story 8** as part of `MainWindow/AttributionViewModel.swift`) inside the `AttributionViewModel`, routed through `AtomicWriter` (Cross-Cutting Concern #3). Per-row `@State` never directly writes; the view model owns the durable state. `Task.debounce` semantics differ from typical Combine debounce — implementation uses a per-write `Task` with `Task.sleep(for: .milliseconds(500))` and cancels the prior pending Task on each user mutation; the live Task awakens, reads the latest in-memory draft, and atomic-writes once.
+
+**Cancellation preservation:** `Save for later` / Esc / Cmd-W dismisses the sheet; the most-recent debounced write completes before SwiftUI tears down the view (the dismiss handler `await`s the in-flight write Task). Stale-active-state recovery (Decision 4.2) reopens the sheet with partial state pre-populated if the GUI crashes mid-attribution.
+
+#### Decision 5.5: Phased roadmap (Path C lock-in)
+
+Forward-compat plan; codified to make Phase 2 / 3 / 4 enable-flips contract-preserving.
+
+| Phase | When | Action |
+|---|---|---|
+| **Phase 1 — MVP** | Initial release | Jargon correction live (FR55–57, already in summarize); diarization-review architectural slots present (interface + cache schema + telemetry columns + state machine + subprocess + Attribution sheet UI), feature flag `diarization_review.enabled = false` by default; transcription-review slots declared (interface + cache schema + telemetry columns), no impl. |
+| **Phase 2 — early v1 (post-MVP dogfood)** | After ~30-day MVP dogfood | Run smoke-test protocol (≥5 captured meetings, evaluate Haiku precision/recall); if `applied/suggestions ≥ 40%` over 4 weeks per Decision 5.7 kill criteria, flip `diarization_review.enabled = true` and bump auricle to v1.1. |
+| **Phase 3 — v1.x** | Post-Phase-2 | Implement `ClaudeTranscriptionReviewer`; surface in transcript pane (chip + reasoning + Apply/Reject); same dogfood-then-enable pattern. Cross-pollinates with jargon correction (vault-glossary grounding for proposed corrections). |
+| **Phase 4 — v1.x+** | Earned by Phase 2/3 success | Unify into a single Claude call producing `unified_suggestions.json` (reduces tokens; one round-trip). Single transcript-pane surface for all three correction types. |
+
+**No-backtracking guarantees** (the design discipline that makes the phasing safe):
+
+- Schema additions are additive — new optional fields can be added to `attribution.json` and `*_suggestions.json` without breaking existing readers.
+- State-machine additions can be no-ops — `reviewing_diarization` already passes through quickly when flag is off; future states adopt the same pattern.
+- Strategy slots reuse the SOLID-I family — adding `ClaudeTranscriptionReviewer` doesn't touch `ClaudeDiarizationReviewer`'s code.
+- Cache-dir handoff contract holds — all cache artifacts remain immutable per Decisions 1.3 + 5.3.
+- The renderer is a pure function — adding correction sources doesn't restructure rendering logic.
+
+#### Decision 5.6: NFR-C1 cost ceiling tiers
+
+The cost ceiling has tiers reflecting opt-in to the AI-correction category. NFR-C1's $0.50 default holds for the MVP shipping configuration; the $0.60 ceiling kicks in only when the user opts into diarization review. Local-LLM strategy (FR33) drops all of these to $0.
+
+| Mode | Calls per meeting | Cost ceiling |
+|---|---|---|
+| **Default MVP** (jargon correction inline within summarize prompt; flag-off diarization review) | 1 (Opus summarize) | **≤ $0.50** (NFR-C1 unchanged) |
+| **MVP with diarization review enabled (Phase 2)** | 2 (Haiku review + Opus summarize) | **≤ $0.60** (NFR-C1 with explicit opt-in) |
+| **v1.x with transcription review enabled (Phase 3)** | 3 (Haiku review × 2 + Opus summarize) | targeted ≤ $0.70 |
+| **v1.x+ unified (Phase 4)** | 2 (single Haiku unified review + Opus summarize) | targeted ≤ $0.55 |
+
+The 30-day rolling cost widget on the meeting list (UX spec Step 10 Round-2 Mary) shows aggregate spend broken down by stage; Opus drift, model-swap surprises, and runaway summary-retry costs surface visually before the next billing cycle.
+
+**Telemetry contract:** every reviewer subprocess writes `metadata_json.cost_usd` + `metadata_json.model_id` to the `stage_events` row AND UPSERTs `telemetry.<category>_review_cost_usd` + `<category>_review_model`. The `cost_usd: 0` + `model_id: "local:<name>"` pattern is locked in MVP schema so v1.1+ local-LLM swap is a config change, not a schema migration (Winston's Round-2 lock-in folded into Decision 4.5).
+
+#### Decision 5.7: Pre-committed kill criteria + trust calibration
+
+To avoid AI features that quietly underperform but stay shipped, the diarization reviewer has explicit kill criteria codified in the architecture (Mary's Round-2 lock-in). The product is designed to **make low quality visible** rather than rely on user complaint.
+
+**Kill criteria** (computed from `telemetry.diarization_suggestions_*` columns):
+
+| Metric | Threshold | Action | Computability |
+|---|---|---|---|
+| `applied_count / suggestions_count` over 4 rolling weeks | < 0.40 | `auricle stats` (v1.1+) flags the meeting class; recommends the user review prompt design or disable flag | **MVP-computable.** Both columns have writers (subprocess writes `suggestions_count`; GUI Attribute writes `applied_count`). |
+| `false_positive_count / applied_count` (manually-corrected post-publish) | > 0.20 | Same flag — user-applied splits that needed re-correction in Obsidian indicate the AI is misleading the user | **v1.1 only.** No MVP writer for `false_positive_count` exists — the metric requires post-publish detection of vault-edits to attributed paragraphs. This is the same forward-instrumentation gap surfaced in Architecture Validation §"Gap Disposition" #11 (closed-loop trust calibration). MVP captures the ingredients (`applied_count`, `segment_splits[]` with `applied_from: 'ai_suggestion'`, vault file path); v1.1 adds the vault-file-hash-on-persist + background diff job that produces the `false_positive_count` column. The kill criterion ships with the threshold codified, but `auricle stats` reports it as `n/a — instrumented in v1.1` until that work lands. |
+
+**Divide-by-zero handling** (the `suggestions_count = 0` edge case — silent AI, no flagged segments):
+
+```
+if suggestions_count == 0:
+    accept_rate = nil  // not "0%", not "100%"; explicitly absent
+    kill_criterion_status = .insufficientSignal  // NOT .pass — "no suggestions" is calibration data, not a quality signal
+```
+
+This propagates to:
+- **Trust-calibration footer:** when `suggestions_count == 0` for the rolling window, the footer reads *"🤖 Reviewed N segments, flagged 0"* (UX spec Step 10 Round-2 Mary "explicit absence replaces silent absence") — NOT *"Accept rate: —/—"*.
+- **Auto-collapse trigger** (UX spec Step 10 Round-2 "if accept rate < 40%, AI hints collapse"): the trigger explicitly requires `suggestions_count > 0` AND `applied_count / suggestions_count < 0.40`. With `suggestions_count == 0`, hints stay at their last user-set state — silence is not distrust.
+- **`auricle stats` (v1.1+) report:** `insufficientSignal` rolls up as a separate row from `passing` / `failing` so a user with 4 weeks of silent AI doesn't see a green check that misrepresents calibration status.
+
+The general rule: **rate-style kill criteria with a denominator of zero are "no signal," not "pass."** Future correction-category criteria adopt the same convention.
+
+User-facing surfaces (UX spec Step 10):
+
+- **Trust-calibration footer in Attribution sheet:** "🤖 Reviewed N segments, flagged M · Accept rate: X/Y this week" — silent absence is replaced with explicit absence (when `M = 0`, footer reads "Reviewed N segments, flagged 0").
+- **Auto-collapse:** if accept rate drops below 40% over recent meetings, the 🤖 chips collapse all expanded reasoning by default — the system gets quieter when the user signals distrust. Implementation reads from `telemetry.diarization_suggestions_*` rolling aggregate.
+- **Per-Apply Cmd-Z + persistent revert:** every Apply action is undoable via Cmd-Z within the session AND via inline "Revert this split" affordance after sheet reopen (the `segment_splits[]` row is removed from `attribution.json`).
+- **J0 banner when API key missing for AI review:** "Diarization review unavailable — add Anthropic key in Settings to enable." One-time, dismissable.
+
+**Cross-cutting alignment:** these criteria operationalize the J1.5 trust-calibration concern (Decision 3.7) for the diarization category. The `auricle stats` v1.1 verb surfaces the metric; MVP's footprint is the telemetry columns + the trust-calibration footer.
 
 ## Implementation Patterns & Consistency Rules
 
@@ -1966,6 +2270,18 @@ auricle/
 │   │   ├── SummarizerConfig.swift
 │   │   └── SummarizerError.swift          # typed errors that drive Dec 3.3 fallback
 │   │
+│   ├── AIReviewerInterface/               # protocol-only target (Dec Group 5 — AI correction category)
+│   │   ├── AIReviewerStrategy.swift       # base associatedtype protocol (Dec 5.1)
+│   │   ├── Suggestion.swift               # the Codable suggestion-id + reasoning protocol
+│   │   ├── AIReviewerResult.swift         # generic result wrapper with cost + reviewedSegmentCount
+│   │   ├── AIReviewerCost.swift           # input_tokens, output_tokens, cost_usd, model_id
+│   │   ├── DiarizationReviewerStrategy.swift   # sibling protocol — input/output shape for diarization (Dec 5.1)
+│   │   ├── DiarizationSuggestion.swift          # diarization_suggestions.json schema + segment_splits payload
+│   │   ├── TranscriptionReviewerStrategy.swift # sibling — declared, no MVP impl (Dec 5.5 Phase 3)
+│   │   ├── TranscriptionSuggestion.swift        # declared schema; transcription_suggestions.json
+│   │   ├── JargonCorrectionStrategy.swift       # sibling — wraps existing GlossaryInjector (Dec 5.1 Phase 1)
+│   │   └── AIReviewerError.swift
+│   │
 │   ├── CalendarInterface/                 # protocol-only target
 │   │   ├── CalendarSource.swift
 │   │   ├── CalendarEvent.swift
@@ -1999,6 +2315,16 @@ auricle/
 │   │   ├── SubstringGroundingValidator.swift
 │   │   ├── AnthropicHTTPClient.swift      # URLSession wrapper; redacts response bodies pre-log
 │   │   └── KeychainAPIKey.swift           # reads anthropic key from macOS Keychain (NFR-S1)
+│   │
+│   ├── ClaudeAIReviewers/                 # concrete strategy target (Dec 5.2)
+│   │   ├── ClaudeDiarizationReviewer.swift # Haiku-default, flag-controlled (diarization_review.enabled)
+│   │   └── (future: ClaudeTranscriptionReviewer.swift, ClaudeUnifiedReviewer.swift) # Phase 3, Phase 4
+│   │   # Note: shares AnthropicHTTPClient + KeychainAPIKey with ClaudeSummarizer (Package.swift dep)
+│   │
+│   ├── ReviewDiarization/                 # the reviewing_diarization stage (Dec 5.3 subprocess)
+│   │   ├── ReviewDiarizationStage.swift   # subprocess entry point; wraps strategy in stage lifecycle
+│   │   ├── ReviewDiarizationPromptBuilder.swift # cache-friendly prompt skeleton
+│   │   └── ReviewDiarizationMetadata.swift # StageMetadata.reviewDiarization payload
 │   │
 │   ├── WhisperKitTranscriber/             # concrete strategy target
 │   │   ├── WhisperKitTranscriber.swift
@@ -2067,6 +2393,15 @@ auricle/
 │   │   └── Snapshots/
 │   │       └── prompts/
 │   ├── ClaudeSummarizerTests/
+│   ├── AIReviewerInterfaceTests/
+│   │   ├── ImmutabilityContractTests.swift  # Dec 5.3 — no reviewer code path opens transcript/diarization for write
+│   │   └── SuggestionSchemaRoundTripTests.swift
+│   ├── ClaudeAIReviewersTests/
+│   │   ├── ClaudeDiarizationReviewerTests.swift # against stubbed Anthropic responses
+│   │   └── PromptCachingContractTests.swift     # cache_control marker placement
+│   ├── ReviewDiarizationTests/
+│   │   ├── ReviewDiarizationStageTests.swift    # flag-off short-circuit; subprocess lifecycle
+│   │   └── RendererPureFunctionTests.swift      # (diarization, overrides, splits) → RenderedTranscript golden fixtures (Dec 5.4)
 │   ├── WhisperKitTranscriberTests/
 │   ├── WhisperKitDiarizerTests/
 │   ├── GoogleCalendarSourceTests/
@@ -2083,6 +2418,7 @@ auricle/
 │       ├── StubCalendarSource.swift
 │       ├── StubTranscriberStrategy.swift
 │       ├── StubDiarizerStrategy.swift
+│       ├── StubDiarizationReviewerStrategy.swift # Dec 5.1 stub for tests
 │       └── TestComposition.swift           # makeTestOrchestrator(...) helper
 │
 ├── App/
@@ -2091,18 +2427,42 @@ auricle/
 │   │
 │   ├── Auricle/                            # GUI executable target source
 │   │   ├── AuricleApp.swift                # @main App struct — composition root for GUI
-│   │   ├── MainWindow/
-│   │   │   ├── MainWindowView.swift        # meeting list + state chips (Dec 4.6)
-│   │   │   ├── MeetingRowView.swift
-│   │   │   └── OnLaunchBannerView.swift    # FR-derived stale-pending banner (Dec 4.2)
-│   │   ├── AttributionWindow/              # SwiftUI window for the attribute stage
-│   │   │   ├── AttributionWindowView.swift
+│   │   ├── MainWindow/                     # single-window architecture (UX spec Step 9 Principle 8)
+│   │   │   ├── MainWindowView.swift        # row-expand IA: meeting list + sheet presenter (Dec 4.6)
+│   │   │   ├── MeetingListView.swift       # LazyVStack of MeetingRowView cells; sort priority per Dec 4.6
+│   │   │   ├── MeetingRowView.swift        # collapsed/expanded row with @State expanded: Bool
+│   │   │   ├── OperationsConsoleView.swift # row-expand contents: pipeline timeline + actions + log line
+│   │   │   ├── PipelineTimelineView.swift  # mini visualization of per-stage progress
+│   │   │   ├── OnLaunchBannerView.swift    # awaiting-attribution queue banner + on-launch banner (Dec 4.2 + 4.6)
+│   │   │   ├── UpcomingEventStripView.swift # calendar-attendee strip (J0, J1)
+│   │   │   ├── RollingCostFooterView.swift # 30-day cost widget (Dec 4.6 + UX Step 10 Round-2)
+│   │   │   ├── AttributionSheet.swift      # .sheet(item: $attributingMeetingID) — replaces former AttributionWindow
+│   │   │   ├── AttributionViewModel.swift  # @Observable; owns attribution.json + diarization_suggestions.json state
+│   │   │   ├── AttributionTranscriptPane.swift # disclosure-collapsed transcript pane (UX spec Step 10 Round-2)
+│   │   │   ├── TranscriptParagraph.swift   # per-paragraph row: speaker label + ParagraphPlayButton + reassign + AI hint
+│   │   │   ├── SpeakerRow.swift            # speaker row: SnippetPlayer + ThisIsMeButton + autocomplete + optional AIHintChip (over-segmentation case)
+│   │   │   ├── ThisIsMeButton.swift        # `.bordered` style; states: idle / active (✓ when this row maps to self.wikilink) / disabled (Settings-required, reads "Set me first…");
+│   │   │   │                               # micro-interaction: subtle attention-pulse on first-run when zero speakers attributed AND focused, gated by Reduce Motion (NFR-A5 — no pulse, only color-state)
 │   │   │   ├── SnippetPlayerView.swift     # AVPlayerView-wrapped snippet playback
-│   │   │   └── AttributionViewModel.swift
-│   │   ├── DoctorWindow/                   # GUI surface for `auricle doctor` (optional MVP+)
+│   │   │   ├── ParagraphPlayButton.swift   # shared AVAudioFile + seek (Amelia's MVP scoping)
+│   │   │   ├── AIHintChip.swift            # 🤖 chip with expand/collapse + accept/reject (Dec 5.7);
+│   │   │   │                               # accessibility contract (NFR-A1, NFR-A3): collapsed-state `accessibilityLabel` summarizes hint count + kind (e.g. "AI hint: may be 2 voices");
+│   │   │   │                               # expanded-state full reasoning text + Apply/Reject buttons are screen-reader navigable;
+│   │   │   │                               # color is never the sole conveyor — chip carries 🤖 glyph + label (NFR-A3)
+│   │   │   ├── TrustCalibrationFooter.swift # accept-rate display in Attribution sheet (Dec 5.7)
+│   │   │   └── CoverageStrip.swift         # calendar-attendee gap-awareness diagnostic
+│   │   ├── DoctorWindow/                   # rare user-initiated separate window — Principle 8 carve-out
 │   │   │   └── DoctorView.swift
-│   │   ├── Settings/
-│   │   │   └── SettingsView.swift          # vault path, model, retention window
+│   │   ├── Settings/                       # macOS Settings scene (Cmd-,) — Principle 8 carve-out
+│   │   │   └── SettingsView.swift          # vault path, model, retention window, diarization_review.enabled
+│   │   ├── DesignSystem/                   # auricle-specific atomic components (UX spec Step 11)
+│   │   │   ├── DesignTokens.swift          # colors, motion, spacing — no hardcoded values elsewhere
+│   │   │   ├── RecordingIndicator.swift    # privacy-contract surface; pulse + Reduce Motion behavior
+│   │   │   ├── StateChip.swift             # per-meeting state visibility; 8 variants per FailureCategory
+│   │   │   ├── CountdownAnnotation.swift   # retention countdown ("Audio deletes in 5 days")
+│   │   │   ├── VarianceWarningGlyph.swift  # acoustic diarization uncertainty hint
+│   │   │   ├── CalendarAttendeeBadge.swift # matched / unmatched / candidate states
+│   │   │   └── WaveformView.swift          # pre-computed amplitude envelope render
 │   │   ├── AppDelegate.swift               # NSApplicationDelegate adapter for SwiftUI
 │   │   ├── NotificationDelegate.swift      # UNUserNotificationCenterDelegate (Dec 4.3)
 │   │   ├── URLSchemeHandler.swift          # handles auricle:// URLs
@@ -2164,12 +2524,14 @@ Orchestrator   → Core, State, Telemetry, Permissions
 SummarizerInterface → Core
 DiarizerInterface   → Core
 TranscriberInterface → Core
+AIReviewerInterface → Core, DiarizerInterface, TranscriberInterface  # consumes diarization + transcript artifacts (Dec 5.1)
 CalendarInterface    → Core
 
 Transcribe     → Core, State, Telemetry, TranscriberInterface, DiarizerInterface
 Diarize        → Core, State, Telemetry, DiarizerInterface
+ReviewDiarization → Core, State, Telemetry, AIReviewerInterface  # the reviewing_diarization stage (Dec 5.3)
 Capture        → Core, State, Telemetry, Permissions
-Attribute      → Core, State, Telemetry
+Attribute      → Core, State, Telemetry, AIReviewerInterface  # consumes diarization_suggestions.json schema for sheet rendering
 Summarize      → Core, State, Telemetry, SummarizerInterface, CalendarInterface, VaultGlossary
 Persist        → Core, State, Telemetry
 Verify         → Core, State, Telemetry, Notifications
@@ -2177,13 +2539,14 @@ Notifications  → Core, State
 VaultGlossary  → Core
 
 ClaudeSummarizer        → Core, SummarizerInterface
+ClaudeAIReviewers       → Core, AIReviewerInterface, ClaudeSummarizer  # reuses AnthropicHTTPClient + KeychainAPIKey (Dec 5.2)
 WhisperKitTranscriber   → Core, TranscriberInterface
 WhisperKitDiarizer      → Core, DiarizerInterface
 GoogleCalendarSource    → Core, CalendarInterface
 
 # Composition roots — only these may import concrete-strategy targets
-AuricleApp     → Orchestrator, ClaudeSummarizer, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, every UI dependency
-auricle-cli    → Orchestrator, ClaudeSummarizer, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, swift-argument-parser
+AuricleApp     → Orchestrator, ClaudeSummarizer, ClaudeAIReviewers, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, every UI dependency
+auricle-cli    → Orchestrator, ClaudeSummarizer, ClaudeAIReviewers, WhisperKitTranscriber, WhisperKitDiarizer, GoogleCalendarSource, every stage target, swift-argument-parser
 ```
 
 **Critical edges that DO NOT exist** (rejected by `Package.swift`):
@@ -2200,7 +2563,8 @@ Per Decision 1.1, the subprocess boundary is a runtime decision dispatched by `O
 |---|---|---|---|
 | `record` / `capture` | GUI process (in-app) | N/A | direct call |
 | `transcribe` + `diarize` (combined) | Subprocess | `SubprocessDispatcher.spawn(.transcribe, meetingId:)` | `auricle-cli __internal-stage transcribe <id> --worker-protocol-version 1` |
-| `attribute` | GUI process (in-app, modal window) | N/A | direct call |
+| `reviewing_diarization` | **Dedicated subprocess** (Dec 5.3); spawned AFTER WhisperKit subprocess terminates | `SubprocessDispatcher.spawn(.reviewDiarization, meetingId:)` | `auricle-cli __internal-stage review-diarization <id> --worker-protocol-version 1` |
+| `attribute` | GUI process (in-app, **sheet on main window** per Dec 4.6 / UX Step 9 Principle 8 — NOT a separate window) | N/A | direct call |
 | `summarize` | Subprocess | `SubprocessDispatcher.spawn(.summarize, meetingId:)` | `auricle-cli __internal-stage summarize <id> --worker-protocol-version 1` |
 | `persist` | GUI process (in-app) | N/A | direct call |
 | `notify` | GUI process (in-app) | N/A | direct call |
@@ -2262,11 +2626,13 @@ struct AuricleApp: App {
         let summarizer = ClaudeCitationsSummarizer(/* with substring as fallback */)
         let transcriber = WhisperKitTranscriber()
         let diarizer = WhisperKitDiarizer()
+        let diarizationReviewer = ClaudeDiarizationReviewer()  // Dec 5.2; flag-controlled at call time
         let calendar = GoogleCalendarSource()
         return Orchestrator(
             summarizer: summarizer,
             transcriber: transcriber,
             diarizer: diarizer,
+            diarizationReviewer: diarizationReviewer,
             calendar: calendar,
             stateStore: StateStore.production(),
             telemetry: TelemetryRecorder.production()
@@ -2303,7 +2669,8 @@ Tests use a third composition root, `Tests/TestSupport/TestComposition.swift`'s 
 |---|---|---|---|
 | Capture | FR1–FR10 | `Capture` | `Permissions`, `State` |
 | Transcribe + Diarize | FR17–FR20 | `Transcribe`, `Diarize` | `WhisperKitTranscriber`, `WhisperKitDiarizer`, `TranscriberInterface`, `DiarizerInterface`, `State` |
-| Attribute | FR21–FR27 | `Attribute` | `App/Auricle/AttributionWindow/`, `State` |
+| AI-assisted correction (Decision Group 5) | UX Spec Step 10; FR55–FR57 (jargon, Phase 1 inline); new FRs TBD for diarization (Phase 1 flagged-off) and transcription (Phase 3) | `ReviewDiarization`, `AIReviewerInterface`, `ClaudeAIReviewers` | `App/Auricle/MainWindow/AttributionSheet.swift` + `AttributionTranscriptPane.swift` + `AIHintChip.swift` + `TrustCalibrationFooter.swift`, `State.telemetry` columns |
+| Attribute | FR21–FR27 | `Attribute` | `App/Auricle/MainWindow/AttributionSheet.swift` (single-window architecture per UX Step 9 Principle 8 — replaces former `App/Auricle/AttributionWindow/`), `State` |
 | Summarize | FR28–FR34 | `Summarize` | `SummarizerInterface`, `ClaudeSummarizer`, `VaultGlossary`, `CalendarInterface`, `GoogleCalendarSource` |
 | Persist | FR35–FR41 | `Persist` | `Core/AtomicWriter`, `State` |
 | Notify | FR42–FR44 | `Notifications` | `App/Auricle/NotificationDelegate`, `Verify` |
@@ -2375,11 +2742,21 @@ USER: clicks Stop (or `auricle stop`)
     Transcribe/TranscribeStage + Diarize/DiarizeStage (shared subprocess)
     WhisperKitTranscriber → transcript.json
     WhisperKitDiarizer → diarization.json + snippets/speaker_N.wav
-    StateStore: 'transcribing' → 'awaiting_attribution'
+    StateStore: 'transcribing' → 'reviewing_diarization'
+  WhisperKit subprocess exits (frees ~2-4GB)
   ↓
-[GUI process — interactive]
-  User opens AttributionWindow
-  Attribute/AttributionStage → attribution.json
+[GUI process spawns reviewer subprocess — Dec 5.3]
+  SubprocessDispatcher → auricle-cli __internal-stage review-diarization <id> --worker-protocol-version 1
+    ReviewDiarization/ReviewDiarizationStage
+    ClaudeAIReviewers/ClaudeDiarizationReviewer (Haiku) → diarization_suggestions.json
+      (or empty stub when diarization_review.enabled = false; <100ms passthrough)
+    StateStore: 'reviewing_diarization' → 'awaiting_attribution'
+  ↓
+[GUI process — interactive, single-window architecture per UX Step 9 Principle 8]
+  Notification fires + main-window banner updates ("⏳ N meetings awaiting your attribution")
+  User clicks row OR banner action → AttributionSheet rises (.sheet(item:) on MainWindowView)
+  Attribute/AttributionStage → attribution.json (with segment_overrides + segment_splits per Dec 5.4)
+  AttributionSheet dismisses; main window returns to focus
   StateStore: 'attributing' → 'summarizing'
   ↓
 [GUI process spawns subprocess]
@@ -2472,7 +2849,7 @@ This validation pass combined a structured walk through coherence, requirements 
 
 ### Coherence Validation ✓
 
-The 18 decisions across Groups 1–4 are internally consistent and do not contradict each other. The roundtable surfaced under-specification (not contradiction) in three places, all folded back into the relevant decisions in place rather than tracked as a delta list:
+The 25 decisions across Groups 1–5 are internally consistent and do not contradict each other. (Group 5 — AI-Assisted Correction — was added after the UX-design workflow surfaced AI correction as a product category; it amends Decisions 1.2, 1.3, 2.1, 4.2, 4.5, and 4.6 in place rather than displacing them, and adds 7 new Decisions 5.1–5.7.) The roundtable surfaced under-specification (not contradiction) in three places, all folded back into the relevant decisions in place rather than tracked as a delta list:
 
 - **Decision 4.2 — Wall-clock budgets and stale-active-state detection** added: in-session subprocess SEGFAULT no longer leaves the chip showing "in-flight" indefinitely. Detection runs in the `Orchestrator` periodic sweep; failure synthesis flows through `StageRunner.synthesizeFailure(...)`. (Round-1 finding from Sally + Winston.)
 - **Decision 4.5 + Decision 2.1 telemetry table** updated: NFR-P1 budget now applies to `time_to_attribution_ready_seconds` (machine-time only); a separate `time_to_vault_note_seconds` captures user-perceived end-to-end latency including `attribute` time. The original `time_to_notification_seconds` column is retired in favor of the dual columns. (Round-1 finding from Sally.)
@@ -2522,7 +2899,7 @@ The Round-1 roundtable surfaced 11 gaps. After Round 2's scope-call, they sort i
 
 **✓ Requirements Analysis** — project context analyzed, scale and complexity assessed, technical constraints identified, cross-cutting concerns mapped.
 
-**✓ Architectural Decisions** — 18 decisions across 4 groups, plus Round-2 lock-ins folded into Decisions 2.1, 4.2, 4.5, 4.6. Technology stack fully specified. Integration patterns defined.
+**✓ Architectural Decisions** — 25 decisions across 5 groups, plus Round-2 lock-ins folded into Decisions 2.1, 4.2, 4.5, 4.6, and the UX-design-workflow amendments folded into Decisions 1.2, 1.3, 2.1, 4.2, 4.5, 4.6 + new Decision Group 5 (Decisions 5.1–5.7 — AI-Assisted Correction as a product category). Technology stack fully specified. Integration patterns defined.
 
 **✓ Implementation Patterns** — naming conventions, structure patterns, communication patterns, process patterns documented. Helper-discipline table covers 10 single-implementation primitives + lint enforcement.
 
@@ -2578,11 +2955,11 @@ swift package init --type library --name AuricleKit
 
 1. **Story 1**: Project initialization (above).
 2. **Story 2**: `Core` primitives — `AtomicWriter`, `Log` facade, `MeetingID`, `MeetingIDResolver` (+ protocol split when test stubs need it), `URLRouter` + `auricle://` grammar, `CacheArtifactWriter`, `CanonicalTranscript`.
-3. **Story 3**: `State/StateStore` + GRDB migration #1 (with the dual NFR-P1 telemetry columns from Decision 4.5 lock-in) + `Orchestrator/StageRunner` (with `synthesizeFailure(...)` API per Decision 4.2 lock-in).
+3. **Story 3**: `State/StateStore` + GRDB migration #1 (with the dual NFR-P1 telemetry columns from Decision 4.5 lock-in **and the AI-reviewer telemetry columns from Decision Group 5**) + `Orchestrator/StageRunner` (with `synthesizeFailure(...)` API per Decision 4.2 lock-in).
 4. **Story 4**: `Persist` + `FrontmatterRenderer` + `VaultWriter` + golden-fixture snapshot tests.
-5. **Story 5**: `Summarize` + `SummarizerInterface` + `ClaudeSummarizer` (both validators) + canonicalization invariant tests + Decision 3.6 smoke-test execution.
-6. **Story 6**: `Transcribe` + `Diarize` + `WhisperKit*` + `Orchestrator/SubprocessSupervisor` (integrates `synthesizeFailure(...)` and stale-detection sweep per Decision 4.2 + 4.6 lock-ins).
-7. **Story 7**: `auricle-cli` skeleton (binding-contract verbs + hidden `__internal-stage` worker subcommand).
-8. **Story 8+**: `Capture` + `Permissions` + `App/Auricle` GUI shell (with amber-chip stale-state UX + VM-factory pattern + malformed-URL toast + first-meeting onboarding handed off to UX-design phase) + `AttributionWindow` + `Notifications` + `Verify` + `Calendar` + `VaultGlossary`.
+5. **Story 5**: `Summarize` + `SummarizerInterface` + `ClaudeSummarizer` (both validators) + canonicalization invariant tests + Decision 3.6 smoke-test execution. Also: `AIReviewerInterface` (protocol family per Decision 5.1) — declared, no concrete impl yet.
+6. **Story 6**: `Transcribe` + `Diarize` + `WhisperKit*` + `ReviewDiarization` stage + `ClaudeAIReviewers/ClaudeDiarizationReviewer` (Decisions 5.2, 5.3) + `Orchestrator/SubprocessSupervisor` (integrates `synthesizeFailure(...)` and stale-detection sweep per Decision 4.2 + 4.6 lock-ins, including the 90s wall-clock budget for `reviewing_diarization`). Cache-immutability contract test (Decision 5.3) lands here.
+7. **Story 7**: `auricle-cli` skeleton (binding-contract verbs + hidden `__internal-stage` worker subcommand, including the `review-diarization` worker per Decision 5.3).
+8. **Story 8+**: `Capture` + `Permissions` + `App/Auricle` GUI shell (single-window architecture per UX Step 9 Principle 8; with amber-chip stale-state UX + VM-factory pattern + malformed-URL toast + first-meeting onboarding handed off to UX-design phase) + `MainWindow/AttributionSheet` (replaces former AttributionWindow per Decision 4.6 + UX Step 9) including AI-hint UI (`AIHintChip`, `TrustCalibrationFooter`) flagged-off in MVP per Path C + `Notifications` + `Verify` + `Calendar` + `VaultGlossary`.
 
-This sequence preserves the brainstorm's risk-front-loaded ordering: the pipeline-plumbing libraries (Stories 2–5) and the CLI executable (Story 7) can be built and dogfooded against pre-existing audio recordings before Story 8's SwiftUI app shell or any ScreenCaptureKit code exists.
+This sequence preserves the brainstorm's risk-front-loaded ordering: the pipeline-plumbing libraries (Stories 2–6) and the CLI executable (Story 7) can be built and dogfooded against pre-existing audio recordings before Story 8's SwiftUI app shell or any ScreenCaptureKit code exists. The AI-reviewer slots (Decision Group 5) are wired in Story 6 alongside the WhisperKit subprocess so the full `transcribing → reviewing_diarization → awaiting_attribution` chain is testable end-to-end before UI work begins.
