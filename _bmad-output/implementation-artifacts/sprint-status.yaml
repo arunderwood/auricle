@@ -1,0 +1,163 @@
+# generated: 2026-05-02
+# last_updated: 2026-05-02
+# project: auricle
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-05-02
+last_updated: 2026-05-02
+project: auricle
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: backlog
+  1-1-project-initialization-xcode-swiftpm-hybrid: backlog
+  1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config: backlog
+  1-3-log-facade-with-sensitivity-tagging-and-redaction: backlog
+  1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns: backlog
+  1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold: backlog
+  1-6-telemetry-recorder-stageeventlogger-and-stagemetadata: backlog
+  1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage: backlog
+  1-8-lint-format-and-ci-enforcement-layer: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variants: backlog
+  2-2-filenameresolver-slug-priority-chain-normalization-and-edge-cases: backlog
+  2-3-vaultwriter-atomic-write-path-resolution-collision-handling: backlog
+  2-4-persist-stage-entry-point-compose-renderer-writer-re-publish-semantics: backlog
+  2-5-frontmatter-schema-versioning-migration-aware-reader: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-summarizerinterface-protocol-normalized-summarywithgrounding-output: backlog
+  3-2-summarizationpromptbuilder-shared-skeleton-glossary-injection-prompt-drift-snapshot-tests: backlog
+  3-3-anthropichttpclient-keychainapikey-retry-backoff: backlog
+  3-4-claudesubstringsummarizer-substringgroundingvalidator: backlog
+  3-5-claudecitationssummarizer-citationgroundingvalidator-canonicalization-invariant-tests: backlog
+  3-6-summarizerorchestrator-primary-fallback-wiring: backlog
+  3-7-summarize-stage-entry-point-cache-dir-handoff: backlog
+  3-8-decision-3-6-smoke-test-execution-decision-rule-lock-in: backlog
+  3-9-eval-harness-frozen-transcripts-regression-tests: backlog
+  3-10-googlecalendarsource-oauth-pkce-keychain-refresh-token-eventmatcher: backlog
+  3-11-calendar-enrichment-graceful-degradation: backlog
+  3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrategy: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-whisperkit-transcribe-stage: backlog
+  4-2-diarize-stage-snippet-extraction: backlog
+  4-3-reviewdiarization-stage-state-machine-entry: backlog
+  4-4-aireviewerinterface-protocol-family-null-transcriptionreviewerstrategy: backlog
+  4-5-claudediarizationreviewer-concrete-impl-behind-flag: backlog
+  4-6-attributionviewmodel-in-core-attribution-batch-cli: backlog
+  4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch: backlog
+  4-8-basic-notification-stub-obsidian-url-open: backlog
+  4-9-exit-criteria-smoke-test: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-permissionchecker-scaffold-tcc-categories-deep-link-urls: backlog
+  5-2-screencapturekit-avaudioengine-pipeline-audiomixer: backlog
+  5-3-wavwriter-pcm-16-bit-16khz-mono-wav: backlog
+  5-4-capture-stage-entry-point-state-machine-integration-mid-capture-revocation-handling: backlog
+  5-5-recordingindicator-atomic-component-privacy-contract-surface: backlog
+  5-6-throwaway-debug-record-trigger-epic-6-deletes-it: backlog
+  5-7-onboardingcoordinator-welcome-vault-picker-obsidian-handshake-expectation-setting-flow: backlog
+  5-8-j0-4-step-permission-gauntlet: backlog
+  5-9-self-wikilink-config-setup-during-onboarding: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-designtokens-statechip-atomic-state-chip-palette: backlog
+  6-2-mainwindowview-shell-header-record-button-sheet-presenter-deletes-story-5-6-debug-trigger: backlog
+  6-3-meetinglistview-meetingrowview-lazyvstack-sort-priority-filter-chips: backlog
+  6-4-operationsconsoleview-row-expand-inline-operations: backlog
+  6-5-pipelinetimelineview-countdownannotation-atomic-components: backlog
+  6-6-onlaunchbannerview-failure-visibility-attribution-queue-dual-role: backlog
+  6-7-upcomingeventstripview-calendar-driven-upcoming-events: backlog
+  6-8-rollingcostfooterview-30-day-cost-widget-reading-epic-1-telemetry: backlog
+  6-9-app-lifecycle-stays-alive-on-window-close-cmd-q-graceful-exit: backlog
+  6-10-manually-discard-from-main-window-fr7-gui-affordance: backlog
+  epic-6-retrospective: optional
+
+  epic-7: backlog
+  7-1-attributionsheet-shell-sheet-presentation-sheet-queue-integration: backlog
+  7-2-attributionviewmodel-observable-wiring-incremental-atomic-write-debouncing: backlog
+  7-3-speakerrow-composite-autocomplete-priority-order: backlog
+  7-4-snippetplayer-waveformview-atomics: backlog
+  7-5-thisismebutton-heuristic-pre-select: backlog
+  7-6-calendarattendeebadge-coveragestrip: backlog
+  7-7-variancewarningglyph-acoustic-over-segmentation-hint: backlog
+  7-8-recurring-meeting-auto-prefill-j9-trust-compounding: backlog
+  7-9-asymmetric-bottom-button-hierarchy-keyboard-flow: backlog
+  7-10-flag-gated-attributiontranscriptpane-transcriptparagraph-paragraphplaybutton: backlog
+  7-11-flag-gated-aihintchip-per-paragraph-apply-reject-controls-reasoning-expansion: backlog
+  7-12-flag-gated-trustcalibrationfooter: backlog
+  7-13-cmd-z-undomanager-persistent-revert-this-split-affordance: backlog
+  epic-7-retrospective: optional
+
+  epic-8: backlog
+  8-1-notifier-unusernotificationcenter-integration-category-registrar: backlog
+  8-2-notificationdelegate-click-handler-payload-versioning: backlog
+  8-3-verifier-actor-idempotent-coalesce-sql-unique-constraint-backstop: backlog
+  8-4-manualverifyhandler-gui-confirm-button-auricle-keep-id-cli-verb: backlog
+  8-5-retentionscheduler-periodic-background-job-retention-timer-arming: backlog
+  8-6-7d-14d-retention-reminder-notifications: backlog
+  8-7-audio-cache-cleanup-on-retention-expiry: backlog
+  epic-8-retrospective: optional
+
+  epic-9: backlog
+  9-1-settingsview-full-macos-settings-scene: backlog
+  9-2-doctorview-doctorverb-permissions-gatekeeper-trust-vault-path-checks: backlog
+  9-3-self-managed-code-signing-ca-per-mac-spctl-trust-setup-bundle-layout: backlog
+  9-4-release-build-script-signed-app-dmg-output: backlog
+  9-5-full-cli-verb-surface-completeness-binding-contract-per-nfr-i7: backlog
+  9-6-trust-calibration-surfaces-auricle-status-id-log-show-discovery-path: backlog
+  9-7-minimal-auricle-stats-mvp-impl-wedge-validation-surface: backlog
+  epic-9-retrospective: optional
+
+  epic-10: backlog
+  10-1-menubar-item-fr8: backlog
+  10-2-vad-pre-flight-halt-force-override-fr9-fr10: backlog
+  10-3-auricle-pending-listing-dock-badge-fr15-fr16: backlog
+  10-4-cli-attribution-fallback-emit-snippets-speakers-fr27: backlog
+  10-5-per-meeting-retention-overrides-auricle-retain-settings-fr49-fr50: backlog
+  10-6-long-context-drift-detection-fr34: backlog
+  10-7-sparkle-eddsa-signed-appcast-self-update-fr65: backlog
+  10-8-claudetranscriptionreviewer-concrete-impl-fr76: backlog
+  10-9-local-llm-summarization-fr33: backlog
+  10-10-auricle-stats-enrichments-rolling-aggregates-drilldowns-kill-criteria-flagging: backlog
+  epic-10-retrospective: optional
