@@ -69,7 +69,7 @@ So that every subsequent story can land in a target with explicit build-system-e
   - [ ] For each target, create the source directory `Sources/<Target>/` even if empty (SwiftPM requires the directory to exist; empty directories are not committed by git unless a `.gitkeep` is added — see Task 5)
   - [ ] Wire dependency edges per **Dev Notes → Target Dependency Matrix** below — DO NOT add cross-edges that aren't listed (SwiftPM target boundaries are the architecture per AR-PAT-10 build-time enforcement)
   - [ ] Each library target sets `path: "Sources/<TargetName>"` explicitly (not strictly required since names match defaults, but explicit-is-better keeps grep findable)
-- [ ] **Task 3: Declare 26 matching test targets in `Package.swift`** (AC: #1)
+- [ ] **Task 3: Declare 25 matching test targets in `Package.swift`** (AC: #1)
   - [ ] Declare `<Target>Tests` for every library target (25 total) — per AR-INIT-5 + Architecture §Test Organization "One test target per source target"
   - [ ] **EXCEPTION:** Interface-only targets (`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`) may have `<Target>Tests` declared with a comment: `// Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.` Still create the test target so the structure is uniform; later stories that ship the protocols add real tests.
   - [ ] Each test target depends on its corresponding source target + `TestSupport`
@@ -217,11 +217,7 @@ let package = Package(
         .target(name: "Core", dependencies: [.product(name: "TOMLKit", package: "TOMLKit")]),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Telemetry", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "Orchestrator", dependencies: [
-            "Core", "State", "Telemetry",
-            "TranscriberInterface", "DiarizerInterface", "SummarizerInterface",
-            "AIReviewerInterface", "CalendarInterface",
-        ]),
+        .target(name: "Orchestrator", dependencies: ["Core", "State", "Telemetry", "Permissions"]),
         .target(name: "Permissions", dependencies: ["Core"]),
 
         // === Capture ===
@@ -231,14 +227,14 @@ let package = Package(
         .target(name: "TranscriberInterface", dependencies: ["Core"]),
         .target(name: "DiarizerInterface", dependencies: ["Core"]),
         .target(name: "SummarizerInterface", dependencies: ["Core"]),
-        .target(name: "AIReviewerInterface", dependencies: ["Core"]),
+        .target(name: "AIReviewerInterface", dependencies: ["Core", "DiarizerInterface", "TranscriberInterface"]),
         .target(name: "CalendarInterface", dependencies: ["Core"]),
 
         // === Stages ===
         .target(name: "Transcribe", dependencies: ["Core", "State", "Telemetry", "TranscriberInterface", "DiarizerInterface"]),
         .target(name: "Diarize", dependencies: ["Core", "State", "Telemetry", "DiarizerInterface"]),
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"]),
-        .target(name: "Summarize", dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface"]),
+        .target(name: "Summarize", dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"]),
         .target(name: "ReviewDiarization", dependencies: ["Core", "State", "Telemetry", "AIReviewerInterface"]),
         .target(name: "Persist", dependencies: ["Core", "State", "Telemetry"]),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"]),
@@ -293,7 +289,9 @@ let package = Package(
 
 **Critical correctness checks for the manifest:**
 - `Capture` MUST NOT depend on `Transcribe` — they live in separate subprocesses per AR-PIPE-1; `Capture` is GUI-process, `Transcribe` is subprocess-spawned. The pipeline contract is via SQLite + cache-dir, not an in-process method call.
-- `Orchestrator` depends on **interfaces only** (`*Interface`) — never on concrete strategies (`ClaudeSummarizer`, `WhisperKitTranscriber`, etc.). DIP per AR-PAT-5; the composition root (Xcode app/CLI targets) wires concretes.
+- `Orchestrator` depends on `Core, State, Telemetry, Permissions` ONLY — no strategy interfaces, no concrete strategies (per Architecture §Module Boundaries graph). The orchestrator dispatches subprocesses via `SubprocessDispatcher` (spawning `auricle-cli __internal-stage <stage>`); concrete strategies are wired in the per-binary composition root (`AuricleApp.swift`, `auricle-cli/main.swift`) and instantiated inside subprocess stage entry points. The orchestrator never sees a `SummarizerStrategy` instance.
+- `AIReviewerInterface` depends on `Core, DiarizerInterface, TranscriberInterface` (per arch line 2530) — it consumes both transcript and diarization artifact shapes (AR-AI-1).
+- `Summarize` depends on `VaultGlossary` because `Sources/Summarize/GlossaryInjector.swift` (arch §Repository Layout, line 2311) lives in the Summarize target and injects vault-glossary terms into the Claude prompt.
 - `ClaudeSummarizer` depends on `VaultGlossary` because the prompt builder injects the glossary (per AR-SUM-5 + Decision 3.2).
 - `WhisperKitTranscriber` and `WhisperKitDiarizer` are SEPARATE targets even though they share WhisperKit; they ship in one subprocess per AR-PIPE-1, but the composition is at the binary level (the `transcribe` stage subprocess imports both), not at the SwiftPM target level. Keep them separate so Story 1.8's lint can detect cross-edges.
 - `Telemetry` and `State` both link `GRDB.swift` because the telemetry table writes are partitioned per AR-DATA-4 — `Telemetry` writes to the `telemetry` table, `State` writes to `meetings` + `stage_events`. Two writers, two targets, no shared connection across module boundaries.
@@ -307,18 +305,18 @@ If a target needs an edge not listed here, that's an architecture revision — e
 | `Core` | `TOMLKit` | Config loader + primitives. No Apple framework deps beyond Foundation. |
 | `State` | `Core`, `GRDB.swift` | Single SQL writer for `meetings`+`stage_events`+`retention_timers` (AR-DATA-4). |
 | `Telemetry` | `Core`, `GRDB.swift` | Single SQL writer for `telemetry` table (AR-DATA-4). |
-| `Orchestrator` | `Core`, `State`, `Telemetry`, all 5 `*Interface` targets | DIP — depends on protocols, never concretes. |
+| `Orchestrator` | `Core`, `State`, `Telemetry`, `Permissions` | Dispatches subprocesses; never directly invokes strategy methods. Concrete strategies are wired in composition roots, not seen by Orchestrator. (Per Architecture §Module Boundaries graph.) |
 | `Permissions` | `Core` | TCC + ScreenCaptureKit checks scaffold (impl in Epic 5). |
 | `Capture` | `Core`, `State`, `Telemetry`, `Permissions` | In-process stage. NOT a depender of `Transcribe`. |
 | `TranscriberInterface` | `Core` | Protocol-only target. |
 | `DiarizerInterface` | `Core` | Protocol-only target. |
 | `SummarizerInterface` | `Core` | Protocol-only target (AR-SUM-1). |
-| `AIReviewerInterface` | `Core` | Protocol family per AR-AI-1. |
+| `AIReviewerInterface` | `Core`, `DiarizerInterface`, `TranscriberInterface` | Protocol family per AR-AI-1; consumes diarization + transcript artifact shapes. |
 | `CalendarInterface` | `Core` | Protocol-only target. |
 | `Transcribe` | `Core`, `State`, `Telemetry`, `TranscriberInterface`, `DiarizerInterface` | Subprocess stage; combines transcribe+diarize per AR-PIPE-1. |
 | `Diarize` | `Core`, `State`, `Telemetry`, `DiarizerInterface` | Diarization stage (some flows separate; protocol shared). |
 | `Attribute` | `Core`, `State`, `Telemetry` | In-process stage; UI lives in `App/Auricle/`, view model in `Core/` per epics.md line 590(h). |
-| `Summarize` | `Core`, `State`, `Telemetry`, `SummarizerInterface`, `CalendarInterface` | Subprocess stage; consumes calendar.json. |
+| `Summarize` | `Core`, `State`, `Telemetry`, `SummarizerInterface`, `CalendarInterface`, `VaultGlossary` | Subprocess stage; consumes calendar.json. `Summarize/GlossaryInjector.swift` (arch line 2311) injects vault-glossary terms into the prompt. |
 | `ReviewDiarization` | `Core`, `State`, `Telemetry`, `AIReviewerInterface` | Subprocess stage (AR-AI-3). |
 | `Persist` | `Core`, `State`, `Telemetry` | In-process stage; owns `VaultWriter` + `FrontmatterRenderer` + `FilenameResolver` (AR-PAT-4). |
 | `Verify` | `Core`, `State`, `Telemetry` | In-process; owns `Verifier` actor (AR-FAIL-4). |
