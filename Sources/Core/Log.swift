@@ -1,10 +1,13 @@
 import Foundation
 import os
 
-/// A field's sensitivity tag: every entry in a `Log` call's `fields`
-/// dictionary must carry one of these — the dictionary's value type itself
-/// has no untagged path (AR-PAT-3). `.sensitive` values never reach the
-/// built message; `.publicSafe` values do, verbatim.
+/// A field's sensitivity tag: every runtime value logged through `Log` must
+/// carry one of these (AR-PAT-3). There is no untagged path for a runtime
+/// value — a `Log` call's `message` is a `StaticString`, so it cannot
+/// interpolate anything computed at runtime; the only way to log a variable
+/// value is through `fields`, whose value type is `LogSensitivity`.
+/// `.sensitive` values never reach the built message; `.publicSafe` values
+/// do, verbatim.
 public enum LogSensitivity: Sendable {
     case publicSafe(String)
     case sensitive(String)
@@ -48,32 +51,38 @@ public struct Log: Sendable {
 
     /// Stripped in release builds: the body — including field redaction and
     /// message assembly — compiles to nothing outside `DEBUG`.
-    public func debug(_ message: String, _ fields: [String: LogSensitivity] = [:]) {
+    public func debug(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         #if DEBUG
         emit(.debug, message, fields)
         #endif
     }
 
-    public func info(_ message: String, _ fields: [String: LogSensitivity] = [:]) {
+    public func info(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         emit(.info, message, fields)
     }
 
     /// `warn` has no distinct `OSLogType` of its own; this maps to `.notice`
     /// (OSLog's `.default` type) — persisted and visible in `log show`
     /// without special flags, one step below `.error`.
-    public func warn(_ message: String, _ fields: [String: LogSensitivity] = [:]) {
+    public func warn(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         emit(.default, message, fields)
     }
 
-    public func error(_ message: String, _ fields: [String: LogSensitivity] = [:]) {
+    public func error(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         emit(.error, message, fields)
     }
 
     /// Single choke point for the "redact, then hand `Logger` an already-safe
     /// `.public` string" step every level above shares — so that invariant is
     /// enforced once, not re-stated at each call site.
-    private func emit(_ level: OSLogType, _ message: String, _ fields: [String: LogSensitivity]) {
-        let built = Log.buildMessage(message, fields)
+    ///
+    /// `message` is a `StaticString`, not a `String`: `StaticString` doesn't
+    /// conform to `ExpressibleByStringInterpolation`, so a call site cannot
+    /// write `"... \(runtimeValue)"` here — it's a compile error, not a
+    /// review-dependent mistake. Every runtime value is forced through
+    /// `fields`, where `LogSensitivity` is mandatory.
+    private func emit(_ level: OSLogType, _ message: StaticString, _ fields: [String: LogSensitivity]) {
+        let built = Log.buildMessage(String(describing: message), fields)
         logger.log(level: level, "\(built, privacy: .public)")
     }
 
