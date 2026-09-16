@@ -44,7 +44,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
         .package(url: "https://github.com/yaslab/ULID.swift.git", from: "1.3.1"),
@@ -60,7 +60,7 @@ let package = Package(
             path: "Sources/Core"
         ),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/State"),
-        .target(name: "Telemetry", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
+        .target(name: "Telemetry", dependencies: ["Core", "State", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
         .target(name: "Orchestrator", dependencies: ["Core", "State", "Telemetry", "Permissions"], path: "Sources/Orchestrator"),
         .target(name: "Permissions", dependencies: ["Core"], path: "Sources/Permissions"),
 
