@@ -601,3 +601,9 @@ standing instructions not to commit without being asked.
 | 11 | `AuricleApp.swift` has no `.onOpenURL` handler for the newly-registered `auricle://` scheme (Edge Case Hunter) | false | reject | Task 8 is explicit: the app shell is "NOTHING ELSE. No Orchestrator instantiation, no view models, no concrete strategies... implemented incrementally as later stories ship." URL-scheme click handling is explicitly Epic 8's scope (Notifier/NotificationDelegate), not this scaffolding-only story's. |
 | 12 | `ManifestPlaceholder.swift` / `CoreTests` sentinel test flagged as load-bearing claims (Edge Case Hunter) | false | reject | Not a defect — the reviewer's own "claim" entries confirm these files are correctly necessary, which Completion Notes points 3-4 already document in full. |
 | 13 | `Auricle.entitlements` lacks a distinct "notification entitlements" key alongside `com.apple.security.device.audio-input` (Edge Case Hunter) | false | reject | Task 8 is explicit that macOS has no entitlement key for `UNUserNotificationCenter` — authorization is runtime-requested and gated by `NSUserNotificationsUsageDescription` alone. `AuricleApp.swift`'s new comment documents this exact point. AC2's summary wording is loose but the implementation matches the more specific Task guidance. |
+
+## Post-Review Amendments
+
+| Date | Change | Trigger |
+|---|---|---|
+| 2026-09-16 | `Package.swift` `swift-tools-version` bumped `5.10` → `6.3`, matching the Xcode 26.4.1 / Swift 6.3.1 toolchain this story's own Debug Log already verified against. Closes the remaining half of Review Triage Log #7 (`.xcode-version` pinned Xcode; the SwiftPM manifest itself still said 5.10). Verified: `swift build` succeeds cleanly across all 25 library targets and dependencies under Swift 6 language mode. | sprint-change-proposal-2026-09-16-swift-version.md |
