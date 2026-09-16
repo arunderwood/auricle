@@ -81,10 +81,12 @@ The architecture-shaping NFRs:
 - **WhisperKit** (Swift Package) — transcribe + built-in diarize. Highest coupling — the model load is the dominant memory cost and the latency floor. Whisper-large-v3-turbo on ANE is the locked default.
 - **ScreenCaptureKit** (Apple framework) — system-audio loopback. Apple-controlled API surface, has changed shape across recent macOS versions; capture stage is the most likely site of OS-update breakage.
 - **AVFoundation / CoreAudio** — microphone capture, audio mixing, snippet playback (`AVPlayerView` or `QLPreviewPanel` for in-UI snippets).
-- **Anthropic SDK / HTTPS client** — single Claude Messages API call per meeting. Configurable model identifier (default `claude-sonnet-4-6`). Stage is swappable per FR33.
+- **Anthropic SDK / HTTPS client** — single Claude Messages API call per meeting. Configurable model identifier (default `claude-sonnet-5` — this line's Sonnet naming predates this proposal and disagrees with NFR-I6's Opus default elsewhere; only the generation number is corrected here, see the 2026-09-16 Claude-model-defaults sprint change proposal). Stage is swappable per FR33.
 - **Google Calendar API v3** (REST) — read-only OAuth 2.0 with PKCE; refresh token in Keychain. Off the hot path; degrades to `#auricle/needs-calendar-enrichment` on failure.
 - **SQLite** (system library, accessed via `sqlite3` / GRDB / similar) — single local database for state, retention, telemetry. Schema is versioned and migrated forward.
 - **swift-argument-parser** — CLI interface (NFR-I7 binding contract).
+- **ULID.swift** (yaslab, Swift Package) — Crockford base32 ULID generation for `MeetingID`. MIT, no transitive third-party deps beyond Foundation.
+- **Yams** (jpsim, Swift Package) — YAML encode/decode for vault frontmatter (`FrontmatterRenderer`). Avoids hand-written YAML escaping around arbitrary calendar-event titles.
 - **Sparkle [v1.1]** — auto-update, EdDSA-signed appcasts.
 - **Obsidian** — consumer of the vault output via `obsidian://open` URL scheme. No plugin required, no Obsidian config assumed beyond a writable vault.
 - **Local LLM runtimes [v1.1+]** — Ollama (HTTP) or MLX (in-process Swift). Plug into the `summarize` stage via the strategy interface introduced for FR33.
@@ -745,8 +747,9 @@ CREATE TABLE telemetry (
     quote_validation_drop_count INTEGER,
     attribution_completion_path TEXT,          -- 'inline_ui'|'cli_speakers_flag'|'publish_anyway'
     summarization_path TEXT,                   -- 'claude_api'|'local_llm'
-    summarization_model TEXT,                  -- 'claude-opus-4-7'|'claude-sonnet-X'|'ollama:...'
-    summarization_effort_budget TEXT,          -- 'minimal'|'low'|'moderate'|'high' or numeric token count
+    summarization_model TEXT,                  -- 'claude-opus-5'|'claude-sonnet-X'|'ollama:...'
+    summarization_effort_budget TEXT,          -- 'low'|'medium'|'high'|'xhigh'|'max' (named levels only;
+                                                -- no numeric-token-budget option on this model generation's API)
     cost_usd REAL,                             -- summarize stage cost only (Opus); see *_cost_usd siblings below for AI-reviewer costs
     -- AI-reviewer category telemetry (Decision Group 5; sparse — populated only when corresponding feature runs)
     diarization_suggestions_count INTEGER,         -- count of AI-proposed corrections emitted by reviewer
@@ -1227,7 +1230,7 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 
 - `transcribe`: `{"model_id": "whisper-large-v3-turbo", "audio_duration_s": 1827, "transcript_chars": 23847}`
 - `reviewing_diarization`: `{"model_id": "claude-haiku-4-5", "input_tokens": ..., "output_tokens": ..., "cost_usd": ..., "suggestions_count": ..., "review_skipped": false}` — when `diarization_review.enabled = false`, payload is `{"model_id": "flag_off", "cost_usd": 0, "suggestions_count": 0, "review_skipped": true}`. For future local-LLM impls (Decision 5.5 Phase 2/4): `{"model_id": "local:<name>", "cost_usd": 0, ...}`. The `cost_usd: 0` + `model_id: "local:<name>"` contract is locked in MVP telemetry schema so v1.1+ swap is a config change, not a schema migration (Winston's Round-2 lock).
-- `summarize`: `{"model_id": "claude-opus-4-7", "effort_budget": "moderate", "input_tokens": ..., "output_tokens": ..., "thinking_tokens": ..., "cost_usd": ..., "quote_validation_drop_count": ..., "grounding_method": "..."}` (`grounding_method` field becomes `"citations"` or `"substring"` post-spike)
+- `summarize`: `{"model_id": "claude-opus-5", "effort_budget": "medium", "input_tokens": ..., "output_tokens": ..., "thinking_tokens": ..., "cost_usd": ..., "quote_validation_drop_count": ..., "grounding_method": "..."}` (`grounding_method` field becomes `"citations"` or `"substring"` post-spike)
 - `persist`: `{"vault_note_path": "...", "frontmatter_schema_version": 1}`
 - `notify`: `{"notification_id": "...", "delivered": true|false}`
 
@@ -1351,14 +1354,14 @@ public enum GroundingMethod: String, Codable {
 #### Decision 3.2: Two grounding strategies — Citations primary, substring as v1.1 + fallback
 
 **`ClaudeCitationsSummarizer` (MVP default):**
-- Calls `messages.create` on `claude-opus-4-7` with the transcript provided as a Document with `citations: { enabled: true }`
+- Calls `messages.create` on `claude-opus-5` with the transcript provided as a Document with `citations: { enabled: true }`
 - Asks for action items and decisions in structured JSON; each item must include a `citations` array referencing the document
 - Receives Anthropic-constructed `CitationCharLocation` objects with `start_char_index` / `end_char_index` (verify against current API docs at implementation time — these are offsets into the canonical transcript representation that was submitted; encoding TBD by API spec, see canonicalization invariant below)
 - Maps each `CitationCharLocation` directly to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }`
 - Validates each pointer via `CitationGroundingValidator` (sanity-checks bounds; well-formed responses always pass)
 
 **`ClaudeSubstringSummarizer` (MVP fallback + v1.1 local-LLM path):**
-- Calls `messages.create` on `claude-opus-4-7` (same prompt skeleton, no Citations enabled) — asks for items with a `source_transcript_quote` field of type string
+- Calls `messages.create` on `claude-opus-5` (same prompt skeleton, no Citations enabled) — asks for items with a `source_transcript_quote` field of type string
 - Maps each returned quote string to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .substring }` by performing literal substring search in the canonical transcript
 - Validates via `SubstringGroundingValidator`: items where the quote is not found verbatim in the canonical transcript are dropped, with the drop reason logged at `warn` level and recorded in `telemetry.quote_validation_drop_count`
 
@@ -2013,6 +2016,12 @@ The project has several **single-implementation primitives**, each owned by exac
 
 The helpers have one implementation, one test, one set of edge-case decisions. Reinventing them in stage code creates inconsistency and reopens fixed bugs.
 
+#### Dependency Discipline (prefer solved-problem libraries)
+
+For a well-specified, general-purpose problem — an encoding (base32, base64), a container/file format (WAV, YAML), a standard protocol (OAuth/PKCE) — default to a native Apple framework or an established OSS package, not a hand-rolled implementation. `AVAudioFile`/`AVAudioConverter` for audio file I/O and resampling, `Yams` for YAML, `ULID.swift` for ULIDs are the concrete defaults for this project.
+
+A hand-rolled implementation of a solved problem needs a documented reason at its point of use (a real constraint a library doesn't meet — e.g. `AtomicWriter`'s `fsync`-before-rename requirement, which Foundation's `.atomic` write option doesn't provide). "No library was evaluated" is not a reason. This still applies within `Core`: a dependency there is an escalation to name and justify, not a default to avoid.
+
 #### Atomic-Write Enforcement (Reinforcing #3 from Cross-Cutting Concerns)
 
 - `AtomicWriter.write(_ data: Data, to path: URL)` is the only filesystem-write primitive. It implements `temp → fsync → rename` per NFR-R1 and FR36.
@@ -2238,7 +2247,7 @@ auricle/
 │   │   ├── MeetingIDResolver.swift        # `<id>` argument resolution (Dec 1.5)
 │   │   ├── PipelineState.swift            # canonical state-name enum (Dec 1.2)
 │   │   ├── SchemaVersion.swift            # schema-version constants for every contract
-│   │   └── ULID.swift                     # ULID generation (Crockford base32)
+│   │   └── ULIDFormat.swift                # ULID generation, wraps yaslab/ULID.swift (named ULIDFormat — the library's own module is named ULID)
 │   │
 │   ├── State/                             # SQLite layer
 │   │   ├── StateStore.swift               # public API — every state read/write goes through here
@@ -2270,8 +2279,8 @@ auricle/
 │   │
 │   ├── Capture/                           # FR1–FR10
 │   │   ├── CaptureSession.swift           # ScreenCaptureKit + AVAudioEngine pipeline
-│   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM (Dec 1.4)
-│   │   ├── WAVWriter.swift                # PCM16 WAV file writer
+│   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM via AVAudioConverter (Dec 1.4)
+│   │   ├── WAVWriter.swift                # PCM16 WAV file writer via AVAudioFile
 │   │   ├── CaptureError.swift
 │   │   └── CaptureMetadata.swift          # StageMetadata.capture payload
 │   │
@@ -2368,7 +2377,7 @@ auricle/
 │   │
 │   ├── Persist/                           # FR35–FR41
 │   │   ├── PersistStage.swift
-│   │   ├── FrontmatterRenderer.swift      # data → markdown (with the Dec 2.2 schema)
+│   │   ├── FrontmatterRenderer.swift      # data → markdown via Yams (with the Dec 2.2 schema)
 │   │   ├── VaultWriter.swift              # markdown → atomic write, path-resolution + collision
 │   │   ├── FilenameResolver.swift         # Dec 2.4 slug rules
 │   │   └── PersistMetadata.swift
@@ -2389,7 +2398,7 @@ auricle/
 │   │   ├── CanonicalTranscriptTests.swift # the Dec 3.4 build-time invariant tests
 │   │   ├── LogRedactionTests.swift
 │   │   ├── MeetingIDResolverTests.swift
-│   │   └── ULIDTests.swift
+│   │   └── ULIDFormatTests.swift
 │   ├── StateTests/
 │   │   ├── MigrationTests.swift           # round-trip every migration (step-05 CI gate)
 │   │   ├── StateStoreTests.swift
