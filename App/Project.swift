@@ -54,13 +54,17 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             infoPlist: .file(path: "Auricle/Info.plist"),
             sources: ["Auricle/**"],
+            copyFiles: [
+                .executables(name: "Embed auricle-cli", subpath: ".", files: [.buildProduct(name: "auricle-cli", codeSignOnCopy: true)])
+            ],
             entitlements: .file(path: "Auricle/Auricle.entitlements"),
-            dependencies: auricleKitProducts
+            dependencies: auricleKitProducts + [.target(name: "auricle-cli")]
         ),
         .target(
             name: "auricle-cli",
             destinations: [.mac],
             product: .commandLineTool,
+            productName: "auricle-cli",
             bundleId: "com.auricle.cli",
             deploymentTargets: .macOS("14.0"),
             sources: ["auricle-cli/**"],

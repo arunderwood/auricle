@@ -27,7 +27,7 @@ public struct SubprocessDispatcher: Sendable {
     public func makeProcess(
         stage: PipelineStage,
         meetingID: MeetingID,
-        workerProtocolVersion: Int = 1
+        workerProtocolVersion: Int = Core.WorkerProtocolVersion.current
     ) throws -> Process {
         guard let executableURL = resolveExecutablePath() else {
             throw DispatchError.executableNotFound
@@ -52,7 +52,7 @@ public struct SubprocessDispatcher: Sendable {
     public func dispatch(
         stage: PipelineStage,
         meetingID: MeetingID,
-        workerProtocolVersion: Int = 1
+        workerProtocolVersion: Int = Core.WorkerProtocolVersion.current
     ) throws -> Process {
         let process = try makeProcess(stage: stage, meetingID: meetingID, workerProtocolVersion: workerProtocolVersion)
         try process.run()
