@@ -1839,8 +1839,9 @@ So that the diarization JSON is canonical and the snippet files are pre-computed
 **Given** the `WhisperKitDiarizer` target depending on `DiarizerInterface`
 **When** I declare `WhisperKitDiarizer` conforming to `DiarizerStrategy`
 **Then** the protocol exposes: `func diarize(transcript: CanonicalTranscript, audio: URL, config: DiarizerConfig) async throws -> DiarizationArtifact` per AR-PAT-7
-**And** the concrete impl uses WhisperKit's built-in diarization per FR18 (no pyannote, no cross-meeting voice-print matching in MVP — those are FR68 v2+)
-**And** the diarization runs in the same subprocess as transcribe (per Decision 1.1 — they share WhisperKit model state)
+**And** before writing the concrete impl, the PRD's Open Resolutions empirical test (WhisperKit-built-in vs SpeakerKit, per the widened resolution) runs first and decides the engine — default to WhisperKit's built-in diarization per FR18 if the test doesn't clearly favor SpeakerKit or if SpeakerKit turns out to need non-Swift runtime support
+**And** cross-meeting voice-print matching (FR68) stays v2+ regardless of which engine wins this test — that's a separate capability from single-meeting diarization quality, not a reason to exclude SpeakerKit
+**And** the diarization runs in the same subprocess as transcribe (per Decision 1.1 — they share WhisperKit model state; if SpeakerKit is adopted, confirm it can share the same process/model-load lifecycle before locking this AC)
 
 **Given** the `Diarize` target
 **When** the stage runs after `Transcribe`
