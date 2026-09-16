@@ -30,7 +30,7 @@ The UX premise is the elimination of the meeting-notes tax: *Be in the meeting. 
 
 ### Target Users
 
-A single human user, observed across multiple modes rather than multiple personas. He is an independent engineer/maker, attends 10–25 voice meetings per week across Zoom / Google Meet / Discord / FaceTime, and maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that he treats as working memory. He is highly tech-savvy and comfortable in a terminal.
+A single human user, observed across multiple modes rather than multiple personas. They are an independent engineer/maker, attend 10–25 voice meetings per week across Zoom / Google Meet / Discord / FaceTime, and maintain a personal Obsidian vault at `~/checkouts/SecondBrain` that they treat as working memory. They are highly tech-savvy and comfortable in a terminal.
 
 The eight UX-relevant modes that shape the surface:
 
@@ -53,7 +53,7 @@ The eight UX-relevant modes that shape the surface:
 
 4. **App-lifecycle mental model.** The app stays alive on window-close; capture continues in background; attribution resumes on next window open. This subverts the "close = quit" expectation. Visible cues are needed (Dock icon presence, recording indicator persistence, optional v1.1 menubar status dot).
 
-5. **Recording-state visibility as a privacy contract.** The recording indicator is not just a status — it's the user's promise to himself about consent. Must be visible (color + shape/motion per NFR-A3 + NFR-A5 Reduce-Motion respect), persistent across window-close, and unmistakable.
+5. **Recording-state visibility as a privacy contract.** The recording indicator is not just a status — it's the user's promise to themselves about consent. Must be visible (color + shape/motion per NFR-A3 + NFR-A5 Reduce-Motion respect), persistent across window-close, and unmistakable.
 
 6. **Trust calibration (J1.5).** PRD's success criterion ("the user defaults to auricle's notes by month 2") requires inspectable per-meeting grounding detail — but DP2 forbids confidence flags in vault frontmatter. Resolution: trust is built via a CLI inspection surface (`auricle status <id>`, `auricle logs <id>`), not in-vault UI noise.
 
@@ -450,7 +450,7 @@ Established UX components recombined; no part requires user education.
 - **`•unmatched`** — attendee never matched (diarization missed them, or they didn't speak)
 Coverage progress on the bottom progress line: *"3 of 4 speakers attributed · 1 calendar attendee not matched."*
 
-**"This is me" — heuristic pre-selection + button override.** On window load, the longest-cumulative-speaking row is auto-pre-filled with the configured `self.wikilink`, shown with a subtle "you" tag and an inline `[undo]` affordance. The user clicks `[undo]` if the heuristic is wrong (rare on 1:1s; more common on multi-party where he's not the dominant speaker), then uses **"This is me"** on the correct row. The button remains on every row for explicit override; Cmd-M still works on the focused row.
+**"This is me" — heuristic pre-selection + button override.** On window load, the longest-cumulative-speaking row is auto-pre-filled with the configured `self.wikilink`, shown with a subtle "you" tag and an inline `[undo]` affordance. The user clicks `[undo]` if the heuristic is wrong (rare on 1:1s; more common on multi-party where they're not the dominant speaker), then uses **"This is me"** on the correct row. The button remains on every row for explicit override; Cmd-M still works on the focused row.
 
 **Variance warning.** When `diarization.json` indicates high intra-segment voice-profile variance for a row, the row carries a non-blocking warning glyph and label (`⚠ may be 2 voices`). It does NOT gate Continue — it's a hedge against under-segmentation, the trust-asymmetry failure mode. The user can play the snippet to judge. (No automatic merge in MVP — manual merge is a v1.1 feature per Decision 4.6 + project structure.)
 
@@ -819,7 +819,7 @@ The PRD documents ten journey narratives (J0–J9 incl. J1.7); this section desi
 
 ### J0 — First-launch / permission gauntlet
 
-The user installs auricle on a fresh Mac and reaches a state where he can record a meeting.
+The user installs auricle on a fresh Mac and reaches a state where they can record a meeting.
 
 ```mermaid
 flowchart TD

@@ -247,7 +247,7 @@ auricle is signed with a self-managed code-signing certificate (personal CA + pe
 
 ### Rationale
 
-- The PRD's locked constraints — single-user, "multiple personally-owned Macs," no public distribution — make Apple's notarization unnecessary. Notarization solves "convince other people's Macs that this software is safe"; auricle's only audience is the user himself.
+- The PRD's locked constraints — single-user, "multiple personally-owned Macs," no public distribution — make Apple's notarization unnecessary. Notarization solves "convince other people's Macs that this software is safe"; auricle's only audience is the user themselves.
 - Apple-supported mechanism: `sudo spctl --add --type execute --requirement 'anchor H"<ca-hash>"'` registers a custom Gatekeeper assessment policy that accepts any binary signed by certificates chained to the named CA. This is the documented path for organizational / internal code-signing use cases and is not a workaround.
 - TCC permission stability (NFR-S3 spirit, FR60) requires a stable signing identity. A self-managed CA + leaf cert combined with stable bundle identifier (`com.auricle.app`) provides exactly this — TCC permissions for Screen Recording, Microphone, and Notifications persist across rebuilds and Sparkle updates without re-grant.
 - Sparkle update mechanism (FR65) is unaffected. Sparkle's appcast EdDSA signature validation (NFR-S9) is independent of Apple code signing. Downloaded `.app` updates are accepted by Gatekeeper via the per-Mac `spctl` trust rule established once at first install on each Mac.

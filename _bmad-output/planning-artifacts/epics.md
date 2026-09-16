@@ -49,10 +49,10 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Attribution (FR21–FR27, FR77)
 
-- **FR21 [MVP]:** The user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — single-workflow-window principle) after diarization completes, with the pipeline blocked on his input before summarization runs.
+- **FR21 [MVP]:** The user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — single-workflow-window principle) after diarization completes, with the pipeline blocked on their input before summarization runs.
 - **FR22 [MVP]:** The user can play a short representative audio snippet (5–10 seconds) for each detected speaker via an in-UI playback control.
 - **FR23 [MVP]:** The user can assign a name to each detected speaker via an autocomplete input that prioritizes (1) calendar attendees of the current meeting (visually marked), (2) existing vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
-- **FR24 [MVP]:** The user can mark himself as a specific speaker without typing — a "this is me" affordance.
+- **FR24 [MVP]:** The user can mark themselves as a specific speaker without typing — a "this is me" affordance.
 - **FR25 [MVP]:** The user can publish a meeting without completing attribution via a "Publish anyway" action; the resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution` in frontmatter.
 - **FR26 [MVP]:** The user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note, so manual fixes are permanent and uncontested).
 - **FR27 [v1.1]:** The user can complete attribution via CLI when the native UI is unavailable: `auricle attribute <id> --emit-snippets` writes WAV snippets to the cache directory; `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` accepts a manual mapping and resumes the pipeline.
@@ -776,7 +776,7 @@ User has full configuration control via SettingsView (Cmd-, macOS Settings scene
 
 ### Epic 10: v1.1 Operability & Power-User Features (Re-Prioritization Queue)
 
-> **Honest framing (per John's review):** This epic is a *parking lot* for v1.1 features. It is NOT prioritized — it is a queue that will be re-ranked after ~30 days of MVP dogfood, when the user has empirical signal on which 2-3 of these features actually matter to his real workflow. Treating it as a pre-prioritized epic would be planning theater. After dogfood, this epic SHOULD be split into "Epic 10: <the 2-3 that earned their way>" and "Epic 11+ (deferred indefinitely): <the rest>." Don't pretend the prioritization conversation has happened when it hasn't. (Amelia's call: renaming doesn't change what gets built — keep one epic but flag the framing.)
+> **Honest framing (per John's review):** This epic is a *parking lot* for v1.1 features. It is NOT prioritized — it is a queue that will be re-ranked after ~30 days of MVP dogfood, when the user has empirical signal on which 2-3 of these features actually matter to their real workflow. Treating it as a pre-prioritized epic would be planning theater. After dogfood, this epic SHOULD be split into "Epic 10: <the 2-3 that earned their way>" and "Epic 11+ (deferred indefinitely): <the rest>." Don't pretend the prioritization conversation has happened when it hasn't. (Amelia's call: renaming doesn't change what gets built — keep one epic but flag the framing.)
 
 Power-user / operability features that earn their way after MVP dogfood — each independently shippable, none load-bearing for MVP. Bundle includes: menubar item with quick start/stop and click-to-open-window (FR8); VAD pre-flight halt with `--force` override (FR9, FR10); `auricle pending` listing + Dock badge for stale-pending items (FR15, FR16); CLI attribution fallback `--emit-snippets`/`--speakers` (FR27); per-meeting retention overrides via `auricle retain --indefinite|--days N|--release` and Settings UI (FR49, FR50); long-context drift detection on ≥60min transcripts (FR34); Sparkle EdDSA-signed appcast self-update (FR65); concrete `ClaudeTranscriptionReviewer` impl with `transcription_review.enabled` flag and same dogfood-then-enable activation gate as diarization review (FR76); local-LLM `OllamaSummarizer` and/or `MLXSummarizer` (FR33); `auricle stats` enrichments (rolling aggregates, per-meeting drilldowns, kill-criteria flagging — minimal MVP `auricle stats` is in Epic 9).
 
@@ -1643,12 +1643,12 @@ So that summarization quality is measured continuously (not just at one-time smo
 **And** failure of any per-fixture threshold blocks the PR
 **And** intentional updates to the threshold or expected outputs require an explicit rationale in the PR description (not a bare snapshot regeneration)
 
-**Given** the user is calibrating his trust in the validator (J1.5)
-**When** he inspects the eval-harness output
+**Given** the user is calibrating their trust in the validator (J1.5)
+**When** they inspect the eval-harness output
 **Then** the harness emits a per-fixture summary line: *"Fixture <name>: kept N items (M expected) · dropped K · false-keeps F · grounding_method=citations"* — readable, auditable, copy-pasteable
 
 **Given** a future maintainer adds a new captured-meeting fixture
-**When** he places it in `Tests/SummarizeTests/Fixtures/eval/<name>/` with `transcript.json` + `expected.json`
+**When** they place it in `Tests/SummarizeTests/Fixtures/eval/<name>/` with `transcript.json` + `expected.json`
 **Then** the harness picks it up automatically (no test-file generation per fixture); the per-fixture threshold defaults to the project-wide default but can be overridden in `expected.json`
 
 ---
@@ -3080,7 +3080,7 @@ So that the trust-asymmetry failure mode (under-segmentation: a single missed sp
 **Given** `diarization.json` segment metadata indicates high intra-segment voice-profile variance for a Speaker_N
 **When** the corresponding `SpeakerRow` renders
 **Then** `VarianceWarningGlyph` appears on the row per UX-DR36
-**And** the glyph is **non-blocking** — it does NOT gate `[Continue]` per UX-DR36 (the user can play the snippet and judge for himself; manual merge is v1.1)
+**And** the glyph is **non-blocking** — it does NOT gate `[Continue]` per UX-DR36 (the user can play the snippet and judge for themselves; manual merge is v1.1)
 
 **Given** the user observes the warning
 **When** they want to investigate
