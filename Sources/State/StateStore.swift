@@ -13,6 +13,12 @@ import GRDB
 /// (`TelemetryRecorder`, `StageEventLogger`) are Story 1.6's, and
 /// state-transition orchestration (`StageRunner`, crash recovery) is
 /// Story 1.5's — neither is implemented here.
+/// Thrown by `StateStore` methods that need a row to already exist and find
+/// none.
+public enum StateStoreError: Error, Sendable, Equatable {
+    case meetingNotFound(id: String)
+}
+
 public actor StateStore {
     private let writer: any DatabaseWriter
 
@@ -95,6 +101,55 @@ public actor StateStore {
         }
     }
 
+    /// The combined write behind `StageRunner`'s two-transaction pattern
+    /// (AR-PIPE-3): one `stage_events` insert plus one `meetings.state`
+    /// update, in a single `writer.write` closure so a crash between the two
+    /// is impossible — either both land or neither does. Called twice per
+    /// stage execution (Txn A with `event: "started"`, Txn B with
+    /// `event: "completed"` or `"failed"`), never once with both events
+    /// folded together, since Txn A must be durable *before* the stage's
+    /// `work` closure runs.
+    ///
+    /// Parameters are raw `String`s, not `PipelineState`/`PipelineStage`:
+    /// this actor doesn't depend on `Orchestrator`, so it can't reference
+    /// those types even if it wanted to. Callers convert via `.rawValue` at
+    /// the boundary.
+    @discardableResult
+    public func recordStageTransition(
+        meetingID: String,
+        stage: String,
+        event: String,
+        occurredAt: String,
+        targetState: String,
+        durationMS: Int? = nil,
+        errorMessage: String? = nil,
+        metadataJSON: String? = nil
+    ) async throws -> StageEvent {
+        try await writer.write { db in
+            var stageEvent = StageEvent(
+                meetingID: meetingID,
+                stage: stage,
+                event: event,
+                occurredAt: occurredAt,
+                durationMS: durationMS,
+                errorMessage: errorMessage,
+                metadataJSON: metadataJSON
+            )
+            try stageEvent.insert(db)
+            try db.execute(sql: "UPDATE meetings SET state = ? WHERE id = ?", arguments: [targetState, meetingID])
+            // With foreign keys unenforced (e.g. an in-memory test queue
+            // with no `PRAGMA foreign_keys = ON`), a nonexistent `meetingID`
+            // would otherwise let the `stage_events` insert above succeed
+            // while this UPDATE silently matches zero rows. Throwing here
+            // rolls back the whole `writer.write` transaction, so the event
+            // insert never lands either — the pair stays atomic.
+            guard db.changesCount > 0 else {
+                throw StateStoreError.meetingNotFound(id: meetingID)
+            }
+            return stageEvent
+        }
+    }
+
     public func fetchStageEvents(meetingID: String) async throws -> [StageEvent] {
         try await writer.read { db in
             try StageEvent
@@ -116,6 +171,21 @@ public actor StateStore {
     public func fetchRetentionTimer(meetingID: String) async throws -> RetentionTimer? {
         try await writer.read { db in
             try RetentionTimer.fetchOne(db, key: meetingID)
+        }
+    }
+
+    /// Rows `RetentionScheduler`'s poll should act on this tick: `status =
+    /// 'pending'` and `fires_at <= asOf`, per `idx_retention_pending_fires_at`
+    /// (the index this query is shaped to use). Plain lexical `<=` on `TEXT`
+    /// is correct here because every `fires_at`/`asOf` value this codebase
+    /// writes is the same zero-padded ISO8601 UTC form — sorts
+    /// chronologically as a string.
+    public func fetchDueRetentionTimers(asOf: String) async throws -> [RetentionTimer] {
+        try await writer.read { db in
+            try RetentionTimer
+                .filter(Column("status") == "pending")
+                .filter(Column("fires_at") <= asOf)
+                .fetchAll(db)
         }
     }
 
