@@ -47,10 +47,18 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
+        .package(url: "https://github.com/yaslab/ULID.swift.git", from: "1.3.1"),
     ],
     targets: [
         // === Cross-cutting ===
-        .target(name: "Core", dependencies: [.product(name: "TOMLKit", package: "TOMLKit")], path: "Sources/Core"),
+        .target(
+            name: "Core",
+            dependencies: [
+                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "ULID", package: "ULID.swift"), // wrapped as `ULIDFormat` — see Sources/Core/ULIDFormat.swift
+            ],
+            path: "Sources/Core"
+        ),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/State"),
         .target(name: "Telemetry", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
         .target(name: "Orchestrator", dependencies: ["Core", "State", "Telemetry", "Permissions"], path: "Sources/Orchestrator"),
