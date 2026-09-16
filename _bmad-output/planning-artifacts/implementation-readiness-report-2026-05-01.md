@@ -46,22 +46,22 @@ documentsIncluded:
 ### Functional Requirements
 
 **Capture (FR1–FR10)**
-- FR1 [MVP]: the user can start audio capture for a meeting via a prominent control in the auricle main window.
-- FR2 [MVP]: the user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
-- FR3 [MVP]: the user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
+- FR1 [MVP]: The user can start audio capture for a meeting via a prominent control in the auricle main window.
+- FR2 [MVP]: The user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
+- FR3 [MVP]: The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
 - FR4 [MVP]: auricle can capture system audio (loopback from any application) without requiring integration with the meeting platform.
 - FR5 [MVP]: auricle can simultaneously capture the user's microphone and mix it with system audio.
 - FR6 [MVP]: auricle can request and handle macOS Screen Recording and Microphone permissions, with clear in-app explanation if permission is denied.
-- FR7 [MVP]: the user can manually discard a captured-but-unprocessed meeting from the main window.
-- FR8 [v1.1]: the user can start and stop capture from a menubar item without opening the main window.
+- FR7 [MVP]: The user can manually discard a captured-but-unprocessed meeting from the main window.
+- FR8 [v1.1]: The user can start and stop capture from a menubar item without opening the main window.
 - FR9 [v1.1]: VAD pre-flight halting gate (configurable, default <2 min speech), surfacing meeting as `silent`.
-- FR10 [v1.1]: the user can override a VAD halt and force-process a meeting (UI affordance + `--force` CLI flag).
+- FR10 [v1.1]: The user can override a VAD halt and force-process a meeting (UI affordance + `--force` CLI flag).
 
 **Pipeline Orchestration & State (FR11–FR16)**
 - FR11 [MVP]: auricle can execute the meeting pipeline in distinct, crash-isolated stages: capture → transcribe → diarize → attribute → summarize → persist → notify.
 - FR12 [MVP]: Each pipeline stage can be invoked independently as `auricle <stage> <id>` CLI subcommand, producing identical artifacts to in-app execution.
 - FR13 [MVP]: Per-meeting state in main window (`Recording`, `Processing`, `Awaiting Attribution`, `Awaiting Verification`, `Verified`).
-- FR14 [MVP]: the user can re-run a failed stage idempotently without corrupting earlier-stage artifacts.
+- FR14 [MVP]: The user can re-run a failed stage idempotently without corrupting earlier-stage artifacts.
 - FR15 [v1.1]: `auricle pending` lists in-flight, silent, awaiting-attribution, awaiting-verification, and stale-pending meetings.
 - FR16 [v1.1]: Dock badge count of stale-pending items.
 
@@ -73,11 +73,11 @@ documentsIncluded:
 
 **Attribution (FR21–FR27, FR77)**
 - FR21 [MVP]: Native Attribution sheet attached to main window (modal, not a separate window — single-workflow-window principle); pipeline blocks on input before summarization.
-- FR22 [MVP]: the user can play 5–10s representative audio snippet for each detected speaker.
+- FR22 [MVP]: The user can play 5–10s representative audio snippet for each detected speaker.
 - FR23 [MVP]: Autocomplete prioritizes (1) calendar attendees, (2) vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
 - FR24 [MVP]: "This is me" affordance for self-attribution without typing.
 - FR25 [MVP]: "Publish anyway" action; resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution`.
-- FR26 [MVP]: the user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note).
+- FR26 [MVP]: The user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note).
 - FR27 [v1.1]: CLI fallback — `auricle attribute <id> --emit-snippets` and `--speakers "1=Ben,2=Sara,..."`.
 - FR77 [MVP]: When ≥2 meetings simultaneously in `Awaiting Attribution`, sheets are serialized FIFO; main window shows banner counter; completing/dismissing/saving-for-later opens next queued sheet.
 

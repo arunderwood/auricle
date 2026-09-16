@@ -926,7 +926,7 @@ Where:
 2. **`<slug>`** — derived from meeting context (rules below).
 3. **`.md`** extension.
 
-**Cross-Mac uniqueness — accepted trade-off (not by-construction):** the user explicitly chose cleaner filenames over by-construction cross-Mac uniqueness. The realistic collision surface for the documented use case (single user, multiple personally-owned Macs) is narrow: cross-Mac collision requires two Macs to capture meetings with identical `capture_started_at` calendar date AND identical normalized slugs (most likely same calendar event from a synced Google Calendar). In practice the user is usually on one Mac at a time, and the failure mode (git conflict surfaced at sync time, or iCloud silent `(2)` rename) is annoying but recoverable manually. If the collision rate ever becomes a real problem in dogfood, a deterministic id-suffix can be re-introduced as an additive change without breaking the canonical filename convention.
+**Cross-Mac uniqueness — accepted trade-off (not by-construction):** The user explicitly chose cleaner filenames over by-construction cross-Mac uniqueness. The realistic collision surface for the documented use case (single user, multiple personally-owned Macs) is narrow: cross-Mac collision requires two Macs to capture meetings with identical `capture_started_at` calendar date AND identical normalized slugs (most likely same calendar event from a synced Google Calendar). In practice the user is usually on one Mac at a time, and the failure mode (git conflict surfaced at sync time, or iCloud silent `(2)` rename) is annoying but recoverable manually. If the collision rate ever becomes a real problem in dogfood, a deterministic id-suffix can be re-introduced as an additive change without breaking the canonical filename convention.
 
 **Slug source priority (try each; fall through if it produces an empty or unusable slug):**
 
@@ -1904,7 +1904,7 @@ auricle/
 │   ├── create-signing-ca.sh            # CA + leaf cert generation (openssl), Epic 9
 │   └── setup-trust.sh                  # per-Mac trust setup, etc.
 ├── assets/
-│   └── auricle-root-ca.cer         # public CA cert (no private key)
+│   └── auricle-root-ca.cer             # public CA cert (no private key)
 └── _bmad-output/                       # planning artifacts
 ```
 
@@ -2520,7 +2520,7 @@ auricle/
 │   └── lint.sh                             # local swiftformat + swiftlint runner
 │
 ├── assets/
-│   └── auricle-root-ca.cer             # public CA cert (no private key)
+│   └── auricle-root-ca.cer                 # public CA cert (no private key)
 │
 └── _bmad-output/                           # planning artifacts (this document, PRD, etc.)
     ├── brainstorming/
@@ -2603,7 +2603,7 @@ The GUI-spawned subprocess work uses a deliberately-hidden CLI subcommand — `a
 - Direct-coupled to `SubprocessDispatcher` only; no documentation surface for users
 - May be renamed, restructured, or replaced wholesale across releases without violating NFR-I7
 
-**Why the separation:** Decision 1.5's user-facing CLI surface (`record`, `run`, `keep`, etc.) is a binding product contract — renames and removals require major-version bumps. The GUI-internal worker invocation has different evolutionary pressures (refactoring, telemetry-shape changes, future stage splits) and shouldn't drag the user-facing surface along. Splitting the worker into a hidden subcommand keeps the binding rule applying only where it should — to the verbs the user (or any future user) types in a terminal.
+**Why the separation:** Decision 1.5's user-facing CLI surface (`record`, `run`, `keep`, etc.) is a binding product contract — renames and removals require major-version bumps. The GUI-internal worker invocation has different evolutionary pressures (refactoring, telemetry-shape changes, future stage splits) and shouldn't drag the user-facing surface along. Splitting the worker into a hidden subcommand keeps the binding rule applying only where it should — to the verbs the user types in a terminal.
 
 **CLI exposure for users is independent and unchanged:** the user-facing `auricle run --only transcribe <id>` (Decision 1.5) still works for terminal users invoking the same stage. The two paths converge on the same `TranscribeStage` library code, but route through different CLI entry points (binding `RunVerb` vs hidden `InternalStageWorker`). Library code never knows which path invoked it.
 
@@ -2868,7 +2868,7 @@ A fresh clone has no `App/Auricle.xcodeproj` — it is generated. Run `mise inst
 
 ## Architecture Validation Results
 
-This validation pass combined a structured walk through coherence, requirements coverage, and implementation readiness with a multi-agent cynical-review roundtable (Winston/architect, Amelia/developer, Mary/analyst, Sally/UX in Round 1; Winston + John/PM in Round 2). The roundtable substantially changed the gap inventory from the initial structured walk; the final scope was driven by a "single-user dogfood reality" framing — the architecture is mental scaffolding for a tool the user is the engineer AND user of, not a product launch.
+This validation pass combined a structured walk through coherence, requirements coverage, and implementation readiness with a multi-agent cynical-review roundtable (Winston/architect, Amelia/developer, Mary/analyst, Sally/UX in Round 1; Winston + John/PM in Round 2). The roundtable substantially changed the gap inventory from the initial structured walk; the final scope was driven by a "single-user dogfood reality" framing — the architecture is mental scaffolding for a tool the maintainer is the engineer AND user of, not a product launch.
 
 ### Coherence Validation ✓
 

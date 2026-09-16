@@ -67,7 +67,7 @@ A fifth, implicit principle that surfaced repeatedly in the brainstorm: **engage
 
 ### User Success
 
-The single user (the user) experiences auricle as the disappearance of a tax. The "aha!" moment is the first end-to-end run: a meeting ends, the user clicks stop, ~1–2 minutes later a macOS notification fires, the user clicks it, Obsidian opens to a new note containing — in this order — meeting metadata as frontmatter, attendees as `[[wikilinks]]`, a clean summary, action items each carrying a verbatim transcript quote, decisions each carrying a verbatim transcript quote, and a foldable transcript at the bottom. The user reads the action items, edits one, accepts the rest, and closes the note. They never opened the recording. The audio is silently scheduled for deletion 7 days from that click.
+The single user experiences auricle as the disappearance of a tax. The "aha!" moment is the first end-to-end run: a meeting ends, the user clicks stop, ~1–2 minutes later a macOS notification fires, the user clicks it, Obsidian opens to a new note containing — in this order — meeting metadata as frontmatter, attendees as `[[wikilinks]]`, a clean summary, action items each carrying a verbatim transcript quote, decisions each carrying a verbatim transcript quote, and a foldable transcript at the bottom. The user reads the action items, edits one, accepts the rest, and closes the note. They never opened the recording. The audio is silently scheduled for deletion 7 days from that click.
 
 The "done" state for any single meeting:
 - Note exists in vault at `~/checkouts/SecondBrain/<location>` with stable filename
@@ -177,7 +177,7 @@ Reserved for **v2+**, after the tool has been used in real workflow for ≥3 mon
 
 auricle has exactly one human user. "Multiple personas" is the wrong frame — the right frame is **multiple modes of the same person's interaction with the system**, each producing a distinct sequence of touchpoints and revealing distinct requirements. The four journeys below cover the behavioral surface area.
 
-### Persona: the user, the single user
+### Persona: the single user
 
 - **Situation:** Independent engineer / maker. Attends 10–25 meetings per week across Zoom, Google Meet, occasional Discord and FaceTime calls. Maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that he treats as a working memory layer — daily notes, project notes, person notes, idea inbox.
 - **Pre-auricle reality:** Splits attention between participating and typing notes. Misses commitments. Some meetings end with no notes at all because the next thing on the calendar starts immediately. SaaS notetakers (Otter, Fireflies, Fathom) were ruled out: they require a bot to join the call, which is socially awkward, requires attendee consent, and exfiltrates audio to a vendor. Manual capture into Obsidian after the fact suffers from recall decay and inconsistent structure.
@@ -189,13 +189,13 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 ### Journey 1: The happy path — first end-to-end meeting
 
-**Opening scene.** Tuesday morning. the user has a 30-minute Zoom with a collaborator. Five minutes before the meeting starts, he opens auricle (Dock icon, main window appears), confirms the calendar shows the upcoming event in the sidebar, and that's the entire pre-meeting interaction. He could also have done nothing — auricle's window can stay closed, and recording can be started from the menubar in v1.1, or via `auricle record` from a terminal at any time.
+**Opening scene.** Tuesday morning. The user has a 30-minute Zoom with a collaborator. Five minutes before the meeting starts, he opens auricle (Dock icon, main window appears), confirms the calendar shows the upcoming event in the sidebar, and that's the entire pre-meeting interaction. He could also have done nothing — auricle's window can stay closed, and recording can be started from the menubar in v1.1, or via `auricle record` from a terminal at any time.
 
-**Rising action.** The meeting starts. the user clicks the prominent **Record** button in the auricle main window. A small recording indicator appears (a pulsing red dot in the title bar of the auricle window; in v1.1, also in the menubar). the user puts auricle out of his mind. He participates in the meeting normally — speaks, listens, takes no manual notes. Other participants have no indication that anything is being recorded; auricle is invisible to Zoom and to them.
+**Rising action.** The meeting starts. The user clicks the prominent **Record** button in the auricle main window. A small recording indicator appears (a pulsing red dot in the title bar of the auricle window; in v1.1, also in the menubar). The user puts auricle out of his mind. He participates in the meeting normally — speaks, listens, takes no manual notes. Other participants have no indication that anything is being recorded; auricle is invisible to Zoom and to them.
 
-**Climax.** The meeting ends. the user clicks **Stop**. The auricle window now shows the meeting in a "Processing" state with a small progress indicator (transcribing → diarizing → ready for attribution). Roughly 30–60 seconds later, an **Attribution** sheet rises over the main window (modal, attached — not a separate window): a list of detected speakers (`Speaker_1`, `Speaker_2`, `Speaker_3`), each with a 5–10 second representative audio snippet (play button, QuickLook-style), and an autocomplete input for each. the user clicks the play button on `Speaker_1`, hears his collaborator's voice, types "Be" — the autocomplete shows `Ben` (calendar-attendee-marked, top of list, visually distinct from generic vault wikilinks below), the user presses Tab. He repeats for `Speaker_2`, which is himself; he selects his own wikilink, also calendar-marked. There were only two speakers. He clicks **Continue**. The summarization stage runs. ~30–60 more seconds. A macOS notification appears in the top-right: **"auricle: meeting ready — Tuesday sync with Ben."**
+**Climax.** The meeting ends. The user clicks **Stop**. The auricle window now shows the meeting in a "Processing" state with a small progress indicator (transcribing → diarizing → ready for attribution). Roughly 30–60 seconds later, an **Attribution** sheet rises over the main window (modal, attached — not a separate window): a list of detected speakers (`Speaker_1`, `Speaker_2`, `Speaker_3`), each with a 5–10 second representative audio snippet (play button, QuickLook-style), and an autocomplete input for each. The user clicks the play button on `Speaker_1`, hears his collaborator's voice, types "Be" — the autocomplete shows `Ben` (calendar-attendee-marked, top of list, visually distinct from generic vault wikilinks below), the user presses Tab. He repeats for `Speaker_2`, which is himself; he selects his own wikilink, also calendar-marked. There were only two speakers. He clicks **Continue**. The summarization stage runs. ~30–60 more seconds. A macOS notification appears in the top-right: **"auricle: meeting ready — Tuesday sync with Ben."**
 
-**Resolution.** the user clicks the notification. Obsidian launches (or focuses, if already running) and opens the new note. The note is at `~/checkouts/SecondBrain/Meetings/2026-04-28-tuesday-sync-with-ben.md` (or whatever the locked-in path convention is). The frontmatter contains the meeting time, duration, attendees as wikilinks, source path to the audio file, and a `auricle:` block with pipeline metadata. The body shows: a one-paragraph summary, an `## Action Items` section with three bullets each carrying a `> source quote`, a `## Decisions` section with one bullet and quote, and a collapsed `## Transcript` section at the bottom. the user skims, edits one action item's wording, and closes the file. In the auricle main window, the meeting now shows as ✓ Verified, with "Audio deletes in 7 days" as a small annotation. the user closes the auricle window. The app stays alive in the Dock.
+**Resolution.** The user clicks the notification. Obsidian launches (or focuses, if already running) and opens the new note. The note is at `~/checkouts/SecondBrain/Meetings/2026-04-28-tuesday-sync-with-ben.md` (or whatever the locked-in path convention is). The frontmatter contains the meeting time, duration, attendees as wikilinks, source path to the audio file, and a `auricle:` block with pipeline metadata. The body shows: a one-paragraph summary, an `## Action Items` section with three bullets each carrying a `> source quote`, a `## Decisions` section with one bullet and quote, and a collapsed `## Transcript` section at the bottom. The user skims, edits one action item's wording, and closes the file. In the auricle main window, the meeting now shows as ✓ Verified, with "Audio deletes in 7 days" as a small annotation. The user closes the auricle window. The app stays alive in the Dock.
 
 **This journey reveals requirements for:**
 - Recording controls (start, stop, recording-state visibility) in the main window
@@ -213,13 +213,13 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 ### Journey 2: Attribution friction — "publish anyway"
 
-**Opening scene.** Friday afternoon, end of the week. the user just finished a 50-minute mostly-listening meeting with eight participants — a project kickoff with a vendor team he's never worked with. He has 8 minutes until his next call. He clicks Stop in auricle.
+**Opening scene.** Friday afternoon, end of the week. The user just finished a 50-minute mostly-listening meeting with eight participants — a project kickoff with a vendor team he's never worked with. He has 8 minutes until his next call. He clicks Stop in auricle.
 
-**Rising action.** The Attribution sheet rises over the main window. There are seven detected speakers (one person spoke too briefly to be diarized as their own cluster). the user recognizes his own voice and one collaborator. The other five voices are people he just met today — he'd be guessing at names, and the autocomplete is showing six calendar attendees but he can't reliably map snippet-to-name without significant playback effort. He doesn't have the time.
+**Rising action.** The Attribution sheet rises over the main window. There are seven detected speakers (one person spoke too briefly to be diarized as their own cluster). The user recognizes his own voice and one collaborator. The other five voices are people he just met today — he'd be guessing at names, and the autocomplete is showing six calendar attendees but he can't reliably map snippet-to-name without significant playback effort. He doesn't have the time.
 
-**Climax.** the user clicks the **"Publish anyway"** button at the bottom of the Attribution view. A small confirmation appears: *"This meeting will be published with `Speaker_N` labels and tagged `#auricle/needs-attribution` in frontmatter. You can fix it in Obsidian later, or re-run attribution from this window."* the user clicks Confirm. Summarization runs. ~60 seconds later, the notification appears.
+**Climax.** The user clicks the **"Publish anyway"** button at the bottom of the Attribution view. A small confirmation appears: *"This meeting will be published with `Speaker_N` labels and tagged `#auricle/needs-attribution` in frontmatter. You can fix it in Obsidian later, or re-run attribution from this window."* The user clicks Confirm. Summarization runs. ~60 seconds later, the notification appears.
 
-**Resolution.** the user clicks the notification. Obsidian opens the note. Speakers in the summary text are rendered as `Speaker_1`, `Speaker_2`, etc. (no wikilinks). The frontmatter contains `tags: [auricle/needs-attribution]`. The action items still have quote-grounding; the decisions are still there. The note is usable for end-of-day recall even though the speakers aren't named. the user doesn't fix attribution today — but a week later, when he's revisiting the project, he opens the note, recognizes a quote, edits `Speaker_3` to `[[Priya]]` everywhere in the file, and removes the `#auricle/needs-attribution` tag manually. The note is now permanently fixed.
+**Resolution.** The user clicks the notification. Obsidian opens the note. Speakers in the summary text are rendered as `Speaker_1`, `Speaker_2`, etc. (no wikilinks). The frontmatter contains `tags: [auricle/needs-attribution]`. The action items still have quote-grounding; the decisions are still there. The note is usable for end-of-day recall even though the speakers aren't named. The user doesn't fix attribution today — but a week later, when he's revisiting the project, he opens the note, recognizes a quote, edits `Speaker_3` to `[[Priya]]` everywhere in the file, and removes the `#auricle/needs-attribution` tag manually. The note is now permanently fixed.
 
 **This journey reveals requirements for:**
 - "Publish anyway" affordance prominently placed in the Attribution UI, with explanatory micro-copy
@@ -232,13 +232,13 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 ### Journey 3: The silent meeting — pipeline halts cleanly (v1.1)
 
-**Opening scene.** the user started recording before joining a Zoom call, then realized he was on the wrong meeting URL and the actual meeting got rescheduled. He forgot the recording was running. Two hours later, he notices the auricle recording indicator and clicks Stop.
+**Opening scene.** The user started recording before joining a Zoom call, then realized he was on the wrong meeting URL and the actual meeting got rescheduled. He forgot the recording was running. Two hours later, he notices the auricle recording indicator and clicks Stop.
 
 **Rising action.** The cache now contains a 2-hour audio file consisting of system silence punctuated by occasional notification sounds, his keyboard, and 30 seconds of background music from a YouTube video he played at one point.
 
 **Climax (v1.1).** auricle's pre-flight VAD halting gate detects <2 minutes of speech in the file. The pipeline halts before transcription. No note is written. No notification fires. In the auricle main window, the meeting appears in the **Pending** list with status `silent — pipeline halted`. The `auricle pending` CLI shows the same.
 
-**Resolution.** the user sees the silent status, recognizes what happened, clicks **Discard** on that meeting in the auricle window. The cached audio is deleted. No vault note was ever created — there's nothing to clean up in Obsidian. Optionally, if he believed there was real content the VAD missed, he could click **Force process** (or run `auricle process <id> --force`), which bypasses the gate.
+**Resolution.** The user sees the silent status, recognizes what happened, clicks **Discard** on that meeting in the auricle window. The cached audio is deleted. No vault note was ever created — there's nothing to clean up in Obsidian. Optionally, if he believed there was real content the VAD missed, he could click **Force process** (or run `auricle process <id> --force`), which bypasses the gate.
 
 **MVP fallback (no VAD yet).** Without the v1.1 VAD gate, this scenario produces a transcribed file that's mostly noise, a summarization run that yields an empty or thin summary, and a note in the vault that the user has to manually delete. This is the motivation for VAD as a v1.1 priority — the worst MVP case is a vault note he has to delete manually, which is annoying but not catastrophic, and the brainstorm explicitly accepted this MVP risk.
 
@@ -253,13 +253,13 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 ### Journey 4: Power-user CLI recovery — attribution UI is broken
 
-**Opening scene.** the user is on macOS Sonoma. A new auricle release introduces a regression in the Attribution view — the snippet playback button doesn't respond to clicks. He has a meeting that finished an hour ago waiting for attribution. He files a bug, but he wants to publish the note now.
+**Opening scene.** The user is on macOS Sonoma. A new auricle release introduces a regression in the Attribution view — the snippet playback button doesn't respond to clicks. He has a meeting that finished an hour ago waiting for attribution. He files a bug, but he wants to publish the note now.
 
-**Rising action.** the user opens a terminal and runs `auricle pending`. The output lists the stuck meeting with its ID. He runs `auricle attribute <id> --emit-snippets`, which writes seven WAV snippets to `~/Library/Caches/auricle/<id>/snippets/`. He QuickLooks each one in Finder, recognizes voices, and writes down the mapping mentally.
+**Rising action.** The user opens a terminal and runs `auricle pending`. The output lists the stuck meeting with its ID. He runs `auricle attribute <id> --emit-snippets`, which writes seven WAV snippets to `~/Library/Caches/auricle/<id>/snippets/`. He QuickLooks each one in Finder, recognizes voices, and writes down the mapping mentally.
 
-**Climax.** the user runs `auricle attribute <id> --speakers "1=Ben,2=Jordan,3=Priya,4=Marcus,5=Diana,6=Kenji,7=Sara"`. The CLI resolves each name against the vault (matching wikilink targets, falling back to creating new wikilinks for unknown names), validates the mapping, and resumes the pipeline. Summarization runs. The notification fires ~60 seconds later.
+**Climax.** The user runs `auricle attribute <id> --speakers "1=Ben,2=Jordan,3=Priya,4=Marcus,5=Diana,6=Kenji,7=Sara"`. The CLI resolves each name against the vault (matching wikilink targets, falling back to creating new wikilinks for unknown names), validates the mapping, and resumes the pipeline. Summarization runs. The notification fires ~60 seconds later.
 
-**Resolution.** the user clicks the notification, opens the note in Obsidian. Everything is correctly attributed — the broken UI never blocked him. He continues using the released CLI path until a fix ships.
+**Resolution.** The user clicks the notification, opens the note in Obsidian. Everything is correctly attributed — the broken UI never blocked him. He continues using the released CLI path until a fix ships.
 
 **This journey reveals requirements for:**
 - (v1.1) `auricle pending` CLI subcommand that lists in-flight, awaiting-attribution, awaiting-verification, and stale-pending meetings with their IDs
@@ -273,9 +273,9 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 **Opening scene.** Three months in, the user has used auricle through a contentious project meeting. The summary captured the decisions correctly, but he wants to keep the audio long-term as a reference — there's institutional value in being able to re-transcribe if the summary ever gets disputed. The default retention timer would delete it 7 days after he clicked the verification notification.
 
-**Rising action.** the user sees the meeting in the auricle main window with "Audio deletes in 5 days" annotation. He right-clicks (or in v1.1, runs `auricle keep <meeting-id>`). A menu appears with **Keep audio indefinitely** and **Set custom retention…** options.
+**Rising action.** The user sees the meeting in the auricle main window with "Audio deletes in 5 days" annotation. He right-clicks (or in v1.1, runs `auricle keep <meeting-id>`). A menu appears with **Keep audio indefinitely** and **Set custom retention…** options.
 
-**Climax.** the user clicks **Keep audio indefinitely**. The retention timer is cleared. The annotation now reads "Audio kept (indefinite)". The meeting frontmatter in Obsidian gets a new field: `auricle.audio_retention: indefinite`.
+**Climax.** The user clicks **Keep audio indefinitely**. The retention timer is cleared. The annotation now reads "Audio kept (indefinite)". The meeting frontmatter in Obsidian gets a new field: `auricle.audio_retention: indefinite`.
 
 **Resolution.** The audio remains on disk. Six months later, when the dispute actually surfaces, the user runs `auricle process <id> --reattribute` (a hypothetical CLI verb worth designing), and the audio is still there. Worst case, it's there for him to play back manually.
 
@@ -466,24 +466,24 @@ These functional requirements are **the capability contract** for auricle. UX de
 
 ### Capture
 
-- **FR1 [MVP]:** the user can start audio capture for a meeting via a prominent control in the auricle main window.
-- **FR2 [MVP]:** the user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
-- **FR3 [MVP]:** the user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
+- **FR1 [MVP]:** The user can start audio capture for a meeting via a prominent control in the auricle main window.
+- **FR2 [MVP]:** The user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
+- **FR3 [MVP]:** The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
 - **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio: Zoom, Google Meet, Teams, Discord, FaceTime, browser audio, video playback) without requiring integration with the meeting platform.
 - **FR5 [MVP]:** auricle can simultaneously capture the user's microphone audio and mix it with system audio for a complete two-sided recording.
 - **FR6 [MVP]:** auricle can request and handle macOS Screen Recording and Microphone permissions, with clear in-app explanation if permission is denied.
-- **FR7 [MVP]:** the user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
-- **FR8 [v1.1]:** the user can start and stop capture from a menubar item without opening the main window.
+- **FR7 [MVP]:** The user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
+- **FR8 [v1.1]:** The user can start and stop capture from a menubar item without opening the main window.
 - **FR9 [v1.1]:** auricle can pre-flight a captured audio file with VAD and halt the pipeline if speech-content is below a configurable threshold (default: <2 minutes of speech in any-duration audio), surfacing the meeting as `silent` instead of producing an empty note.
-- **FR10 [v1.1]:** the user can override a VAD halt and force-process a meeting via UI affordance and CLI flag (`auricle process <id> --force`).
+- **FR10 [v1.1]:** The user can override a VAD halt and force-process a meeting via UI affordance and CLI flag (`auricle process <id> --force`).
 
 ### Pipeline Orchestration & State
 
 - **FR11 [MVP]:** auricle can execute the meeting pipeline in distinct, crash-isolated stages: capture → transcribe → diarize → attribute → summarize → persist → notify.
 - **FR12 [MVP]:** Each pipeline stage can be invoked independently as an `auricle <stage> <id>` CLI subcommand, producing identical artifacts to in-app execution.
-- **FR13 [MVP]:** the user can see a per-meeting state in the main window indicating which stage is in progress, awaiting user action, or complete (`Recording`, `Processing`, `Awaiting Attribution`, `Awaiting Verification`, `Verified`).
-- **FR14 [MVP]:** the user can re-run a failed stage idempotently without corrupting artifacts from earlier stages.
-- **FR15 [v1.1]:** the user can list all in-flight, silent, awaiting-attribution, awaiting-verification, and stale-pending meetings via `auricle pending`.
+- **FR13 [MVP]:** The user can see a per-meeting state in the main window indicating which stage is in progress, awaiting user action, or complete (`Recording`, `Processing`, `Awaiting Attribution`, `Awaiting Verification`, `Verified`).
+- **FR14 [MVP]:** The user can re-run a failed stage idempotently without corrupting artifacts from earlier stages.
+- **FR15 [v1.1]:** The user can list all in-flight, silent, awaiting-attribution, awaiting-verification, and stale-pending meetings via `auricle pending`.
 - **FR16 [v1.1]:** auricle can display a Dock badge count of stale-pending items (meetings awaiting verification beyond N days).
 
 ### Transcription & Diarization
@@ -495,13 +495,13 @@ These functional requirements are **the capability contract** for auricle. UX de
 
 ### Attribution
 
-- **FR21 [MVP]:** the user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — per the single-workflow-window principle) after diarization completes, with the pipeline blocked on his input before summarization runs.
-- **FR22 [MVP]:** the user can play a short representative audio snippet (5–10 seconds) for each detected speaker via an in-UI playback control.
-- **FR23 [MVP]:** the user can assign a name to each detected speaker via an autocomplete input that prioritizes (1) calendar attendees of the current meeting (visually marked), (2) existing vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
-- **FR24 [MVP]:** the user can mark himself as a specific speaker without typing — a "this is me" affordance.
-- **FR25 [MVP]:** the user can publish a meeting without completing attribution via a "Publish anyway" action; the resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution` in frontmatter.
-- **FR26 [MVP]:** the user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note, so manual fixes are permanent and uncontested).
-- **FR27 [v1.1]:** the user can complete attribution via CLI when the native UI is unavailable: `auricle attribute <id> --emit-snippets` writes WAV snippets to the cache directory; `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` accepts a manual mapping and resumes the pipeline.
+- **FR21 [MVP]:** The user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — per the single-workflow-window principle) after diarization completes, with the pipeline blocked on his input before summarization runs.
+- **FR22 [MVP]:** The user can play a short representative audio snippet (5–10 seconds) for each detected speaker via an in-UI playback control.
+- **FR23 [MVP]:** The user can assign a name to each detected speaker via an autocomplete input that prioritizes (1) calendar attendees of the current meeting (visually marked), (2) existing vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
+- **FR24 [MVP]:** The user can mark himself as a specific speaker without typing — a "this is me" affordance.
+- **FR25 [MVP]:** The user can publish a meeting without completing attribution via a "Publish anyway" action; the resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution` in frontmatter.
+- **FR26 [MVP]:** The user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note, so manual fixes are permanent and uncontested).
+- **FR27 [v1.1]:** The user can complete attribution via CLI when the native UI is unavailable: `auricle attribute <id> --emit-snippets` writes WAV snippets to the cache directory; `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` accepts a manual mapping and resumes the pipeline.
 - **FR77 [MVP]:** When ≥2 meetings are simultaneously in `Awaiting Attribution`, auricle serializes the Attribution sheet — only one sheet is open at a time. The main window displays a banner counter ("3 meetings waiting for attribution") with a click target that opens the next queued sheet; completing, dismissing, or saving-for-later the active sheet causes the next queued meeting's sheet to rise. Sheet ordering is FIFO by capture-stop timestamp.
 
 ### Summarization
@@ -547,7 +547,7 @@ AI-assisted correction is a **product category** at auricle, not a single featur
 ### Notification & Verification
 
 - **FR42 [MVP]:** auricle can fire a macOS user notification when a meeting summary has been written to the vault, with the meeting title visible in the notification.
-- **FR43 [MVP]:** the user can click the notification to open the resulting note in Obsidian via URL scheme.
+- **FR43 [MVP]:** The user can click the notification to open the resulting note in Obsidian via URL scheme.
 - **FR44 [MVP]:** auricle can detect the notification click and use it as the verification trigger that arms the audio retention timer (the click is a meaningful event, not a passive open).
 
 ### Audio Retention & Lifecycle
@@ -555,9 +555,9 @@ AI-assisted correction is a **product category** at auricle, not a single featur
 - **FR45 [MVP]:** auricle can hold captured audio indefinitely until the user clicks the verification notification.
 - **FR46 [MVP]:** auricle can begin a configurable grace timer (default 7 days) after the verification click, after which the captured audio is deleted from cache.
 - **FR47 [MVP]:** auricle can re-prompt the user at 7 days post-verification (escalate at 14 days) to confirm or extend retention before deletion.
-- **FR48 [MVP]:** the user can see per-meeting audio retention status (e.g., "Audio deletes in 5 days", "Audio kept (indefinite)", "Audio deleted") in the main window.
-- **FR49 [v1.1]:** the user can override audio retention for a specific meeting (indefinite or custom window) via the main window UI and via `auricle keep <meeting-id>` CLI.
-- **FR50 [v1.1]:** the user can configure per-meeting retention windows that override the default.
+- **FR48 [MVP]:** The user can see per-meeting audio retention status (e.g., "Audio deletes in 5 days", "Audio kept (indefinite)", "Audio deleted") in the main window.
+- **FR49 [v1.1]:** The user can override audio retention for a specific meeting (indefinite or custom window) via the main window UI and via `auricle keep <meeting-id>` CLI.
+- **FR50 [v1.1]:** The user can configure per-meeting retention windows that override the default.
 
 ### Calendar Enrichment
 
@@ -574,7 +574,7 @@ AI-assisted correction is a **product category** at auricle, not a single featur
 
 ### Configuration & Permissions
 
-- **FR58 [MVP]:** the user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity.
+- **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity.
 - **FR59 [MVP]:** auricle can persist configuration in `~/Library/Application Support/com.auricle.app/` as a structured file (TOML or JSON), separate from secrets which live in Keychain.
 - **FR60 [MVP]:** auricle can detect missing required permissions (Screen Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
 
@@ -583,7 +583,7 @@ AI-assisted correction is a **product category** at auricle, not a single featur
 - **FR61 [MVP]:** Each pipeline stage can produce structured logs to the macOS unified logging system under subsystem `com.auricle.app`, with per-stage categories.
 - **FR62 [MVP]:** auricle can survive a crash of any individual stage subprocess without losing artifacts from already-completed stages — the next pipeline run picks up from the last successful stage.
 - **FR63 [MVP]:** auricle continues running after the main window is closed, allowing in-flight captures and pipelines to complete without user intervention.
-- **FR64 [MVP]:** the user can quit the auricle app entirely via standard Cmd-Q, which gracefully stops any active capture and persists in-flight state.
+- **FR64 [MVP]:** The user can quit the auricle app entirely via standard Cmd-Q, which gracefully stops any active capture and persists in-flight state.
 - **FR65 [v1.1]:** auricle can self-update via Sparkle, fetching EdDSA-signed appcast updates from the project's release feed with user confirmation. The downloaded `.app` bundle is signed with the self-managed code-signing certificate (per NFR-S2) and is accepted by Gatekeeper on each user Mac via the existing `spctl` trust policy established at first install.
 - **FR66 [MVP]:** auricle can locally store per-meeting telemetry (time-to-notification, quote-validation drops, attribution path, summarization cost, retention status) in a SQLite database at `~/Library/Application Support/com.auricle.app/`, accessible to the user but not transmitted off-device.
 

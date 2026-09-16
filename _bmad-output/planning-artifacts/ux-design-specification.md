@@ -30,7 +30,7 @@ The UX premise is the elimination of the meeting-notes tax: *Be in the meeting. 
 
 ### Target Users
 
-A single human user — the user — observed across multiple modes rather than multiple personas. He is an independent engineer/maker, attends 10–25 voice meetings per week across Zoom / Google Meet / Discord / FaceTime, and maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that he treats as working memory. He is highly tech-savvy and comfortable in a terminal.
+A single human user, observed across multiple modes rather than multiple personas. He is an independent engineer/maker, attends 10–25 voice meetings per week across Zoom / Google Meet / Discord / FaceTime, and maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that he treats as working memory. He is highly tech-savvy and comfortable in a terminal.
 
 The eight UX-relevant modes that shape the surface:
 
@@ -128,7 +128,7 @@ The secondary critical interaction is **first-launch onboarding (J0)** — TCC p
 
 ### Primary Emotional Goals
 
-The headline emotion is **calm trust** — not delight, not excitement. the user should walk out of a meeting and not think about the notes. Mental load shifts from "did I capture that?" to "I know it's in there." auricle doing its job correctly should feel like nothing — and that nothing is the entire product.
+The headline emotion is **calm trust** — not delight, not excitement. The user should walk out of a meeting and not think about the notes. Mental load shifts from "did I capture that?" to "I know it's in there." auricle doing its job correctly should feel like nothing — and that nothing is the entire product.
 
 The PRD's "default to auricle's notes by month two" adoption signal is fundamentally an emotional milestone: the moment trust has converted to habit.
 
@@ -450,9 +450,9 @@ Established UX components recombined; no part requires user education.
 - **`•unmatched`** — attendee never matched (diarization missed them, or they didn't speak)
 Coverage progress on the bottom progress line: *"3 of 4 speakers attributed · 1 calendar attendee not matched."*
 
-**"This is me" — heuristic pre-selection + button override.** On window load, the longest-cumulative-speaking row is auto-pre-filled with the configured `self.wikilink`, shown with a subtle "you" tag and an inline `[undo]` affordance. the user clicks `[undo]` if the heuristic is wrong (rare on 1:1s; more common on multi-party where he's not the dominant speaker), then uses **"This is me"** on the correct row. The button remains on every row for explicit override; Cmd-M still works on the focused row.
+**"This is me" — heuristic pre-selection + button override.** On window load, the longest-cumulative-speaking row is auto-pre-filled with the configured `self.wikilink`, shown with a subtle "you" tag and an inline `[undo]` affordance. The user clicks `[undo]` if the heuristic is wrong (rare on 1:1s; more common on multi-party where he's not the dominant speaker), then uses **"This is me"** on the correct row. The button remains on every row for explicit override; Cmd-M still works on the focused row.
 
-**Variance warning.** When `diarization.json` indicates high intra-segment voice-profile variance for a row, the row carries a non-blocking warning glyph and label (`⚠ may be 2 voices`). It does NOT gate Continue — it's a hedge against under-segmentation, the trust-asymmetry failure mode. the user can play the snippet to judge. (No automatic merge in MVP — manual merge is a v1.1 feature per Decision 4.6 + project structure.)
+**Variance warning.** When `diarization.json` indicates high intra-segment voice-profile variance for a row, the row carries a non-blocking warning glyph and label (`⚠ may be 2 voices`). It does NOT gate Continue — it's a hedge against under-segmentation, the trust-asymmetry failure mode. The user can play the snippet to judge. (No automatic merge in MVP — manual merge is a v1.1 feature per Decision 4.6 + project structure.)
 
 #### 3. Bottom Actions: Continue (primary) vs Publish Unattributed (secondary, demoted)
 
@@ -819,7 +819,7 @@ The PRD documents ten journey narratives (J0–J9 incl. J1.7); this section desi
 
 ### J0 — First-launch / permission gauntlet
 
-the user installs auricle on a fresh Mac and reaches a state where he can record a meeting.
+The user installs auricle on a fresh Mac and reaches a state where he can record a meeting.
 
 ```mermaid
 flowchart TD
@@ -846,7 +846,7 @@ Key UX details:
 
 ### J1 — Happy path end-to-end
 
-the user records a 30-min meeting, names speakers, gets a verified note in Obsidian.
+The user records a 30-min meeting, names speakers, gets a verified note in Obsidian.
 
 ```mermaid
 sequenceDiagram
@@ -987,15 +987,15 @@ Inline ops console gives context, action, and CLI fallback in one place. "Retry 
 
 #### J3 — Silent meeting (v1.1)
 
-the user started recording, forgot, 2hr of mostly silence. Click Stop → pipeline pre-flight VAD detects <2 min speech → halts before transcribe. State: `silent` (gray chip). Row click expands inline: "VAD detected only 18s of speech in 2h audio." Actions: [Discard] | [Force process]. No vault note, no notification, no clean-up. MVP fallback (no VAD): pipeline runs, produces thin summary, user manually deletes the note.
+The user started recording, forgot, 2hr of mostly silence. Click Stop → pipeline pre-flight VAD detects <2 min speech → halts before transcribe. State: `silent` (gray chip). Row click expands inline: "VAD detected only 18s of speech in 2h audio." Actions: [Discard] | [Force process]. No vault note, no notification, no clean-up. MVP fallback (no VAD): pipeline runs, produces thin summary, user manually deletes the note.
 
 #### J4 — CLI fallback (v1.1)
 
-Native attribution sheet has a regression. the user opens terminal: `auricle pending` → `auricle attribute 01HZ7K --emit-snippets` → QuickLooks snippets in Finder → `auricle attribute 01HZ7K --speakers "1=Ben,2=Jordan,..."` → resolves names against vault, resumes pipeline. The decoupled-stages architecture is what makes this fallback exist without rebuilding anything.
+Native attribution sheet has a regression. The user opens terminal: `auricle pending` → `auricle attribute 01HZ7K --emit-snippets` → QuickLooks snippets in Finder → `auricle attribute 01HZ7K --speakers "1=Ben,2=Jordan,..."` → resolves names against vault, resumes pipeline. The decoupled-stages architecture is what makes this fallback exist without rebuilding anything.
 
 #### J5 — Retention housekeeping
 
-the user sees "Audio deletes in 5 days" on an important meeting. Clicks row → expands inline → ops console shows [Keep audio indefinitely] [Set custom...]. Clicks "Keep audio indefinitely". Inline confirmation. Row annotation updates: "Audio kept (indefinite)". Frontmatter gets `auricle.audio_retention: indefinite`.
+The user sees "Audio deletes in 5 days" on an important meeting. Clicks row → expands inline → ops console shows [Keep audio indefinitely] [Set custom...]. Clicks "Keep audio indefinitely". Inline confirmation. Row annotation updates: "Audio kept (indefinite)". Frontmatter gets `auricle.audio_retention: indefinite`.
 
 #### J8 — Sleep-wake mid-capture
 
@@ -1003,7 +1003,7 @@ Laptop sleeps mid-meeting. ScreenCaptureKit stream interrupts; capture's retry p
 
 #### J9 — Recurring 1:1 / auto-prefill
 
-Tuesday standup with Ben (3rd capture of this calendar event). Both rows pre-filled by FR23 previously-labeled tier (≥3 prior labelings of same calendar attendees). AI review may also catch any drift. the user presses Cmd-Enter → done in 1 keystroke. Trust compounds.
+Tuesday standup with Ben (3rd capture of this calendar event). Both rows pre-filled by FR23 previously-labeled tier (≥3 prior labelings of same calendar attendees). AI review may also catch any drift. The user presses Cmd-Enter → done in 1 keystroke. Trust compounds.
 
 ### Common patterns extracted
 

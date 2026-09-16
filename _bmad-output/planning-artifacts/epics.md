@@ -20,24 +20,24 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Capture (FR1–FR10)
 
-- **FR1 [MVP]:** the user can start audio capture for a meeting via a prominent control in the auricle main window.
-- **FR2 [MVP]:** the user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
-- **FR3 [MVP]:** the user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
+- **FR1 [MVP]:** The user can start audio capture for a meeting via a prominent control in the auricle main window.
+- **FR2 [MVP]:** The user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
+- **FR3 [MVP]:** The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
 - **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio) without requiring integration with the meeting platform.
 - **FR5 [MVP]:** auricle can simultaneously capture the user's microphone audio and mix it with system audio for a complete two-sided recording.
 - **FR6 [MVP]:** auricle can request and handle macOS Screen Recording and Microphone permissions, with clear in-app explanation if permission is denied.
-- **FR7 [MVP]:** the user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
-- **FR8 [v1.1]:** the user can start and stop capture from a menubar item without opening the main window.
+- **FR7 [MVP]:** The user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
+- **FR8 [v1.1]:** The user can start and stop capture from a menubar item without opening the main window.
 - **FR9 [v1.1]:** auricle can pre-flight a captured audio file with VAD and halt the pipeline if speech-content is below a configurable threshold (default: <2 minutes of speech).
-- **FR10 [v1.1]:** the user can override a VAD halt and force-process a meeting via UI affordance and CLI flag (`auricle process <id> --force`).
+- **FR10 [v1.1]:** The user can override a VAD halt and force-process a meeting via UI affordance and CLI flag (`auricle process <id> --force`).
 
 #### Pipeline Orchestration & State (FR11–FR16)
 
 - **FR11 [MVP]:** auricle can execute the meeting pipeline in distinct, crash-isolated stages: capture → transcribe → diarize → attribute → summarize → persist → notify.
 - **FR12 [MVP]:** Each pipeline stage can be invoked independently as an `auricle <stage> <id>` CLI subcommand, producing identical artifacts to in-app execution.
-- **FR13 [MVP]:** the user can see a per-meeting state in the main window indicating which stage is in progress, awaiting user action, or complete (`Recording`, `Processing`, `Awaiting Attribution`, `Awaiting Verification`, `Verified`).
-- **FR14 [MVP]:** the user can re-run a failed stage idempotently without corrupting artifacts from earlier stages.
-- **FR15 [v1.1]:** the user can list all in-flight, silent, awaiting-attribution, awaiting-verification, and stale-pending meetings via `auricle pending`.
+- **FR13 [MVP]:** The user can see a per-meeting state in the main window indicating which stage is in progress, awaiting user action, or complete (`Recording`, `Processing`, `Awaiting Attribution`, `Awaiting Verification`, `Verified`).
+- **FR14 [MVP]:** The user can re-run a failed stage idempotently without corrupting artifacts from earlier stages.
+- **FR15 [v1.1]:** The user can list all in-flight, silent, awaiting-attribution, awaiting-verification, and stale-pending meetings via `auricle pending`.
 - **FR16 [v1.1]:** auricle can display a Dock badge count of stale-pending items (meetings awaiting verification beyond N days).
 
 #### Transcription & Diarization (FR17–FR20)
@@ -49,13 +49,13 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Attribution (FR21–FR27, FR77)
 
-- **FR21 [MVP]:** the user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — single-workflow-window principle) after diarization completes, with the pipeline blocked on his input before summarization runs.
-- **FR22 [MVP]:** the user can play a short representative audio snippet (5–10 seconds) for each detected speaker via an in-UI playback control.
-- **FR23 [MVP]:** the user can assign a name to each detected speaker via an autocomplete input that prioritizes (1) calendar attendees of the current meeting (visually marked), (2) existing vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
-- **FR24 [MVP]:** the user can mark himself as a specific speaker without typing — a "this is me" affordance.
-- **FR25 [MVP]:** the user can publish a meeting without completing attribution via a "Publish anyway" action; the resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution` in frontmatter.
-- **FR26 [MVP]:** the user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note, so manual fixes are permanent and uncontested).
-- **FR27 [v1.1]:** the user can complete attribution via CLI when the native UI is unavailable: `auricle attribute <id> --emit-snippets` writes WAV snippets to the cache directory; `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` accepts a manual mapping and resumes the pipeline.
+- **FR21 [MVP]:** The user can review detected speakers in a native Attribution sheet attached to the main window (modal, not a separate window — single-workflow-window principle) after diarization completes, with the pipeline blocked on his input before summarization runs.
+- **FR22 [MVP]:** The user can play a short representative audio snippet (5–10 seconds) for each detected speaker via an in-UI playback control.
+- **FR23 [MVP]:** The user can assign a name to each detected speaker via an autocomplete input that prioritizes (1) calendar attendees of the current meeting (visually marked), (2) existing vault wikilink targets, (3) previously-labeled speakers, with frequency/recency tie-breakers.
+- **FR24 [MVP]:** The user can mark himself as a specific speaker without typing — a "this is me" affordance.
+- **FR25 [MVP]:** The user can publish a meeting without completing attribution via a "Publish anyway" action; the resulting note uses `Speaker_N` placeholder labels and is tagged `#auricle/needs-attribution` in frontmatter.
+- **FR26 [MVP]:** The user can manually fix attribution in Obsidian after the fact (auricle never re-edits the note, so manual fixes are permanent and uncontested).
+- **FR27 [v1.1]:** The user can complete attribution via CLI when the native UI is unavailable: `auricle attribute <id> --emit-snippets` writes WAV snippets to the cache directory; `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` accepts a manual mapping and resumes the pipeline.
 - **FR77 [MVP]:** When ≥2 meetings are simultaneously in `Awaiting Attribution`, auricle serializes the Attribution sheet — only one sheet is open at a time. The main window displays a banner counter ("3 meetings waiting for attribution") with a click target that opens the next queued sheet; completing/dismissing/saving-for-later the active sheet causes the next queued meeting's sheet to rise. Sheet ordering is FIFO by capture-stop timestamp.
 
 #### Summarization (FR28–FR34)
@@ -88,7 +88,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 #### Notification & Verification (FR42–FR44)
 
 - **FR42 [MVP]:** auricle can fire a macOS user notification when a meeting summary has been written to the vault, with the meeting title visible in the notification.
-- **FR43 [MVP]:** the user can click the notification to open the resulting note in Obsidian via URL scheme.
+- **FR43 [MVP]:** The user can click the notification to open the resulting note in Obsidian via URL scheme.
 - **FR44 [MVP]:** auricle can detect the notification click and use it as the verification trigger that arms the audio retention timer (the click is a meaningful event, not a passive open).
 
 #### Audio Retention & Lifecycle (FR45–FR50)
@@ -96,9 +96,9 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **FR45 [MVP]:** auricle can hold captured audio indefinitely until the user clicks the verification notification.
 - **FR46 [MVP]:** auricle can begin a configurable grace timer (default 7 days) after the verification click, after which the captured audio is deleted from cache.
 - **FR47 [MVP]:** auricle can re-prompt the user at 7 days post-verification (escalate at 14 days) to confirm or extend retention before deletion.
-- **FR48 [MVP]:** the user can see per-meeting audio retention status (e.g., "Audio deletes in 5 days", "Audio kept (indefinite)", "Audio deleted") in the main window.
-- **FR49 [v1.1]:** the user can override audio retention for a specific meeting (indefinite or custom window) via the main window UI and via `auricle keep <meeting-id>` CLI.
-- **FR50 [v1.1]:** the user can configure per-meeting retention windows that override the default.
+- **FR48 [MVP]:** The user can see per-meeting audio retention status (e.g., "Audio deletes in 5 days", "Audio kept (indefinite)", "Audio deleted") in the main window.
+- **FR49 [v1.1]:** The user can override audio retention for a specific meeting (indefinite or custom window) via the main window UI and via `auricle keep <meeting-id>` CLI.
+- **FR50 [v1.1]:** The user can configure per-meeting retention windows that override the default.
 
 #### Calendar Enrichment (FR51–FR54)
 
@@ -115,7 +115,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Configuration & Permissions (FR58–FR60)
 
-- **FR58 [MVP]:** the user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity. Includes `diarization_review.enabled` and `diarization_review.model` per FR74.
+- **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity. Includes `diarization_review.enabled` and `diarization_review.model` per FR74.
 - **FR59 [MVP]:** auricle can persist configuration in `~/Library/Application Support/com.auricle.app/` as a structured file (TOML or JSON), separate from secrets which live in Keychain.
 - **FR60 [MVP]:** auricle can detect missing required permissions (Screen Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
 
@@ -124,7 +124,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **FR61 [MVP]:** Each pipeline stage can produce structured logs to the macOS unified logging system under subsystem `com.auricle.app`, with per-stage categories.
 - **FR62 [MVP]:** auricle can survive a crash of any individual stage subprocess without losing artifacts from already-completed stages — the next pipeline run picks up from the last successful stage.
 - **FR63 [MVP]:** auricle continues running after the main window is closed, allowing in-flight captures and pipelines to complete without user intervention.
-- **FR64 [MVP]:** the user can quit the auricle app entirely via standard Cmd-Q, which gracefully stops any active capture and persists in-flight state.
+- **FR64 [MVP]:** The user can quit the auricle app entirely via standard Cmd-Q, which gracefully stops any active capture and persists in-flight state.
 - **FR65 [v1.1]:** auricle can self-update via Sparkle, fetching EdDSA-signed appcast updates from the project's release feed with user confirmation. Downloaded `.app` is signed with the self-managed code-signing certificate and accepted by Gatekeeper via the existing `spctl` trust policy.
 - **FR66 [MVP]:** auricle can locally store per-meeting telemetry (time-to-attribution-ready, time-to-vault-note, quote-validation drops, attribution path, summarization cost, retention status, AI-reviewer counts/cost/model) in a SQLite database at `~/Library/Application Support/com.auricle.app/`, accessible to the user but not transmitted off-device.
 
