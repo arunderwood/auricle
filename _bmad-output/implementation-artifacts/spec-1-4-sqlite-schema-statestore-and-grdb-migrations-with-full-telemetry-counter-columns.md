@@ -2,7 +2,7 @@
 title: 'Story 1.4: SQLite Schema, StateStore, and GRDB Migrations (with Full Telemetry Counter Columns)'
 type: 'feature'
 created: '2026-09-16'
-status: 'blocked'
+status: 'done'
 baseline_revision: 'b045c5227a0ccabc02316af0bed363165175b8d0'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -204,4 +204,4 @@ GRDB 7's unverified-against-this-package status (architecture.md:798) is a real 
 
 **Residual risks:** the two deferred `Migration001_Initial.swift` gaps (empty `schema_version` table; unenforced `duration_seconds >= 0`) are real but architecturally frozen out of this story's reach — worth flagging at the next architecture review. `sprint-status.yaml` will continue to understate progress on Epic 1 stories delivered through this workflow variant until that sync gap is addressed at the orchestration level, not the story level.
 
-**Finalization blocked:** implementation, review, and all patches are complete and verified (`swift build` clean, `swift test --filter StateTests` 30/30, db-access boundary check clean). `git commit` fails with `error: 1Password: failed to fill whole buffer` / `fatal: failed to write commit object` on every attempt (3 tries, including a 3s retry) — this repo signs commits via SSH through 1Password's `op-ssh-sign` (`gpg.format = ssh`, `commit.gpgsign = true`), and 1Password's signing helper appears to need interactive user presence (biometric/vault unlock) that isn't available in this unattended session, even though the 1Password app and its SSH agent socket are both running. Per this workflow's own rules, bypassing signing (`--no-gpg-sign`) is not something I'll do without the user explicitly asking. Status set to `blocked` rather than `done`: all 18 files remain staged but uncommitted in the working tree.
+**Finalization:** `git commit` initially failed 3 times with `error: 1Password: failed to fill whole buffer` (this repo signs commits via SSH through 1Password, which needs interactive vault unlock unavailable in an unattended session). Reported blocked and paused rather than bypassing signing. The user then unlocked 1Password and asked for a retry; the commit succeeded on the next attempt as `a81032d` on `claude/epic-1-backlog-stories-4bcf76`. Working tree verified clean after the commit.
