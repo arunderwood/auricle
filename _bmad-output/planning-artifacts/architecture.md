@@ -217,7 +217,7 @@ xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp build
 
 **Architectural Decisions Provided by This Approach:**
 
-**Language & Runtime:** Swift 5.10+ targeting macOS 14+; no other runtimes.
+**Language & Runtime:** Swift 6.3+ (language mode 6, strict concurrency checking on) targeting macOS 14+; no other runtimes. Adopted at Story 1.1's scaffold, before any real implementation code exists, per AR-INIT-7 — the cheapest point this project will ever be at to take on strict concurrency checking. Corroborated by the two highest-coupling external dependencies: WhisperKit's successor (`argmax-oss-swift`) adopts Swift 6 strict concurrency in its own v1.0+, and GRDB 7 requires a Swift 6 compiler.
 
 **Module Boundaries:** Enforced by SwiftPM `Package.swift` — a target's allowed imports are declared in the manifest, not in code conventions. Mechanical SOLID enforcement.
 

@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.3
 // AuricleKit — single SwiftPM library, 25 modular targets per AR-INIT-5.
 // Module boundaries are the architecture: cross-target imports declared here are
 // the ONLY intended imports. Plain `swift build` does not reject an undeclared
