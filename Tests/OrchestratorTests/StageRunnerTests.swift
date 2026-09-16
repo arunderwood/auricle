@@ -4,9 +4,18 @@ import GRDB
 import Testing
 @testable import Orchestrator
 @testable import State
+@testable import Telemetry
 
 private func makeStore() throws -> StateStore {
     try StateStore.forTesting(writer: try DatabaseQueue())
+}
+
+/// Every test constructs its `StageRunner` through this helper rather than
+/// calling the initializer directly: the `StageEventLogger` must be backed
+/// by the same `StateStore` the test asserts against afterward, and
+/// spelling that out at every call site would just repeat this line.
+private func makeRunner(store: StateStore, now: @escaping @Sendable () -> Date = { Date() }) -> StageRunner {
+    StageRunner(stateStore: store, stageEventLogger: StageEventLogger(stateStore: store), now: now)
 }
 
 /// A 26-character, Crockford-base32-safe (no `I`/`L`/`O`/`U`) stand-in ULID:
@@ -36,7 +45,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("GD01")
     try await store.insertMeeting(makeMeeting(id: id, state: "captured"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     let outcome = try await runner.run(stage: .transcribe, meetingID: resolvedID, activeState: .transcribing) {
@@ -61,7 +70,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("BAD1")
     try await store.insertMeeting(makeMeeting(id: id, state: "captured"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     _ = try await runner.run(stage: .transcribe, meetingID: resolvedID, activeState: .transcribing) {
@@ -90,7 +99,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("THR1")
     try await store.insertMeeting(makeMeeting(id: id, state: "captured"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     await #expect(throws: StubWorkError.self) {
@@ -115,7 +124,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("RVD3")
     try await store.insertMeeting(makeMeeting(id: id, state: "reviewing_diarization"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     try await runner.synthesizeFailure(
@@ -137,7 +146,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("PBD3")
     try await store.insertMeeting(makeMeeting(id: id, state: "published"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     try await runner.synthesizeFailure(
@@ -159,7 +168,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("TRX3")
     try await store.insertMeeting(makeMeeting(id: id, state: "transcribing"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     try await runner.synthesizeFailure(
@@ -181,7 +190,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("SMZ3")
     try await store.insertMeeting(makeMeeting(id: id, state: "summarizing"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     try await runner.synthesizeFailure(
@@ -203,7 +212,7 @@ private struct StubWorkError: Error, Equatable {}
     let store = try makeStore()
     let id = meetingID("ATB2")
     try await store.insertMeeting(makeMeeting(id: id, state: "attributing"))
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
 
     do {
@@ -223,7 +232,7 @@ private struct StubWorkError: Error, Equatable {}
 
 @Test func sweepTransitionsOnlyMeetingsPastTheirOwnStatesBudget() async throws {
     let store = try makeStore()
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let fixedNow = Date(timeIntervalSince1970: 1_735_000_000)
 
     let staleTranscribing = meetingID("TRX4")
@@ -279,7 +288,7 @@ private struct StubWorkError: Error, Equatable {}
 /// always takes, was never exercised. This seeds a literal in that shape.
 @Test func sweepParsesFractionalSecondsUpdatedAtLikeTheProductionTrigger() async throws {
     let store = try makeStore()
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
 
     let updatedAt = "2026-01-01T00:00:00.398Z"
     let plainFormatter = ISO8601DateFormatter()
@@ -306,7 +315,7 @@ private struct StubWorkError: Error, Equatable {}
 /// just one strictly past it.
 @Test func sweepTreatsExactlyAtBudgetAsStaleButOneSecondUnderAsNotStale() async throws {
     let store = try makeStore()
-    let runner = StageRunner(stateStore: store)
+    let runner = makeRunner(store: store)
     let fixedNow = Date(timeIntervalSince1970: 1_735_000_000)
 
     let oneSecondUnderBudget = meetingID("BND1")

@@ -60,7 +60,7 @@ let package = Package(
             path: "Sources/Core"
         ),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/State"),
-        .target(name: "Telemetry", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
+        .target(name: "Telemetry", dependencies: ["Core", "State", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
         .target(name: "Orchestrator", dependencies: ["Core", "State", "Telemetry", "Permissions"], path: "Sources/Orchestrator"),
         .target(name: "Permissions", dependencies: ["Core"], path: "Sources/Permissions"),
 

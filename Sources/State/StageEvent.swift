@@ -13,6 +13,7 @@ public struct StageEvent: Codable, Equatable, Sendable {
     public var durationMS: Int?
     public var errorMessage: String?
     public var metadataJSON: String?
+    public var metadataSchemaVersion: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -23,6 +24,7 @@ public struct StageEvent: Codable, Equatable, Sendable {
         case durationMS = "duration_ms"
         case errorMessage = "error_message"
         case metadataJSON = "metadata_json"
+        case metadataSchemaVersion = "metadata_schema_version"
     }
 
     public init(
@@ -33,7 +35,8 @@ public struct StageEvent: Codable, Equatable, Sendable {
         occurredAt: String,
         durationMS: Int? = nil,
         errorMessage: String? = nil,
-        metadataJSON: String? = nil
+        metadataJSON: String? = nil,
+        metadataSchemaVersion: Int? = nil
     ) {
         self.id = id
         self.meetingID = meetingID
@@ -43,6 +46,7 @@ public struct StageEvent: Codable, Equatable, Sendable {
         self.durationMS = durationMS
         self.errorMessage = errorMessage
         self.metadataJSON = metadataJSON
+        self.metadataSchemaVersion = metadataSchemaVersion
     }
 }
 

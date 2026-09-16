@@ -23,7 +23,50 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     let appliedIdentifiers = try queue.read { db in
         try MigrationRegistrar.migrator.appliedIdentifiers(db)
     }
-    #expect(appliedIdentifiers == [Migration001Initial.identifier])
+    #expect(appliedIdentifiers == [
+        Migration001Initial.identifier,
+        Migration002StageEventsMetadataSchemaVersion.identifier,
+    ])
+}
+
+/// The first genuine schema-upgrade path in this codebase: a database that
+/// already has migration #1's schema and a real `stage_events` row,
+/// upgraded in place by migration #2. `metadata_schema_version` has no
+/// application-level writer for a row inserted before that column existed —
+/// its `DEFAULT 1` clause is what has to backfill the pre-existing row.
+@Test func migrationTwoBackfillsMetadataSchemaVersionOnAPreExistingStageEventsRow() throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let queue = try DatabasePoolFactory.makeQueue(path: path)
+    var migrationOneOnly = DatabaseMigrator()
+    migrationOneOnly.registerMigration(Migration001Initial.identifier, migrate: Migration001Initial.migrate)
+    try migrationOneOnly.migrate(queue)
+
+    try queue.write { db in
+        try db.execute(
+            sql: """
+            INSERT INTO meetings (id, state, created_at, updated_at)
+            VALUES ('01PREMIGRATIONMEETINGID00', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+            """
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO stage_events (meeting_id, stage, event, occurred_at)
+            VALUES ('01PREMIGRATIONMEETINGID00', 'capture', 'started', '2026-01-01T00:00:00Z')
+            """
+        )
+    }
+
+    try MigrationRegistrar.migrator.migrate(queue)
+
+    let backfilledVersion = try queue.read { db in
+        try Int.fetchOne(
+            db,
+            sql: "SELECT metadata_schema_version FROM stage_events WHERE meeting_id = '01PREMIGRATIONMEETINGID00'"
+        )
+    }
+    #expect(backfilledVersion == 1)
 }
 
 @Test func journalModeIsWALForBothOpeners() throws {
@@ -174,6 +217,20 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         let column = try #require(columnInfo(nullableColumn, in: columns))
         #expect(!column.isNotNull, "expected \(nullableColumn) to be nullable")
     }
+}
+
+@Test func stageEventsMetadataSchemaVersionColumnExistsAfterMigrationTwo() throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let queue = try DatabasePoolFactory.makeQueue(path: path)
+    try MigrationRegistrar.migrator.migrate(queue)
+
+    let columns = try queue.read { db in try db.columns(in: "stage_events") }
+
+    let metadataSchemaVersion = try #require(columnInfo("metadata_schema_version", in: columns))
+    #expect(metadataSchemaVersion.type.uppercased() == "INTEGER")
+    #expect(!metadataSchemaVersion.isNotNull)
+    #expect(metadataSchemaVersion.defaultValueSQL == "1")
 }
 
 @Test func retentionTimersColumnsMatchSchema() throws {

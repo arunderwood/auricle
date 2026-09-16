@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 /// The sole read/write API for the single SQLite database (AR-PAT-4,
@@ -17,6 +18,10 @@ import GRDB
 /// none.
 public enum StateStoreError: Error, Sendable, Equatable {
     case meetingNotFound(id: String)
+    /// `upsertTelemetry` couldn't turn `patch` into column/value pairs —
+    /// a `Double` field holding `NaN` or infinity is the known trigger,
+    /// since JSON has no representation for either.
+    case invalidTelemetryPatch
 }
 
 public actor StateStore {
@@ -123,7 +128,8 @@ public actor StateStore {
         targetState: String,
         durationMS: Int? = nil,
         errorMessage: String? = nil,
-        metadataJSON: String? = nil
+        metadataJSON: String? = nil,
+        metadataSchemaVersion: Int? = nil
     ) async throws -> StageEvent {
         try await writer.write { db in
             var stageEvent = StageEvent(
@@ -133,7 +139,8 @@ public actor StateStore {
                 occurredAt: occurredAt,
                 durationMS: durationMS,
                 errorMessage: errorMessage,
-                metadataJSON: metadataJSON
+                metadataJSON: metadataJSON,
+                metadataSchemaVersion: metadataSchemaVersion
             )
             try stageEvent.insert(db)
             try db.execute(sql: "UPDATE meetings SET state = ? WHERE id = ?", arguments: [targetState, meetingID])
@@ -202,5 +209,62 @@ public actor StateStore {
         try await writer.read { db in
             try Telemetry.fetchOne(db, key: meetingID)
         }
+    }
+
+    /// The write-authority matrix's UPSERT primitive (architecture.md:1253,
+    /// AR-AI-5): each stage contributes only the columns it owns, so a
+    /// `nil` field in `patch` must leave that column exactly as any other
+    /// writer already left it, never null it out. The `INSERT`'s column
+    /// list is only `patch`'s non-nil fields (plus `meeting_id`) — SQLite
+    /// already leaves every other column `NULL` on a fresh row when a
+    /// column is absent from the `INSERT`, so a sparse first write needs no
+    /// explicit `NULL`s spelled out. The `DO UPDATE SET` clause reassigns
+    /// those same non-`meeting_id` columns from `excluded` (the row SQLite
+    /// would have inserted), so an existing row's other columns are
+    /// untouched. Hand-rolled SQL rather than a GRDB `Record` upsert: GRDB's
+    /// only public partial-column upsert API is `upsertAndFetch`, which
+    /// requires a `RETURNING` clause this method has no use for.
+    public func upsertTelemetry(_ patch: Telemetry) async throws {
+        let object = try Self.jsonObject(for: patch)
+        let columns = Array(object.keys)
+        guard let arguments = StatementArguments(columns.map { object[$0]! }) else {
+            throw StateStoreError.invalidTelemetryPatch
+        }
+        let columnsToUpdate = columns.filter { $0 != "meeting_id" }
+
+        try await writer.write { db in
+            let placeholders = Array(repeating: "?", count: columns.count).joined(separator: ", ")
+            var sql = """
+                INSERT INTO telemetry (\(columns.joined(separator: ", "))) \
+                VALUES (\(placeholders)) \
+                ON CONFLICT(meeting_id)
+                """
+            if columnsToUpdate.isEmpty {
+                sql += " DO NOTHING"
+            } else {
+                sql += " DO UPDATE SET " + columnsToUpdate.map { "\($0) = excluded.\($0)" }.joined(separator: ", ")
+            }
+            try db.execute(sql: sql, arguments: arguments)
+        }
+    }
+
+    /// `patch` as a `[column_name: value]` dictionary, read off `patch`'s
+    /// own `Encodable` conformance instead of a 20-case `if let` chain: the
+    /// compiler-synthesized `encode(to:)` for a struct of `Optional`
+    /// properties calls `encodeIfPresent` per field, so a `nil` field is
+    /// omitted from the encoded JSON entirely rather than written as
+    /// `null` — the surviving keys, already in `CodingKeys`' snake_case
+    /// column-name form, are exactly the columns this patch touches
+    /// (`meeting_id` always included, since that field isn't optional). A
+    /// future telemetry column needs no matching edit here. Throws rather
+    /// than silently standing in for an empty patch when `patch` can't be
+    /// encoded at all (e.g. a `NaN`/infinite `Double` field, which JSON has
+    /// no representation for).
+    private static func jsonObject(for patch: Telemetry) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(patch)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw StateStoreError.invalidTelemetryPatch
+        }
+        return object
     }
 }

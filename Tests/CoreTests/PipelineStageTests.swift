@@ -1,4 +1,4 @@
-import Orchestrator
+import Core
 import Testing
 
 @Test func pipelineStageRawValuesMatchCanonicalSpellings() {

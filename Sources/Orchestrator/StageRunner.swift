@@ -1,10 +1,14 @@
 import Core
 import Foundation
 import State
+import Telemetry
 
 /// The single wrapper for the two-transaction pattern (AR-PIPE-3): every
-/// stage calls `run`, never `StateStore.recordStageTransition` directly.
-/// Txn A (`started` + `activeState`) commits before `work` runs; Txn B
+/// stage calls `run`, never `StateStore.recordStageTransition` directly —
+/// nor does `StageRunner` itself; both `run` and `synthesizeFailure` write
+/// `stage_events` through `StageEventLogger` (AR-PAT-4), which wraps the
+/// same `StateStore` calls unchanged. Txn A
+/// (`started` + `activeState`) commits before `work` runs; Txn B
 /// (`completed`/`failed` + the outcome's own `targetState`) commits after.
 /// If `work` throws, Txn B never runs — the meeting is left sitting in
 /// `activeState`, architecturally identical to a subprocess crash between
@@ -12,11 +16,17 @@ import State
 /// stale-detection sweep) and `CrashRecovery` exist to reconcile later.
 public actor StageRunner {
     private let stateStore: StateStore
+    private let stageEventLogger: StageEventLogger
     private let now: @Sendable () -> Date
     private let log = Log(category: "orchestrator")
 
-    public init(stateStore: StateStore, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        stateStore: StateStore,
+        stageEventLogger: StageEventLogger,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.stateStore = stateStore
+        self.stageEventLogger = stageEventLogger
         self.now = now
     }
 
@@ -56,37 +66,38 @@ public actor StageRunner {
         activeState: PipelineState,
         work: @Sendable () async throws -> StageOutcome
     ) async throws -> StageOutcome {
-        try await stateStore.recordStageTransition(
-            meetingID: meetingID.rawValue,
-            stage: stage.rawValue,
-            event: "started",
+        try await stageEventLogger.record(event: StageEventRecord(
+            meetingID: meetingID,
+            stage: stage,
+            kind: .started,
             occurredAt: ISO8601UTC.string(from: now()),
-            targetState: activeState.rawValue
-        )
+            targetState: activeState,
+            metadataJSON: "{}"
+        ))
 
         let outcome = try await work()
         let occurredAt = ISO8601UTC.string(from: now())
 
         switch outcome {
         case .completed(let targetState, let metadataJSON):
-            try await stateStore.recordStageTransition(
-                meetingID: meetingID.rawValue,
-                stage: stage.rawValue,
-                event: "completed",
+            try await stageEventLogger.record(event: StageEventRecord(
+                meetingID: meetingID,
+                stage: stage,
+                kind: .completed,
                 occurredAt: occurredAt,
-                targetState: targetState.rawValue,
+                targetState: targetState,
                 metadataJSON: metadataJSON
-            )
+            ))
         case .failed(let targetState, let errorClass, let errorMessage, let metadataJSON):
-            try await stateStore.recordStageTransition(
-                meetingID: meetingID.rawValue,
-                stage: stage.rawValue,
-                event: "failed",
+            try await stageEventLogger.record(event: StageEventRecord(
+                meetingID: meetingID,
+                stage: stage,
+                kind: .failed,
                 occurredAt: occurredAt,
-                targetState: targetState.rawValue,
+                targetState: targetState,
                 errorMessage: errorMessage,
                 metadataJSON: buildFailedMetadataJSON(errorClass: errorClass, mergingInto: metadataJSON)
-            )
+            ))
         }
         return outcome
     }
@@ -152,15 +163,15 @@ public actor StageRunner {
             throw SynthesizeFailureError.noStaleTransition(activeState: activeState)
         }
 
-        try await stateStore.recordStageTransition(
-            meetingID: meetingID.rawValue,
-            stage: stage.rawValue,
-            event: "failed",
+        try await stageEventLogger.record(event: StageEventRecord(
+            meetingID: meetingID,
+            stage: stage,
+            kind: .failed,
             occurredAt: ISO8601UTC.string(from: now()),
-            targetState: transition.targetState.rawValue,
+            targetState: transition.targetState,
             errorMessage: reason.errorMessage,
             metadataJSON: buildFailedMetadataJSON(errorClass: transition.errorClass, mergingInto: nil)
-        )
+        ))
     }
 
     /// One pass of the periodic stale-detection sweep (architecture.md:1062):
