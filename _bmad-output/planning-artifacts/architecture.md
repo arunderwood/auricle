@@ -85,6 +85,8 @@ The architecture-shaping NFRs:
 - **Google Calendar API v3** (REST) — read-only OAuth 2.0 with PKCE; refresh token in Keychain. Off the hot path; degrades to `#auricle/needs-calendar-enrichment` on failure.
 - **SQLite** (system library, accessed via `sqlite3` / GRDB / similar) — single local database for state, retention, telemetry. Schema is versioned and migrated forward.
 - **swift-argument-parser** — CLI interface (NFR-I7 binding contract).
+- **ULID.swift** (yaslab, Swift Package) — Crockford base32 ULID generation for `MeetingID`. Foundation-optional, MIT.
+- **Yams** (jpsim, Swift Package) — YAML encode/decode for vault frontmatter (`FrontmatterRenderer`). Avoids hand-written YAML escaping around arbitrary calendar-event titles.
 - **Sparkle [v1.1]** — auto-update, EdDSA-signed appcasts.
 - **Obsidian** — consumer of the vault output via `obsidian://open` URL scheme. No plugin required, no Obsidian config assumed beyond a writable vault.
 - **Local LLM runtimes [v1.1+]** — Ollama (HTTP) or MLX (in-process Swift). Plug into the `summarize` stage via the strategy interface introduced for FR33.
@@ -2013,6 +2015,12 @@ The project has several **single-implementation primitives**, each owned by exac
 
 The helpers have one implementation, one test, one set of edge-case decisions. Reinventing them in stage code creates inconsistency and reopens fixed bugs.
 
+#### Dependency Discipline (prefer solved-problem libraries)
+
+For a well-specified, general-purpose problem — an encoding (base32, base64), a container/file format (WAV, YAML), a standard protocol (OAuth/PKCE) — default to a native Apple framework or an established OSS package, not a hand-rolled implementation. `AVAudioFile`/`AVAudioConverter` for audio file I/O and resampling, `Yams` for YAML, `ULID.swift` for ULIDs are the concrete defaults for this project.
+
+A hand-rolled implementation of a solved problem needs a documented reason at its point of use (a real constraint a library doesn't meet — e.g. `AtomicWriter`'s `fsync`-before-rename requirement, which Foundation's `.atomic` write option doesn't provide). "No library was evaluated" is not a reason. This still applies within `Core`: a dependency there is an escalation to name and justify, not a default to avoid.
+
 #### Atomic-Write Enforcement (Reinforcing #3 from Cross-Cutting Concerns)
 
 - `AtomicWriter.write(_ data: Data, to path: URL)` is the only filesystem-write primitive. It implements `temp → fsync → rename` per NFR-R1 and FR36.
@@ -2238,7 +2246,7 @@ auricle/
 │   │   ├── MeetingIDResolver.swift        # `<id>` argument resolution (Dec 1.5)
 │   │   ├── PipelineState.swift            # canonical state-name enum (Dec 1.2)
 │   │   ├── SchemaVersion.swift            # schema-version constants for every contract
-│   │   └── ULID.swift                     # ULID generation (Crockford base32)
+│   │   └── ULID.swift                     # ULID generation, wraps yaslab/ULID.swift
 │   │
 │   ├── State/                             # SQLite layer
 │   │   ├── StateStore.swift               # public API — every state read/write goes through here
@@ -2270,8 +2278,8 @@ auricle/
 │   │
 │   ├── Capture/                           # FR1–FR10
 │   │   ├── CaptureSession.swift           # ScreenCaptureKit + AVAudioEngine pipeline
-│   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM (Dec 1.4)
-│   │   ├── WAVWriter.swift                # PCM16 WAV file writer
+│   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM via AVAudioConverter (Dec 1.4)
+│   │   ├── WAVWriter.swift                # PCM16 WAV file writer via AVAudioFile
 │   │   ├── CaptureError.swift
 │   │   └── CaptureMetadata.swift          # StageMetadata.capture payload
 │   │
@@ -2368,7 +2376,7 @@ auricle/
 │   │
 │   ├── Persist/                           # FR35–FR41
 │   │   ├── PersistStage.swift
-│   │   ├── FrontmatterRenderer.swift      # data → markdown (with the Dec 2.2 schema)
+│   │   ├── FrontmatterRenderer.swift      # data → markdown via Yams (with the Dec 2.2 schema)
 │   │   ├── VaultWriter.swift              # markdown → atomic write, path-resolution + collision
 │   │   ├── FilenameResolver.swift         # Dec 2.4 slug rules
 │   │   └── PersistMetadata.swift

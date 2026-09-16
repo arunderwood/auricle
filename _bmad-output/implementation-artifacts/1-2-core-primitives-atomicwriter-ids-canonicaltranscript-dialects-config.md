@@ -20,7 +20,7 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-1-context.m
 ## Boundaries & Constraints
 
 **Always:**
-- `Core`'s only external dependency stays `TOMLKit`; any new dependency is an architecture escalation, not a silent addition.
+- `Core`'s external dependencies are `TOMLKit` and `ULID.swift` (yaslab); any further dependency is an architecture escalation, not a silent addition.
 - One primary type per file, filename == type name; flat `Sources/Core/` layout.
 - `AtomicWriter.write(_:to:)` is the sole filesystem-write primitive; nothing else here calls `Data.write`/`FileManager.createFile` directly.
 - Typed errors: `Error`-conforming `enum`s, one per domain, associated values for context; `NSError` translated only at Apple-framework callback boundaries.
@@ -28,8 +28,10 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-1-context.m
 **Never:**
 - Don't implement `CanonicalTranscript` or `Config` — deferred, see deferred-work.md.
 - Don't implement the AR-PAT-4 CI-lint bypass-detection rule — that's Story 1.8; tests cover correctness now, grep enforcement lands later.
-- Don't pull in a third-party ULID package — Foundation only.
+- `ULID.generate`/`ULID.isValid` wrap `yaslab/ULID.swift` (MIT, Foundation-optional); don't hand-roll Crockford base32 encode/decode.
 - Don't touch any `Source/<Target>` other than `Core`, or any file under `App/`.
+
+_Renegotiated 2026-09-16 via correct-course: see sprint-change-proposal-2026-09-16-ulid-dependencies.md._
 
 ## I/O & Edge-Case Matrix
 
@@ -57,7 +59,7 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-1-context.m
 
 **Execution:**
 - [x] `Sources/Core/AtomicWriter.swift` -- `AtomicWriter.write(_ data: Data, to path: URL) throws`, temp → fsync → rename -- NFR-R1+FR36
-- [x] `Sources/Core/ULID.swift` -- ULID generation (timestamp-prefixed, Crockford base32, 26 chars), Foundation only -- backs `MeetingID.generate()`
+- [x] `Sources/Core/ULID.swift` -- ULID generation (timestamp-prefixed, Crockford base32, 26 chars), wraps `yaslab/ULID.swift` -- backs `MeetingID.generate()`
 - [x] `Sources/Core/MeetingID.swift` -- `struct MeetingID` wrapping the ULID string; `MeetingID(ulid:)` (validating), `.generate()` -- AR-PAT-7
 - [x] `Sources/Core/MeetingIDResolver.swift` -- `MeetingIDDataSource` protocol + `MeetingIDResolver` per Design Notes contract
 - [x] `Sources/Core/Codable+Dialects.swift` -- snake_case `CodingKeys` pattern for cache-dir types; camelCase (no `CodingKeys`) for CLI types -- AR-PAT-2
