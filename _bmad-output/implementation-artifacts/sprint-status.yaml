@@ -45,7 +45,7 @@ development_status:
   epic-1: in-progress
   1-1-project-initialization-xcode-swiftpm-hybrid: review
   1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config: review
-  1-3-log-facade-with-sensitivity-tagging-and-redaction: backlog
+  1-3-log-facade-with-sensitivity-tagging-and-redaction: review
   1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns: backlog
   1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold: backlog
   1-6-telemetry-recorder-stageeventlogger-and-stagemetadata: backlog
