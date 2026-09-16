@@ -197,7 +197,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **NFR-I3 [MVP]:** auricle is compatible with the current major release of Obsidian (1.x) via the `obsidian://open` URL scheme. No Obsidian plugin required.
 - **NFR-I4 [MVP]:** auricle's frontmatter schema is documented and versioned (`auricle.schema_version` field in every note). Breaking changes increment the major version and ship with a documented migration path.
 - **NFR-I5 [MVP]:** auricle integrates with Google Calendar API v3 read-only. Calendar API failures degrade gracefully — meeting captures still complete with `#auricle/needs-calendar-enrichment` tag.
-- **NFR-I6 [MVP]:** auricle integrates with the Anthropic Messages API. The model identifier and extended-thinking effort budget are both configurable; default at MVP is `claude-opus-4-7` with extended thinking enabled at a moderate default effort budget. Both knobs are tunable via config (per FR58) without code changes.
+- **NFR-I6 [MVP]:** auricle integrates with the Anthropic Messages API. The model identifier and effort level are both configurable; default at MVP is `claude-opus-5` at `medium` effort (named levels `low`/`medium`/`high`/`xhigh`/`max` — no numeric override on this model generation). Both knobs are tunable via config (per FR58) without code changes.
 - **NFR-I7 [MVP]:** auricle's CLI subcommands have stable, documented argument signatures. Renaming or removing a CLI flag is a breaking change requiring a major version bump.
 - **NFR-I8 [v1.1+]:** auricle's local LLM path supports Ollama (HTTP API) and/or MLX (in-process). Specific runtime is configurable; switching is a config-only change, not a reinstall.
 
@@ -223,7 +223,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Cost (NFR-C1–NFR-C4)
 
-- **NFR-C1 [MVP]:** Per-meeting variable cost ceilings by configuration tier: ≤ $0.50 default (jargon correction inline; no diarization review), ≤ $0.60 when `diarization_review.enabled = true`, targeted ≤ $0.70 in v1.x with `transcription_review.enabled = true`, $0 on local-LLM path (FR33). All ceilings assume a 30-minute meeting with attendee context and vault glossary, default model (`claude-opus-4-7` summarize, `claude-haiku-4-5` reviewers), prompt caching enabled.
+- **NFR-C1 [MVP]:** Per-meeting variable cost ceilings by configuration tier: ≤ $0.50 default (jargon correction inline; no diarization review), ≤ $0.60 when `diarization_review.enabled = true`, targeted ≤ $0.70 in v1.x with `transcription_review.enabled = true`, $0 on local-LLM path (FR33). All ceilings assume a 30-minute meeting with attendee context and vault glossary, default model (`claude-opus-5` summarize at `medium` effort, `claude-haiku-4-5` reviewers), prompt caching enabled.
 - **NFR-C2 [v1.1]:** Per-meeting variable cost reduces to ≤ $0.05 for a 30-minute meeting via prompt optimization (caching system instructions, scoping glossary tighter).
 - **NFR-C3 [v1.1+]:** Per-meeting cost reduces to $0 when local-LLM summarization path is configured.
 - **NFR-C4 [MVP]:** Total fixed cost: $0. Distribution uses a self-managed code-signing certificate, trusted on each user Mac via `spctl` assessment policy — no Apple Developer Program subscription required. No subscription dependencies, no SaaS components.
@@ -273,7 +273,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 #### Summarization Contracts (Decision Group 3)
 
 - **AR-SUM-1:** `SummarizerStrategy` protocol with normalized output `SummaryWithGrounding` (containing `summary`, `actionItems`, `decisions`, `groundingMethod`, `cost`). All grounding pointers normalized to `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod }` at validator boundary. Renderer reads `transcript[start..<end]` regardless of source strategy.
-- **AR-SUM-2:** Two MVP grounding strategies: `ClaudeCitationsSummarizer` (primary, Citations API on `claude-opus-4-7`) and `ClaudeSubstringSummarizer` (fallback + v1.1+ local-LLM path). Both share a single `SummarizationPromptBuilder` (snapshot tests fail build on prompt drift between strategies).
+- **AR-SUM-2:** Two MVP grounding strategies: `ClaudeCitationsSummarizer` (primary, Citations API on `claude-opus-5`) and `ClaudeSubstringSummarizer` (fallback + v1.1+ local-LLM path). Both share a single `SummarizationPromptBuilder` (snapshot tests fail build on prompt drift between strategies).
 - **AR-SUM-3:** `SummarizerOrchestrator` mediates fallback (NOT in-strategy retry). Fallback triggers on typed errors (`citationsUnavailable`, `malformedResponse`, `rateLimited`, `featureToggleDisabled`); bounded to one attempt; NFR-C1 cost ceiling applies across primary + fallback.
 - **AR-SUM-4:** Canonicalization invariant — exactly ONE canonical transcript representation: NFC-normalized Unicode, LF line endings, no leading/trailing whitespace per line, speaker labels prefixed `<Speaker_N>: `. Character offsets are UTF-8 byte offsets into the NFC-normalized representation. Build-time contract test (`tests/CanonicalTranscriptContractTests.swift`) and cross-mode fixture tests (golden transcripts run through both strategies producing byte-identical renderer output) fail the build on violation.
 - **AR-SUM-5:** Anthropic prompt caching: system prompt + glossary + attendee context use `cache_control` blocks; transcript is never cached (unique per meeting). Smoke-test protocol (Story N hour 1, runs before dogfood): both strategies on ≥5 real captured meetings (≥1 1:1, ≥1 multi-party); default flips to substring if substring catches anything Citations missed. Smoke-test results recorded at `tests/fixtures/smoke-test-results.md`.
@@ -559,7 +559,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 | NFR-I3 (Obsidian 1.x via URL scheme) | Epic 2 (frontmatter) + Epic 8 (URL-open click handler) | No plugin required |
 | NFR-I4 (frontmatter schema versioned + migration-aware) | Epic 2 | `auricle.schema_version` field |
 | NFR-I5 (Google Calendar API v3 read-only + graceful degradation) | Epic 3 | `GoogleCalendarSource` |
-| NFR-I6 (Anthropic Messages API + configurable model + effort budget) | Epic 3 | `claude-opus-4-7` default; FR58 config knob |
+| NFR-I6 (Anthropic Messages API + configurable model + effort level) | Epic 3 | `claude-opus-5` default at `medium` effort; FR58 config knob |
 | NFR-I7 (CLI argument-surface stability) | Epic 1 (scaffold) + Epic 9 (full surface) | Major version bump on rename/remove |
 | NFR-I8 (local LLM Ollama + MLX configurable) | Epic 10 | v1.1+ |
 | **Accessibility (A)** | | |
@@ -1366,7 +1366,7 @@ So that the renderer downstream is grounding-method-agnostic and substituting on
 
 **Given** the `SummarizerConfig` value type
 **When** I inspect its structure
-**Then** it carries: model identifier (default `claude-opus-4-7` per NFR-I6), effort budget (`minimal`/`low`/`moderate`/`high` or numeric), Anthropic API key reference (read at call time from Keychain — never carried in the value), prompt-caching enabled flag, remaining-cost-budget hint (passed to fallback strategy by orchestrator per Decision 3.3)
+**Then** it carries: model identifier (default `claude-opus-5` per NFR-I6), effort level (`low`/`medium`/`high`/`xhigh`/`max` — named levels only; the current API has no numeric-budget override), Anthropic API key reference (read at call time from Keychain — never carried in the value), prompt-caching enabled flag, remaining-cost-budget hint (passed to fallback strategy by orchestrator per Decision 3.3)
 
 **Given** the `SummarizerInterface` target
 **When** any test or composition root depends on it
@@ -1456,7 +1456,7 @@ So that the substring path serves as both the v1.1+ local-LLM path's contract (F
 
 **Given** the `ClaudeSubstringSummarizer` value
 **When** I call `summarize(transcript:, glossary:, config:)`
-**Then** the implementation calls `messages.create` on `claude-opus-4-7` (default per NFR-I6) via `AnthropicHTTPClient` from Story 3.3 with the prompt from `SummarizationPromptBuilder.build(..., mode: .substring)` from Story 3.2
+**Then** the implementation calls `messages.create` on `claude-opus-5` (default per NFR-I6) via `AnthropicHTTPClient` from Story 3.3 with the prompt from `SummarizationPromptBuilder.build(..., mode: .substring)` from Story 3.2
 **And** the response JSON shape requested includes `summary`, `action_items[]` (each with `text` + `source_transcript_quote: String`), `decisions[]` (same shape)
 **And** each returned `source_transcript_quote` is mapped to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .substring }` by `SubstringGroundingValidator.validate(quote:in:)`
 
@@ -1487,7 +1487,7 @@ So that Citations is the MVP default for FR29 grounding (per Decision 3.6 smoke-
 
 **Given** the `ClaudeCitationsSummarizer` value
 **When** I call `summarize(transcript:, glossary:, config:)`
-**Then** the implementation calls `messages.create` on `claude-opus-4-7` with the transcript provided as a Document with `citations: { enabled: true }` per Decision 3.2
+**Then** the implementation calls `messages.create` on `claude-opus-5` with the transcript provided as a Document with `citations: { enabled: true }` per Decision 3.2
 **And** the prompt is from `SummarizationPromptBuilder.build(..., mode: .citations)` from Story 3.2
 **And** the response includes Anthropic-constructed `CitationCharLocation` objects with `start_char_index` / `end_char_index`
 **And** each `CitationCharLocation` is mapped directly to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }` by `CitationGroundingValidator.validate(citation:in:)`
@@ -1570,7 +1570,7 @@ So that the stage runs as a subprocess (per AR-PIPE-1 — heavy isolation needed
 
 **Given** the stage execution
 **When** the orchestrator returns a `SummaryWithGrounding`
-**Then** `telemetry` is updated via UPSERT per the write-authority matrix from AR-DATA-4: `summarization_path = "claude_api"`, `summarization_model = "claude-opus-4-7"`, `summarization_effort_budget = "moderate"` (or whatever was actually used), `cost_usd`, `quote_validation_drop_count`, `grounding_method` per Decision 4.5
+**Then** `telemetry` is updated via UPSERT per the write-authority matrix from AR-DATA-4: `summarization_path = "claude_api"`, `summarization_model = "claude-opus-5"`, `summarization_effort_budget = "medium"` (or whatever was actually used), `cost_usd`, `quote_validation_drop_count`, `grounding_method` per Decision 4.5
 **And** a `stage_events` row is written with `stage='summarize'`, `event='completed'`, `metadata_json` containing `{model_id, effort_budget, input_tokens, output_tokens, thinking_tokens, cost_usd, quote_validation_drop_count, grounding_method}`
 
 **Given** the stage execution
