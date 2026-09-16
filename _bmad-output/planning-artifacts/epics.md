@@ -232,11 +232,12 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Project Initialization & Starter Template
 
-- **AR-INIT-1:** Hybrid SwiftPM library + Xcode app project structure. Library targets in `Sources/` declared in `Package.swift`; Xcode project at `App/Auricle.xcodeproj` produces both the GUI binary (`AuricleApp`) and the CLI binary (`auricle-cli`); both depend on the SwiftPM library. SwiftPM target boundaries enforce SOLID at build-system level (cross-target imports rejected).
+- **AR-INIT-1:** Hybrid SwiftPM library + Tuist-generated Xcode app project structure. Library targets in `Sources/` declared in `Package.swift`. The Xcode project at `App/Auricle.xcodeproj` is GENERATED from `Project.swift` by `tuist generate` and is gitignored, never committed; it produces both the GUI binary (`AuricleApp`, product `.app`) and the CLI binary (`auricle-cli`, product `.commandLineTool`), each depending on the root SwiftPM package declared as `.local(path: ".")` and linked per-product via `.package(product:)`. SwiftPM target boundaries enforce SOLID at build-system level (cross-target imports rejected).
 - **AR-INIT-2:** External SwiftPM dependencies declared in `Package.swift`: WhisperKit, GRDB.swift, swift-argument-parser, TOMLKit (config), Sparkle (v1.1, deferred).
-- **AR-INIT-3:** Xcode project configuration: Hardened Runtime ON, App Sandbox OFF, Info.plist with `LSUIElement=NO` plus NS*UsageDescription strings (per Decision 4.4), entitlements (`com.apple.security.device.audio-input`, notifications), CFBundleURLTypes for `auricle://` scheme.
-- **AR-INIT-4:** CI (`.github/workflows/ci.yml`) runs `swift build`, `swift test`, `xcodebuild build` for both schemes, `swiftformat --lint`, `swiftlint`. Release workflow (`release.yml`) runs `xcodebuild archive` + `codesign` + (v1.1) Sparkle appcast generation.
+- **AR-INIT-3:** Build configuration lives in plain-text files, never in the Xcode GUI (AR-PAT-11). `config/Shared.xcconfig` carries `ENABLE_HARDENED_RUNTIME=YES`, `MACOSX_DEPLOYMENT_TARGET=14.0`, `ARCHS=arm64`, `PRODUCT_BUNDLE_IDENTIFIER=com.auricle.app`, `CODE_SIGN_ENTITLEMENTS`; the App Sandbox key is absent entirely. `App/Auricle/Info.plist` (committed, hand-edited) carries `LSUIElement=NO`, the NS*UsageDescription strings (per Decision 4.4), and CFBundleURLTypes for the `auricle://` scheme. `App/Auricle/Auricle.entitlements` (committed) carries `com.apple.security.device.audio-input`. `Project.swift` references these by path — `infoPlist: .file(path:)`, `entitlements: .file(path:)`, and `settings: .settings(configurations: [.debug(name:xcconfig:), .release(name:xcconfig:)], defaultSettings: .none)` so the xcconfigs are authoritative and Tuist injects nothing.
+- **AR-INIT-4:** CI (`.github/workflows/ci.yml`) runs `mise install`, `swift build`, `swift test`, `tuist generate --no-open`, `xcodebuild build` for both schemes, `swiftformat --lint`, `swiftlint`. CI additionally asserts `App/Auricle.xcodeproj` is NOT tracked by git (`git ls-files --error-unmatch` must fail) — a committed generated project is a regression of AR-INIT-1. Release workflow (`release.yml`) runs `mise install` + `tuist generate` + `xcodebuild archive` + `codesign` + (v1.1) Sparkle appcast generation.
 - **AR-INIT-5:** SwiftPM target list comprises: `Core`, `State`, `Telemetry`, `Orchestrator`, `Permissions`, `Capture`, `TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`, `Transcribe`, `Diarize`, `Attribute`, `Summarize`, `ClaudeSummarizer`, `ClaudeAIReviewers`, `ReviewDiarization`, `WhisperKitTranscriber`, `WhisperKitDiarizer`, `GoogleCalendarSource`, `VaultGlossary`, `Persist`, `Verify`, `Notifications`, plus matching `<Target>Tests` test targets and `TestSupport`.
+- **AR-INIT-6:** Developer toolchain is declared and version-pinned in `mise.toml` (Tuist, SwiftFormat, SwiftLint). `mise install` reproduces the exact toolchain on a fresh Mac and in CI; version drift would break NFR-M7's byte-identical-rebuild guarantee. Tuist is used as the open-source CLI only — the hosted Tuist cache/server tier is NOT adopted (NFR-C4: total fixed cost $0).
 
 #### Distribution & Trust
 
@@ -311,6 +312,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **AR-PAT-8:** Cross-process IPC mechanisms allowed: SQLite writes + cache-dir artifacts. Forbidden: XPC, Mach ports, named pipes, shared memory, pasteboard, distributed objects. Subprocess invocations use `Foundation.Process` with structured stdout JSON / stderr text-or-JSON-error.
 - **AR-PAT-9:** Markdown output discipline — frontmatter under `---` fences (YAML, exact Decision 2.2 schema); `## ` only for sections (filename owns the document title); never beyond `### `; wikilinks `[[Display Name]]` for people/projects/concepts; verbatim quotes `> ` blockquote; no emoji, no horizontal rules outside frontmatter, no tables; UTF-8 with LF line endings, single trailing newline.
 - **AR-PAT-10:** Pattern enforcement layers: build-time SwiftPM target boundaries, lint-time naming/layout/helper-bypass detection in `.swiftformat`/`.swiftlint.yml`, CI-time JSON contract round-trip tests + `SummarizationPromptBuilder` snapshot tests + canonicalization invariant tests + cross-mode fixture tests + GRDB migration round-trip tests, code-review checklist for human-only enforcement.
+- **AR-PAT-11:** No GUI-required development tasks. Every step that produces, configures, signs, or releases a build must be executable from a non-interactive shell. Xcode, Keychain Access, and System Settings may be *used* by preference — they must never be *required*. A plan step whose only documented path is a GUI navigation sequence is a planning defect. Enforcement: CI runs the full build-and-sign path headlessly; a step CI cannot run is a step that does not exist. This governs developer tasks only — end-user GUI affordances (System Settings permission remediation per FR6/FR60, Keychain Access as the API-key reveal path, manual frontmatter edits in Obsidian per FR26) are product behavior and are unaffected.
 
 ### UX Design Requirements
 
@@ -1093,7 +1095,9 @@ So that conformance to the architectural patterns is mechanical, not memorial.
 
 **Given** `.github/workflows/ci.yml`
 **When** a PR opens
-**Then** the workflow runs `swift build` (verify SwiftPM library compiles), `swift test` (run all library tests including contract tests, snapshot tests, the canonicalization invariant test from Story 1.2), `xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp build` and `-scheme auricle-cli build` (verify executables compile), `swiftformat --lint` and `swiftlint` (fail on naming, layout, helper-bypass violations)
+**Then** the workflow runs `mise install` (pinned toolchain per AR-INIT-6), `swift build` (verify SwiftPM library compiles), `swift test` (run all library tests including contract tests, snapshot tests, the canonicalization invariant test from Story 1.2), `tuist generate --no-open`, `xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp build` and `-scheme auricle-cli build` (verify executables compile), `swiftformat --lint` and `swiftlint` (fail on naming, layout, helper-bypass violations)
+**And** the workflow fails if `App/Auricle.xcodeproj` is tracked by git (per AR-INIT-4) — a committed generated project is a regression
+**And** the workflow fails if `tuist generate` leaves a non-empty `git status` outside the gitignored project — the manifest and the working tree must agree
 **And** every job runs in a clean environment; no caching of build artifacts that could mask determinism issues
 
 **Given** the lint discipline
@@ -3615,7 +3619,9 @@ So that auricle installs on a fresh Mac with one-time trust setup (~5 min) and s
 
 **Given** the originating Mac
 **When** I create the personal Code-Signing CA + per-tool leaf cert per AR-DIST-1
-**Then** the artifacts exist: "Auricle Root CA" certificate (root, self-signed, marked CA-capable, generated via Keychain Access > Certificate Assistant or `openssl`); "Auricle Code Signing" leaf certificate (signed by the CA, used as Xcode signing identity)
+**Then** `scripts/create-signing-ca.sh` (idempotent, per AR-PAT-11) generates both artifacts with no GUI step: "Auricle Root CA" (root, self-signed, `basicConstraints=critical,CA:TRUE`, `keyUsage=critical,keyCertSign`, via `openssl req -x509`) and the "Auricle Code Signing" leaf (`openssl x509 -req` signed by the CA, `extendedKeyUsage=codeSigning`), each imported to the login keychain via `security import`
+**And** the script is re-runnable: a second invocation detects the existing identity via `security find-identity -v -p codesigning` and exits 0 without creating a duplicate
+**And** the leaf is named as `CODE_SIGN_IDENTITY` in `config/Release.xcconfig`, not selected in a signing pane
 **And** the CA `.cer` (public certificate, no private key) is checked into the repo at `assets/auricle-root-ca.cer`
 **And** the private keys for both CA and leaf live ONLY in the originating Mac's login Keychain — never exported (only that Mac can sign new builds)
 
@@ -3625,9 +3631,10 @@ So that auricle installs on a fresh Mac with one-time trust setup (~5 min) and s
 **And** the script exits 0 on success with verification message "Trust setup complete. Verify with: spctl --assess --verbose /Applications/Auricle.app"
 **And** running the script a second time on the same Mac is a no-op (idempotent)
 
-**Given** Xcode Signing & Capabilities
-**When** I configure the project per AR-DIST-3
-**Then** Signing Identity = "Auricle Code Signing" (the leaf cert); Hardened Runtime = enabled; Sandbox = disabled
+**Given** `config/Release.xcconfig`
+**When** I inspect it per AR-DIST-3 + AR-INIT-3
+**Then** `CODE_SIGN_IDENTITY = Auricle Code Signing`, `CODE_SIGN_STYLE = Manual`, `ENABLE_HARDENED_RUNTIME = YES`, and no `com.apple.security.app-sandbox` key appears in `App/Auricle/Auricle.entitlements`
+**And** `codesign -dv --entitlements - <bundle>` on the built product confirms all three, so the assertion is against the signed artifact rather than against project settings
 **And** no notarization step in the release script
 
 **Given** the `.app` bundle layout per AR-DIST-3
@@ -3652,7 +3659,7 @@ So that releases are reproducible (same git SHA + same toolchain → identical s
 
 **Given** the script
 **When** I inspect it
-**Then** the script runs: `xcodebuild archive` for the GUI scheme; `codesign` with the leaf cert chained to "Auricle Root CA" (per AR-DIST-3); package as `.dmg` (or `.app` zip) per AR-DIST-3
+**Then** the script runs: `mise install`; `tuist generate --no-open` (the project is generated, not committed, per AR-INIT-1); `xcodebuild archive` for the GUI scheme; `codesign` with the leaf cert chained to "Auricle Root CA" (per AR-DIST-3); package as `.dmg` (or `.app` zip) per AR-DIST-3
 **And** the script does NOT run notarization (`xcrun notarytool submit`) per AR-DIST-3 — auricle uses self-managed trust, not Apple notarization
 **And** v1.1 extends the script to generate the Sparkle appcast XML with EdDSA signature per FR65 (deferred — out of MVP scope)
 
@@ -3660,7 +3667,7 @@ So that releases are reproducible (same git SHA + same toolchain → identical s
 **When** the build completes
 **Then** the output artifact is at `build/Auricle-<version>.dmg` (or similar) — ready to drop into a GitHub Release
 **And** the artifact is signed (verified via `codesign --verify --verbose <bundle-path>`)
-**And** running the script twice with the same git SHA + same Xcode version produces byte-identical `.app` contents (verified by `find Auricle.app -type f -exec sha256sum {} \;`) per NFR-M7
+**And** running the script twice with the same git SHA + same Xcode version + same `mise.toml`-pinned Tuist version produces byte-identical `.app` contents (verified by `find Auricle.app -type f -exec sha256sum {} \;`) per NFR-M7 — the pinned Tuist version is part of the reproducibility contract per AR-INIT-6, because it determines the generated project
 
 **Given** the bundle identifier and signing identity remain stable across rebuilds and Sparkle updates
 **When** Sparkle ships in v1.1
