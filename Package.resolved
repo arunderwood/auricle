@@ -1,5 +1,5 @@
 {
-  "originHash" : "152bd197d7e49ad32adf2c18ab651b9df5090861d1295901720dbf2aec911d8c",
+  "originHash" : "fb7654dcd001bdc49ef03badb8345159e3c5d9cadd88f6e731cf4e37df97b04a",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -71,6 +71,15 @@
       "state" : {
         "revision" : "ec6198d37d495efc6acd4dffbd262cdca7ff9b3f",
         "version" : "0.6.0"
+      }
+    },
+    {
+      "identity" : "ulid.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/yaslab/ULID.swift.git",
+      "state" : {
+        "revision" : "e21933de8ac3e8ba9e83aa71956cd27206eec6b9",
+        "version" : "1.3.1"
       }
     },
     {

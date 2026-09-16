@@ -85,7 +85,7 @@ The architecture-shaping NFRs:
 - **Google Calendar API v3** (REST) — read-only OAuth 2.0 with PKCE; refresh token in Keychain. Off the hot path; degrades to `#auricle/needs-calendar-enrichment` on failure.
 - **SQLite** (system library, accessed via `sqlite3` / GRDB / similar) — single local database for state, retention, telemetry. Schema is versioned and migrated forward.
 - **swift-argument-parser** — CLI interface (NFR-I7 binding contract).
-- **ULID.swift** (yaslab, Swift Package) — Crockford base32 ULID generation for `MeetingID`. Foundation-optional, MIT.
+- **ULID.swift** (yaslab, Swift Package) — Crockford base32 ULID generation for `MeetingID`. MIT, no transitive third-party deps beyond Foundation.
 - **Yams** (jpsim, Swift Package) — YAML encode/decode for vault frontmatter (`FrontmatterRenderer`). Avoids hand-written YAML escaping around arbitrary calendar-event titles.
 - **Sparkle [v1.1]** — auto-update, EdDSA-signed appcasts.
 - **Obsidian** — consumer of the vault output via `obsidian://open` URL scheme. No plugin required, no Obsidian config assumed beyond a writable vault.
@@ -2246,7 +2246,7 @@ auricle/
 │   │   ├── MeetingIDResolver.swift        # `<id>` argument resolution (Dec 1.5)
 │   │   ├── PipelineState.swift            # canonical state-name enum (Dec 1.2)
 │   │   ├── SchemaVersion.swift            # schema-version constants for every contract
-│   │   └── ULID.swift                     # ULID generation, wraps yaslab/ULID.swift
+│   │   └── ULIDFormat.swift                # ULID generation, wraps yaslab/ULID.swift (named ULIDFormat — the library's own module is named ULID)
 │   │
 │   ├── State/                             # SQLite layer
 │   │   ├── StateStore.swift               # public API — every state read/write goes through here
@@ -2397,7 +2397,7 @@ auricle/
 │   │   ├── CanonicalTranscriptTests.swift # the Dec 3.4 build-time invariant tests
 │   │   ├── LogRedactionTests.swift
 │   │   ├── MeetingIDResolverTests.swift
-│   │   └── ULIDTests.swift
+│   │   └── ULIDFormatTests.swift
 │   ├── StateTests/
 │   │   ├── MigrationTests.swift           # round-trip every migration (step-05 CI gate)
 │   │   ├── StateStoreTests.swift
