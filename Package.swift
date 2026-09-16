@@ -6,7 +6,7 @@
 // which Story 1.8 wires into CI so the boundary becomes build-enforced there.
 //
 // MARK: - Deferred to v1.1 (AR-INIT-2)
-// Sparkle: https://github.com/sparkle-project/Sparkle.git from: "2.6.0"
+// Sparkle: https://github.com/sparkle-project/Sparkle.git from: "2.10.0"
 
 import PackageDescription
 
