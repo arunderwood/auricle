@@ -1,0 +1,8 @@
+#include "Shared.xcconfig"
+
+CODE_SIGN_IDENTITY = Auricle Code Signing
+CODE_SIGN_STYLE = Manual
+
+// "Auricle Code Signing" does not exist as a signing identity until Story 9.3
+// creates it — Release builds will not sign until then. Debug builds (ad-hoc,
+// see Debug.xcconfig) are all this story needs.

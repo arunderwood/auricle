@@ -43,7 +43,7 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
-  1-1-project-initialization-xcode-swiftpm-hybrid: ready-for-dev
+  1-1-project-initialization-xcode-swiftpm-hybrid: review
   1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config: backlog
   1-3-log-facade-with-sensitivity-tagging-and-redaction: backlog
   1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns: backlog
