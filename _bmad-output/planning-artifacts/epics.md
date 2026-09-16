@@ -931,6 +931,12 @@ So that every subsequent epic can read/write state without ever needing a schema
 
 **Acceptance Criteria:**
 
+**Given** the `Package.swift` GRDB dependency floor (`from: "6.29.0"`, predating GRDB 7.0.0 which requires Xcode 16+/Swift 6 compiler — already satisfied by this project's Xcode 26.4.1 pin)
+**When** this story begins
+**Then** confirm GRDB 7.x builds cleanly against this package's `swift-tools-version: 5.10` target before writing migration #1
+**And** if the build is clean, bump the floor to `from: "7.0.0"` — its default-IMMEDIATE-writes behavior is a better match for this story's WAL/cross-process assumptions (per architecture.md's GRDB/WAL/concurrency table) than 6.x's configurable default
+**And** if the build is not clean, stay on `from: "6.29.0"` and record why in this story's Dev Agent Record
+
 **Given** the `State` target
 **When** I call `StateStore.production().database()` for the first time on a fresh machine
 **Then** the database is created at `~/Library/Application Support/com.auricle.app/auricle.sqlite3` per AR-DATA-1
