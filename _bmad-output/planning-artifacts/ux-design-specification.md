@@ -858,29 +858,29 @@ sequenceDiagram
     participant Notif as macOS Notification
 
     Note over Main: Upcoming-event strip shows<br/>"Ben sync · in 14 min"
-    the user->>Main: Click ⏺ Record
+    User->>Main: Click ⏺ Record
     Main->>Pipeline: state: recording
     Note over Pipeline: Capture loops 32 min
-    the user->>Main: Click ⏹ Stop
+    User->>Main: Click ⏹ Stop
     Main->>Pipeline: state: captured → transcribing
     Note over Pipeline: WhisperKit ~24s
     Pipeline->>Pipeline: state: reviewing_diarization (Haiku ~5–10s)
     Pipeline->>Main: state: awaiting_attribution
     Main->>Notif: Fire "Captured — name speakers when ready"
     Note over User: User initiates engagement<br/>(no auto-foreground)
-    the user->>Main: Click row OR notification OR banner
+    User->>Main: Click row OR notification OR banner
     Main->>Sheet: Present Attribution sheet
     Note over Sheet: Heuristic pre-fills "Jordan (you)"<br/>on longest-speaking row;<br/>recurring-meeting prefill from FR23
-    the user->>Sheet: Spacebar (audition Speaker_2)
-    the user->>Sheet: Type "Be" → Enter (Ben)
-    the user->>Sheet: Cmd-Enter (Continue)
+    User->>Sheet: Spacebar (audition Speaker_2)
+    User->>Sheet: Type "Be" → Enter (Ben)
+    User->>Sheet: Cmd-Enter (Continue)
     Sheet-->>Main: Dismiss sheet
     Main->>Pipeline: state: attributing → summarizing
     Note over Pipeline: Claude Opus ~60s
     Pipeline->>Vault: Atomic write note
     Pipeline->>Main: state: published → awaiting_verification
     Main->>Notif: Fire "Summary ready"
-    the user->>Notif: Click notification
+    User->>Notif: Click notification
     Notif->>Vault: Open note (obsidian:// URL)
     Notif->>Pipeline: state: verified · arm 7-day timer
 ```
@@ -931,16 +931,16 @@ sequenceDiagram
     Pipeline->>Claude: Review diarization (transcript JSON)
     Claude-->>Pipeline: diarization_suggestions.json:<br/>"Speaker_3 segment 42 likely 2–3 distinct speakers<br/>(question / answer / acknowledgment pattern)"
     Pipeline->>Sheet: awaiting_attribution; sheet pre-loaded with suggestions
-    the user->>Sheet: Open sheet
+    User->>Sheet: Open sheet
     Note over Sheet: Speaker_3 row: ⚠ acoustic + 🤖 likely 3 speakers
     Note over Sheet: In transcript pane:<br/>Segment 42 shows AI reasoning + proposed splits
-    the user->>Sheet: Reads AI reasoning ("question-answer-acknowledgment pattern")
-    the user->>Sheet: Plays segment 42 audio (▶ Play paragraph)
+    User->>Sheet: Reads AI reasoning ("question-answer-acknowledgment pattern")
+    User->>Sheet: Plays segment 42 audio (▶ Play paragraph)
     Note over User: Confirms — yes, three voices
-    the user->>Sheet: Click [Apply all] on AI's proposed splits
+    User->>Sheet: Click [Apply all] on AI's proposed splits
     Note over Sheet: Segment 42 splits into 3 sub-segments<br/>each with proposed speaker assignment
-    the user->>Sheet: Adjusts split 2 manually (AI guessed 'unknown')
-    the user->>Sheet: Cmd-Enter (Continue)
+    User->>Sheet: Adjusts split 2 manually (AI guessed 'unknown')
+    User->>Sheet: Cmd-Enter (Continue)
     Sheet-->>Pipeline: attribution.json with segment_overrides
     Pipeline->>Pipeline: state: summarizing
     Note over Pipeline: Summary uses corrected speakers
@@ -971,10 +971,10 @@ sequenceDiagram
     Pipeline->>Main: state: summarization_failed (transient)
     Main->>Main: Banner: "1 meeting needs your help"<br/>Row chip turns amber: "Retry needed ↻"
     Note over User: Notices banner on next visit
-    the user->>Main: Click row → expands inline
+    User->>Main: Click row → expands inline
     Note over Main: Ops console:<br/>"Summarization failed — Claude API timeout<br/>after 5 retries (credits exhausted)"<br/>[Retry now] [Discard]<br/>Or: auricle run 01HZ7K
-    the user->>the user: Tops up Anthropic credits
-    the user->>Main: Click [Retry now]
+    User->>User: Tops up Anthropic credits
+    User->>Main: Click [Retry now]
     Main->>Pipeline: state: summarizing
     Pipeline->>Claude: Summarize call
     Claude-->>Pipeline: 200 OK
