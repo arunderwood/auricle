@@ -1,0 +1,11 @@
+MACOSX_DEPLOYMENT_TARGET = 14.0
+ARCHS = arm64
+EXCLUDED_ARCHS = x86_64
+ENABLE_HARDENED_RUNTIME = YES
+PRODUCT_BUNDLE_IDENTIFIER = com.auricle.app
+CODE_SIGN_ENTITLEMENTS = Auricle/Auricle.entitlements
+SWIFT_VERSION = 5.10
+
+// ENABLE_APP_SANDBOX is deliberately absent, not set to NO — the App Sandbox
+// conflicts with ScreenCaptureKit and vault writes (Architecture §Technical
+// Constraints). Do not add this key.

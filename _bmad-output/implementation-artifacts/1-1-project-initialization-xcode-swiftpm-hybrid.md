@@ -1,6 +1,7 @@
 # Story 1.1: Project Initialization (Xcode + SwiftPM Hybrid)
 
-Status: ready-for-dev
+Status: done
+Baseline Commit: 0a53390e241e44c6165578302b157b3ce7c24b1b
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -61,97 +62,97 @@ So that every subsequent story can land in a target with explicit build-system-e
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Tuist local-package spike** (gates every later task — do NOT start Task 1 until this passes)
-  - [ ] Install the toolchain: `mise install` if `mise.toml` exists, otherwise `brew install tuist` (Task 6 writes `mise.toml` properly)
-  - [ ] In a scratch directory OUTSIDE the repo, create a minimal `Package.swift` with one library target, and an `App/Project.swift` declaring one `.app` target with `packages: [.local(path: ".")]` and `dependencies: [.package(product: "TheLibrary")]`
-  - [ ] Run `tuist generate --no-open && xcodebuild -scheme <app> build` — must exit 0
-  - [ ] **If this fails:** stop. Fall back to XcodeGen (already installed, 2.46.0) with an identical `config/*.xcconfig` split — only the manifest language changes, because no build setting lives in the manifest. Record the failure and the deviation from AR-INIT-1 in the Dev Agent Record, and tell the user before proceeding.
-  - [ ] Delete the scratch directory. Do NOT commit it.
+- [x] **Task 0: Tuist local-package spike** (gates every later task — do NOT start Task 1 until this passes)
+  - [x] Install the toolchain: `mise install` if `mise.toml` exists, otherwise `brew install tuist` (Task 6 writes `mise.toml` properly)
+  - [x] In a scratch directory OUTSIDE the repo, create a minimal `Package.swift` with one library target, and an `App/Project.swift` declaring one `.app` target with `packages: [.local(path: ".")]` and `dependencies: [.package(product: "TheLibrary")]`
+  - [x] Run `tuist generate --no-open && xcodebuild -scheme <app> build` — must exit 0
+  - [x] **If this fails:** stop. Fall back to XcodeGen (already installed, 2.46.0) with an identical `config/*.xcconfig` split — only the manifest language changes, because no build setting lives in the manifest. Record the failure and the deviation from AR-INIT-1 in the Dev Agent Record, and tell the user before proceeding.
+  - [x] Delete the scratch directory. Do NOT commit it.
 
   **Why this gate exists:** the Tuist manifest API used by Tasks 6–8 is verified against Tuist's `ProjectDescription` sources (`Product.app`, `Product.commandLineTool`, `Package.local(path:)`, `TargetDependency.package(product:)`, `InfoPlist.file(path:)`, `Entitlements.file(path:)`, `Configuration.debug(name:settings:xcconfig:)` all exist as written). What is NOT verified is this specific arrangement — a project in `App/` consuming a SwiftPM package at the repository root. Thirty minutes here beats discovering it at Task 6.
 
-- [ ] **Task 1: Initialize SwiftPM package** (AC: #1)
-  - [ ] Run `swift package init --type library --name AuricleKit` at repo root (do NOT use `--type executable`; the manifest is the library; executables live in the Xcode project per AR-INIT-1)
-  - [ ] Delete the auto-generated `Sources/AuricleKit/AuricleKit.swift` and `Tests/AuricleKitTests/AuricleKitTests.swift` placeholder files — they belong to no real target
-  - [ ] Edit `Package.swift` per the manifest skeleton in **Dev Notes → Package.swift Skeleton** below
-  - [ ] Set `swift-tools-version: 5.10` on line 1 (required for Swift Testing per Architecture §Testing Framework)
-  - [ ] Set `platforms: [.macOS(.v14)]` (per AR-INIT-3 deployment target)
-- [ ] **Task 2: Declare all 26 library targets in `Package.swift`** (AC: #1)
-  - [ ] Declare 25 library targets per AR-INIT-5 in this order: cross-cutting first (`Core`, `State`, `Telemetry`, `Orchestrator`, `Permissions`), then capture (`Capture`), then interfaces (`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`), then stages (`Transcribe`, `Diarize`, `Attribute`, `Summarize`, `Persist`, `Verify`, `Notifications`, `ReviewDiarization`), then concrete strategies (`ClaudeSummarizer`, `ClaudeAIReviewers`, `WhisperKitTranscriber`, `WhisperKitDiarizer`, `GoogleCalendarSource`, `VaultGlossary`)
-  - [ ] Declare the `TestSupport` library target (per AR-INIT-5 — test fixtures + composition root for tests, per Architecture §Test Organization)
-  - [ ] For each target, create the source directory `Sources/<Target>/` even if empty (SwiftPM requires the directory to exist; empty directories are not committed by git unless a `.gitkeep` is added — see Task 5)
-  - [ ] Wire dependency edges per **Dev Notes → Target Dependency Matrix** below — DO NOT add cross-edges that aren't listed (SwiftPM target boundaries are the architecture per AR-PAT-10 build-time enforcement)
-  - [ ] Each library target sets `path: "Sources/<TargetName>"` explicitly (not strictly required since names match defaults, but explicit-is-better keeps grep findable)
-- [ ] **Task 3: Declare 25 matching test targets in `Package.swift`** (AC: #1)
-  - [ ] Declare `<Target>Tests` for every library target (25 total) — per AR-INIT-5 + Architecture §Test Organization "One test target per source target"
-  - [ ] **EXCEPTION:** Interface-only targets (`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`) may have `<Target>Tests` declared with a comment: `// Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.` Still create the test target so the structure is uniform; later stories that ship the protocols add real tests.
-  - [ ] Each test target depends on its corresponding source target + `TestSupport`
-  - [ ] Each test target sets `path: "Tests/<TargetName>Tests"` explicitly
-  - [ ] Each test target uses Swift Testing (no need to import XCTest at the manifest level; the framework is implicit in Swift 5.10+)
-- [ ] **Task 4: Declare external SPM dependencies in `Package.swift`** (AC: #1)
-  - [ ] WhisperKit: `https://github.com/argmaxinc/WhisperKit.git` — `from: "0.9.0"` (use latest stable at scaffold time; pin via `Package.resolved`)
-  - [ ] GRDB.swift: `https://github.com/groue/GRDB.swift.git` — `from: "6.29.0"` (latest 6.x stable; do not jump to 7.x without architectural review of any breaking changes)
-  - [ ] swift-argument-parser: `https://github.com/apple/swift-argument-parser.git` — `from: "1.5.0"`
-  - [ ] TOMLKit: `https://github.com/LebJe/TOMLKit.git` — `from: "0.6.0"`
-  - [ ] Sparkle: declare as a top-of-file comment: `// MARK: - Deferred to v1.1 (AR-INIT-2) — Sparkle: https://github.com/sparkle-project/Sparkle.git from: "2.6.0"`
-  - [ ] Wire WhisperKit only into `WhisperKitTranscriber` and `WhisperKitDiarizer` targets
-  - [ ] Wire GRDB.swift only into `State` and `Telemetry` targets (per Architecture §SQLite Layer "Depended on by the State target only" — Telemetry is the second authorized SQL writer per AR-PAT-4)
-  - [ ] Wire swift-argument-parser into the `auricle-cli` Xcode target only (NOT into any SwiftPM library target; the CLI is the binding-contract surface per NFR-I7 and the parser is the executable-shell concern)
-  - [ ] Wire TOMLKit only into `Core` (config loader lives in `Core/Config.swift` per Story 1.2)
-- [ ] **Task 5: Create `Sources/<Target>/` and `Tests/<Target>Tests/` directories with `.gitkeep` placeholders** (AC: #1, #4)
-  - [ ] For each of the 25 library targets: `mkdir -p Sources/<Target>` and add `Sources/<Target>/.gitkeep` (zero-byte file — git tracks empty directories only via at-least-one tracked file)
-  - [ ] For `TestSupport`: `mkdir -p Sources/TestSupport` + `.gitkeep`
-  - [ ] For each of the 26 test targets: `mkdir -p Tests/<Target>Tests` + `.gitkeep`
-  - [ ] Verify `swift build` and `swift test` succeed against the empty package (this is AC1's "empty target compilation passes" gate — fail here means the manifest is wrong)
-- [ ] **Task 6: Write `mise.toml`, `Tuist.swift`, and `Project.swift`** (AC: #2, #3)
-  - [ ] `mise.toml` at repo root pinning exact versions of `tuist`, `swiftformat`, `swiftlint` (AR-INIT-6). Pin exact versions, not ranges — drift breaks NFR-M7's byte-identical-rebuild guarantee.
-  - [ ] `Tuist.swift` at repo root: `let tuist = Tuist(project: .tuist(generationOptions: .options()))`
-  - [ ] `Project.swift` at repo root: `packages: [.local(path: ".")]` — the root SwiftPM package
-  - [ ] Declare target `AuricleApp`: `destinations: [.mac]`, `product: .app`, `bundleId: "com.auricle.app"`, `deploymentTargets: .macOS("14.0")`, `infoPlist: .file(path: "App/Auricle/Info.plist")`, `entitlements: .file(path: "App/Auricle/Auricle.entitlements")`, `sources: ["App/Auricle/**"]`, and one `.package(product:)` dependency per library it consumes (see **Dev Notes → Composition Root Dependency List** below)
-  - [ ] Declare target `auricle-cli`: `destinations: [.mac]`, `product: .commandLineTool`, `sources: ["App/auricle-cli/**"]`, dependencies `.package(product:)` for swift-argument-parser plus every SwiftPM library product (CLI is the binding-contract surface; needs full library access per Architecture §Composition Roots)
-  - [ ] Project-level `settings:` → `.settings(configurations: [.debug(name: .debug, xcconfig: "config/Debug.xcconfig"), .release(name: .release, xcconfig: "config/Release.xcconfig")], defaultSettings: .none)`
-  - [ ] **`defaultSettings: .none` is load-bearing.** It stops Tuist injecting its own build settings, which would silently shadow the xcconfigs and make the plain-text files a lie.
-  - [ ] Run `tuist generate --no-open`; confirm `App/Auricle.xcodeproj` appears
-  - [ ] Confirm the generated project is ignored: `git status --porcelain` shows nothing under `App/` except the committed source directories
-- [ ] **Task 7: Write `config/*.xcconfig` and `App/Auricle/Info.plist`** (AC: #2, #3)
-  - [ ] `config/Shared.xcconfig`: `MACOSX_DEPLOYMENT_TARGET = 14.0`; `ARCHS = arm64`; `EXCLUDED_ARCHS = x86_64` (Apple Silicon only per Architecture §Technical Constraints "Apple Silicon only. M5 Max is reference hardware; M1 is the floor"); `ENABLE_HARDENED_RUNTIME = YES`; `PRODUCT_BUNDLE_IDENTIFIER = com.auricle.app`; `CODE_SIGN_ENTITLEMENTS = App/Auricle/Auricle.entitlements`; `SWIFT_VERSION = 5.10`
-  - [ ] **Do NOT add `ENABLE_APP_SANDBOX` in any form.** The key must be absent, not set to `NO` — the sandbox conflicts with ScreenCaptureKit and vault writes per Architecture §Technical Constraints.
-  - [ ] `config/Debug.xcconfig`: `#include "Shared.xcconfig"`; `CODE_SIGN_IDENTITY = -` (ad-hoc)
-  - [ ] `config/Release.xcconfig`: `#include "Shared.xcconfig"`; `CODE_SIGN_IDENTITY = Auricle Code Signing`; `CODE_SIGN_STYLE = Manual`. That identity does not exist until Story 9.3 creates it, so Release will not sign yet — expected, and Epic 9's problem rather than this story's.
-  - [ ] `App/Auricle/Info.plist` — hand-written XML, committed. Bundle identifier comes from `PRODUCT_BUNDLE_IDENTIFIER` via `$(PRODUCT_BUNDLE_IDENTIFIER)`; **DO NOT CHANGE** that value ever, per NFR-S2 (TCC permissions are keyed on bundle ID)
-  - [ ] Set `LSUIElement = NO` (auricle is a normal app with a Dock icon and main window per UX-DR1, not a menu bar accessory; menu-bar item arrives in v1.1 per FR8)
-  - [ ] Add `NSScreenCaptureUsageDescription` with verbatim string: `auricle records your meeting audio so it can transcribe what's said` (UX-DR44 — DO NOT paraphrase; user-voice copy is locked)
-  - [ ] Add `NSMicrophoneUsageDescription` with verbatim string: `auricle captures your voice alongside the meeting so your contributions are in the notes`
-  - [ ] Add `NSUserNotificationsUsageDescription` with verbatim string: `auricle pings you when a meeting is ready to review — usually just a click to confirm`
-  - [ ] Add `CFBundleURLTypes` array with one entry: `CFBundleURLName = "com.auricle.app.url"`, `CFBundleURLSchemes = ["auricle"]` (per AR-INIT-3 + Architecture §Notification / URL Scheme Names — registers `auricle://` for notification-click handlers per AR-FAIL-5)
-  - [ ] Verify both files parse: `plutil -lint App/Auricle/Info.plist`
-- [ ] **Task 8: Write `App/Auricle/Auricle.entitlements`** (AC: #2)
-  - [ ] Hand-written plist, committed at `App/Auricle/Auricle.entitlements`, containing `com.apple.security.device.audio-input` = `true`
-  - [ ] Verify the entitlements file does NOT contain `com.apple.security.app-sandbox` (would break ScreenCaptureKit + vault writes)
-  - [ ] `UNUserNotificationCenter` requires no entitlement key on macOS — authorization is requested at runtime and gated by `NSUserNotificationsUsageDescription`. Record that in a comment in `AuricleApp.swift` so the next reader does not go looking for a key that does not exist.
-  - [ ] Verify it parses: `plutil -lint App/Auricle/Auricle.entitlements`
-- [ ] **Task 9: Write minimal stub `@main` for AuricleApp + minimal swift-argument-parser scaffold for auricle-cli** (AC: #2)
-  - [ ] `App/Auricle/AuricleApp.swift`: declare `@main struct AuricleApp: App { var body: some Scene { WindowGroup { Text("auricle") } } }` — NOTHING ELSE. No `Orchestrator` instantiation, no view models, no concrete strategies. The composition root per AR-PAT-5 is implemented incrementally as later stories ship.
-  - [ ] `App/auricle-cli/main.swift`: declare `import ArgumentParser` + `@main struct AuricleCLI: AsyncParsableCommand { static let configuration = CommandConfiguration(commandName: "auricle", abstract: "Personal meeting notes pipeline") }` — NO subcommands yet. Story 1.7 ships the CLI scaffold with `status` + hidden `__internal-stage` per AR-PIPE-7.
-- [ ] **Task 10: Write `.gitignore`** (AC: #4)
-  - [ ] Add `.build/` (SwiftPM build output)
-  - [ ] Add `.swiftpm/` (SwiftPM local cache + xcode-generated package files)
-  - [ ] Add `DerivedData/` (Xcode build output)
-  - [ ] Add `App/Auricle.xcodeproj/` — the generated Xcode project. Never committed; regenerate with `tuist generate` (AR-INIT-1). CI fails the build if it is tracked (Story 1.8).
-  - [ ] Add `.tuist/` and `Derived/` (Tuist local cache and derived artifacts)
-  - [ ] Add `xcuserdata/` (Xcode per-user state — `*.xcodeproj/xcuserdata/` and `*.xcworkspace/xcuserdata/`)
-  - [ ] **DO NOT** add `Package.resolved` to `.gitignore` — it's committed for reproducible builds (NFR-M7). Add a comment in `.gitignore`: `# Package.resolved IS committed (reproducible builds per NFR-M7)`
-  - [ ] Add `.DS_Store` (cosmetic; macOS junk)
-  - [ ] Add `*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is NOT excluded — Xcode's auto-managed lockfile mirror is fine to commit alongside the SwiftPM root `Package.resolved`
-- [ ] **Task 11: Verify the complete build chain works end-to-end** (AC: #1, #2, #4)
-  - [ ] From repo root: `swift build` → must exit 0
-  - [ ] From repo root: `swift test` → must exit 0 (no tests run, but no compile errors)
-  - [ ] From repo root: `tuist generate --no-open` → must exit 0
-  - [ ] From repo root: `xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp -destination 'platform=macOS,arch=arm64' build` → must exit 0
-  - [ ] From repo root: `xcodebuild -project App/Auricle.xcodeproj -scheme auricle-cli -destination 'platform=macOS,arch=arm64' build` → must exit 0
-  - [ ] Prove the project is reproducible from the manifest alone: `rm -rf App/Auricle.xcodeproj && tuist generate --no-open && xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp -destination 'platform=macOS,arch=arm64' build` → must exit 0. This is the whole point of AR-INIT-1; if it fails, the project is carrying state that lives nowhere in version control.
-  - [ ] Confirm the generated project is untracked: `git ls-files --error-unmatch App/Auricle.xcodeproj` → must FAIL (non-zero exit)
-  - [ ] Spot-check one cross-target import that should fail: in `Sources/Capture/.gitkeep` add a temporary `Sources/Capture/_TestImport.swift` containing `import Transcribe`; run `swift build`; confirm SwiftPM rejects the build with a "no such module" error (per AR-INIT-1 + AR-PAT-10 build-time enforcement); then DELETE the test file. **DO NOT COMMIT this verification artifact** — its existence is what we're proving the manifest *forbids*.
+- [x] **Task 1: Initialize SwiftPM package** (AC: #1)
+  - [x] Run `swift package init --type library --name AuricleKit` at repo root (do NOT use `--type executable`; the manifest is the library; executables live in the Xcode project per AR-INIT-1)
+  - [x] Delete the auto-generated `Sources/AuricleKit/AuricleKit.swift` and `Tests/AuricleKitTests/AuricleKitTests.swift` placeholder files — they belong to no real target
+  - [x] Edit `Package.swift` per the manifest skeleton in **Dev Notes → Package.swift Skeleton** below
+  - [x] Set `swift-tools-version: 5.10` on line 1 (required for Swift Testing per Architecture §Testing Framework)
+  - [x] Set `platforms: [.macOS(.v14)]` (per AR-INIT-3 deployment target)
+- [x] **Task 2: Declare all 26 library targets in `Package.swift`** (AC: #1)
+  - [x] Declare 25 library targets per AR-INIT-5 in this order: cross-cutting first (`Core`, `State`, `Telemetry`, `Orchestrator`, `Permissions`), then capture (`Capture`), then interfaces (`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`), then stages (`Transcribe`, `Diarize`, `Attribute`, `Summarize`, `Persist`, `Verify`, `Notifications`, `ReviewDiarization`), then concrete strategies (`ClaudeSummarizer`, `ClaudeAIReviewers`, `WhisperKitTranscriber`, `WhisperKitDiarizer`, `GoogleCalendarSource`, `VaultGlossary`)
+  - [x] Declare the `TestSupport` library target (per AR-INIT-5 — test fixtures + composition root for tests, per Architecture §Test Organization)
+  - [x] For each target, create the source directory `Sources/<Target>/` even if empty (SwiftPM requires the directory to exist; empty directories are not committed by git unless a `.gitkeep` is added — see Task 5)
+  - [x] Wire dependency edges per **Dev Notes → Target Dependency Matrix** below — DO NOT add cross-edges that aren't listed (SwiftPM target boundaries are the architecture per AR-PAT-10 build-time enforcement)
+  - [x] Each library target sets `path: "Sources/<TargetName>"` explicitly (not strictly required since names match defaults, but explicit-is-better keeps grep findable)
+- [x] **Task 3: Declare 25 matching test targets in `Package.swift`** (AC: #1)
+  - [x] Declare `<Target>Tests` for every library target (25 total) — per AR-INIT-5 + Architecture §Test Organization "One test target per source target"
+  - [x] **EXCEPTION:** Interface-only targets (`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`, `AIReviewerInterface`, `CalendarInterface`) may have `<Target>Tests` declared with a comment: `// Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.` Still create the test target so the structure is uniform; later stories that ship the protocols add real tests.
+  - [x] Each test target depends on its corresponding source target + `TestSupport`
+  - [x] Each test target sets `path: "Tests/<TargetName>Tests"` explicitly
+  - [x] Each test target uses Swift Testing (no need to import XCTest at the manifest level; the framework is implicit in Swift 5.10+)
+- [x] **Task 4: Declare external SPM dependencies in `Package.swift`** (AC: #1)
+  - [x] WhisperKit: `https://github.com/argmaxinc/WhisperKit.git` — `from: "0.9.0"` (use latest stable at scaffold time; pin via `Package.resolved`)
+  - [x] GRDB.swift: `https://github.com/groue/GRDB.swift.git` — `from: "6.29.0"` (latest 6.x stable; do not jump to 7.x without architectural review of any breaking changes)
+  - [x] swift-argument-parser: `https://github.com/apple/swift-argument-parser.git` — `from: "1.5.0"`
+  - [x] TOMLKit: `https://github.com/LebJe/TOMLKit.git` — `from: "0.6.0"`
+  - [x] Sparkle: declare as a top-of-file comment: `// MARK: - Deferred to v1.1 (AR-INIT-2) — Sparkle: https://github.com/sparkle-project/Sparkle.git from: "2.6.0"`
+  - [x] Wire WhisperKit only into `WhisperKitTranscriber` and `WhisperKitDiarizer` targets
+  - [x] Wire GRDB.swift only into `State` and `Telemetry` targets (per Architecture §SQLite Layer "Depended on by the State target only" — Telemetry is the second authorized SQL writer per AR-PAT-4)
+  - [x] Wire swift-argument-parser into the `auricle-cli` Xcode target only (NOT into any SwiftPM library target; the CLI is the binding-contract surface per NFR-I7 and the parser is the executable-shell concern)
+  - [x] Wire TOMLKit only into `Core` (config loader lives in `Core/Config.swift` per Story 1.2)
+- [x] **Task 5: Create `Sources/<Target>/` and `Tests/<Target>Tests/` directories with `.gitkeep` placeholders** (AC: #1, #4)
+  - [x] For each of the 25 library targets: `mkdir -p Sources/<Target>` and add `Sources/<Target>/.gitkeep` (zero-byte file — git tracks empty directories only via at-least-one tracked file)
+  - [x] For `TestSupport`: `mkdir -p Sources/TestSupport` + `.gitkeep`
+  - [x] For each of the 26 test targets: `mkdir -p Tests/<Target>Tests` + `.gitkeep`
+  - [x] Verify `swift build` and `swift test` succeed against the empty package (this is AC1's "empty target compilation passes" gate — fail here means the manifest is wrong)
+- [x] **Task 6: Write `mise.toml`, `Tuist.swift`, and `Project.swift`** (AC: #2, #3)
+  - [x] `mise.toml` at repo root pinning exact versions of `tuist`, `swiftformat`, `swiftlint` (AR-INIT-6). Pin exact versions, not ranges — drift breaks NFR-M7's byte-identical-rebuild guarantee.
+  - [x] `Tuist.swift` at repo root: `let tuist = Tuist(project: .tuist(generationOptions: .options()))`
+  - [x] `Project.swift` at repo root: `packages: [.local(path: ".")]` — the root SwiftPM package
+  - [x] Declare target `AuricleApp`: `destinations: [.mac]`, `product: .app`, `bundleId: "com.auricle.app"`, `deploymentTargets: .macOS("14.0")`, `infoPlist: .file(path: "App/Auricle/Info.plist")`, `entitlements: .file(path: "App/Auricle/Auricle.entitlements")`, `sources: ["App/Auricle/**"]`, and one `.package(product:)` dependency per library it consumes (see **Dev Notes → Composition Root Dependency List** below)
+  - [x] Declare target `auricle-cli`: `destinations: [.mac]`, `product: .commandLineTool`, `sources: ["App/auricle-cli/**"]`, dependencies `.package(product:)` for swift-argument-parser plus every SwiftPM library product (CLI is the binding-contract surface; needs full library access per Architecture §Composition Roots)
+  - [x] Project-level `settings:` → `.settings(configurations: [.debug(name: .debug, xcconfig: "config/Debug.xcconfig"), .release(name: .release, xcconfig: "config/Release.xcconfig")], defaultSettings: .none)`
+  - [x] **`defaultSettings: .none` is load-bearing.** It stops Tuist injecting its own build settings, which would silently shadow the xcconfigs and make the plain-text files a lie.
+  - [x] Run `tuist generate --no-open`; confirm `App/Auricle.xcodeproj` appears
+  - [x] Confirm the generated project is ignored: `git status --porcelain` shows nothing under `App/` except the committed source directories
+- [x] **Task 7: Write `config/*.xcconfig` and `App/Auricle/Info.plist`** (AC: #2, #3)
+  - [x] `config/Shared.xcconfig`: `MACOSX_DEPLOYMENT_TARGET = 14.0`; `ARCHS = arm64`; `EXCLUDED_ARCHS = x86_64` (Apple Silicon only per Architecture §Technical Constraints "Apple Silicon only. M5 Max is reference hardware; M1 is the floor"); `ENABLE_HARDENED_RUNTIME = YES`; `PRODUCT_BUNDLE_IDENTIFIER = com.auricle.app`; `CODE_SIGN_ENTITLEMENTS = App/Auricle/Auricle.entitlements`; `SWIFT_VERSION = 5.10`
+  - [x] **Do NOT add `ENABLE_APP_SANDBOX` in any form.** The key must be absent, not set to `NO` — the sandbox conflicts with ScreenCaptureKit and vault writes per Architecture §Technical Constraints.
+  - [x] `config/Debug.xcconfig`: `#include "Shared.xcconfig"`; `CODE_SIGN_IDENTITY = -` (ad-hoc)
+  - [x] `config/Release.xcconfig`: `#include "Shared.xcconfig"`; `CODE_SIGN_IDENTITY = Auricle Code Signing`; `CODE_SIGN_STYLE = Manual`. That identity does not exist until Story 9.3 creates it, so Release will not sign yet — expected, and Epic 9's problem rather than this story's.
+  - [x] `App/Auricle/Info.plist` — hand-written XML, committed. Bundle identifier comes from `PRODUCT_BUNDLE_IDENTIFIER` via `$(PRODUCT_BUNDLE_IDENTIFIER)`; **DO NOT CHANGE** that value ever, per NFR-S2 (TCC permissions are keyed on bundle ID)
+  - [x] Set `LSUIElement = NO` (auricle is a normal app with a Dock icon and main window per UX-DR1, not a menu bar accessory; menu-bar item arrives in v1.1 per FR8)
+  - [x] Add `NSScreenCaptureUsageDescription` with verbatim string: `auricle records your meeting audio so it can transcribe what's said` (UX-DR44 — DO NOT paraphrase; user-voice copy is locked)
+  - [x] Add `NSMicrophoneUsageDescription` with verbatim string: `auricle captures your voice alongside the meeting so your contributions are in the notes`
+  - [x] Add `NSUserNotificationsUsageDescription` with verbatim string: `auricle pings you when a meeting is ready to review — usually just a click to confirm`
+  - [x] Add `CFBundleURLTypes` array with one entry: `CFBundleURLName = "com.auricle.app.url"`, `CFBundleURLSchemes = ["auricle"]` (per AR-INIT-3 + Architecture §Notification / URL Scheme Names — registers `auricle://` for notification-click handlers per AR-FAIL-5)
+  - [x] Verify both files parse: `plutil -lint App/Auricle/Info.plist`
+- [x] **Task 8: Write `App/Auricle/Auricle.entitlements`** (AC: #2)
+  - [x] Hand-written plist, committed at `App/Auricle/Auricle.entitlements`, containing `com.apple.security.device.audio-input` = `true`
+  - [x] Verify the entitlements file does NOT contain `com.apple.security.app-sandbox` (would break ScreenCaptureKit + vault writes)
+  - [x] `UNUserNotificationCenter` requires no entitlement key on macOS — authorization is requested at runtime and gated by `NSUserNotificationsUsageDescription`. Record that in a comment in `AuricleApp.swift` so the next reader does not go looking for a key that does not exist.
+  - [x] Verify it parses: `plutil -lint App/Auricle/Auricle.entitlements`
+- [x] **Task 9: Write minimal stub `@main` for AuricleApp + minimal swift-argument-parser scaffold for auricle-cli** (AC: #2)
+  - [x] `App/Auricle/AuricleApp.swift`: declare `@main struct AuricleApp: App { var body: some Scene { WindowGroup { Text("auricle") } } }` — NOTHING ELSE. No `Orchestrator` instantiation, no view models, no concrete strategies. The composition root per AR-PAT-5 is implemented incrementally as later stories ship.
+  - [x] `App/auricle-cli/main.swift`: declare `import ArgumentParser` + `@main struct AuricleCLI: AsyncParsableCommand { static let configuration = CommandConfiguration(commandName: "auricle", abstract: "Personal meeting notes pipeline") }` — NO subcommands yet. Story 1.7 ships the CLI scaffold with `status` + hidden `__internal-stage` per AR-PIPE-7.
+- [x] **Task 10: Write `.gitignore`** (AC: #4)
+  - [x] Add `.build/` (SwiftPM build output)
+  - [x] Add `.swiftpm/` (SwiftPM local cache + xcode-generated package files)
+  - [x] Add `DerivedData/` (Xcode build output)
+  - [x] Add `App/Auricle.xcodeproj/` — the generated Xcode project. Never committed; regenerate with `tuist generate` (AR-INIT-1). CI fails the build if it is tracked (Story 1.8).
+  - [x] Add `.tuist/` and `Derived/` (Tuist local cache and derived artifacts)
+  - [x] Add `xcuserdata/` (Xcode per-user state — `*.xcodeproj/xcuserdata/` and `*.xcworkspace/xcuserdata/`)
+  - [x] **DO NOT** add `Package.resolved` to `.gitignore` — it's committed for reproducible builds (NFR-M7). Add a comment in `.gitignore`: `# Package.resolved IS committed (reproducible builds per NFR-M7)`
+  - [x] Add `.DS_Store` (cosmetic; macOS junk)
+  - [x] Add `*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is NOT excluded — Xcode's auto-managed lockfile mirror is fine to commit alongside the SwiftPM root `Package.resolved`
+- [x] **Task 11: Verify the complete build chain works end-to-end** (AC: #1, #2, #4)
+  - [x] From repo root: `swift build` → must exit 0
+  - [x] From repo root: `swift test` → must exit 0 (no tests run, but no compile errors)
+  - [x] From repo root: `tuist generate --no-open` → must exit 0
+  - [x] From repo root: `xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp -destination 'platform=macOS,arch=arm64' build` → must exit 0
+  - [x] From repo root: `xcodebuild -project App/Auricle.xcodeproj -scheme auricle-cli -destination 'platform=macOS,arch=arm64' build` → must exit 0
+  - [x] Prove the project is reproducible from the manifest alone: `rm -rf App/Auricle.xcodeproj && tuist generate --no-open && xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp -destination 'platform=macOS,arch=arm64' build` → must exit 0. This is the whole point of AR-INIT-1; if it fails, the project is carrying state that lives nowhere in version control.
+  - [x] Confirm the generated project is untracked: `git ls-files --error-unmatch App/Auricle.xcodeproj` → must FAIL (non-zero exit)
+  - [x] Spot-check one cross-target import that should fail: in `Sources/Capture/.gitkeep` add a temporary `Sources/Capture/_TestImport.swift` containing `import Transcribe`; run `swift build`; confirm SwiftPM rejects the build with a "no such module" error (per AR-INIT-1 + AR-PAT-10 build-time enforcement); then DELETE the test file. **DO NOT COMMIT this verification artifact** — its existence is what we're proving the manifest *forbids*.
 
 ## Dev Notes
 
@@ -411,16 +412,192 @@ The directory layout produced by this story is the canonical layout for the enti
 
 ### Agent Model Used
 
-(to be filled by dev agent)
+Claude Sonnet 5 (claude-sonnet-5), via Claude Code
 
 ### Debug Log References
 
-(to be filled by dev agent)
+- Task 0 spike: `tuist generate --no-open` + `xcodebuild build` for a minimal
+  `App/` project consuming a parent-directory SwiftPM package — passed after
+  adding `import ProjectDescription` to `Tuist.swift` (see deviation below).
+- `swift build` / `swift test` full-package runs — see Completion Notes for the
+  empty-target findings that drove `ManifestPlaceholder.swift` and the one
+  `CoreTests` smoke test.
+- `xcodebuild -scheme AuricleApp build` and `-scheme auricle-cli build` —
+  both green; `auricle-cli` failed once on `'main' attribute cannot be used in
+  a module that contains top-level code` until `main.swift` was renamed to
+  `AuricleCLI.swift`.
+- Reproducibility proof: `rm -rf App/Auricle.xcodeproj && tuist generate
+  --no-open && xcodebuild -scheme AuricleApp build` — exit 0.
+- `git ls-files --error-unmatch App/Auricle.xcodeproj` — exit 1 (untracked), as
+  required.
+- Cross-import spot check: `import Transcribe` added to `Sources/Capture/`,
+  built with `swift build --explicit-target-dependency-import-check error` →
+  `error: Target Capture imports another target (Transcribe) in the package
+  without declaring it a dependency.` Plain `swift build` (no flag) does
+  **not** reject this import — see Completion Notes.
+- `codesign -dv` and `codesign -d --entitlements -` on the built
+  `AuricleApp.app` — `Identifier=com.auricle.app`, hardened runtime flag set,
+  `com.apple.security.device.audio-input` present, no sandbox entitlement.
+- `plutil -lint` on `Info.plist` and `Auricle.entitlements` — both OK.
 
 ### Completion Notes List
 
-(to be filled by dev agent)
+All four ACs and all eleven tasks are implemented and independently verified
+by running the actual commands (not just constructing files). Five points
+where the installed toolchain (Xcode 26.4.1 / Swift 6.3.1 / Tuist 4.208.0)
+diverged from what the story's literal text assumed, each resolved and worth
+carrying into later stories:
+
+1. **`Tuist.swift` needs `import ProjectDescription`.** The one-line skeleton
+   in Task 6 (`let tuist = Tuist(project: .tuist(...))`) does not compile
+   without the import; added it.
+
+2. **`Project.swift` lives in `App/`, not at the repo root, and a
+   `Workspace.swift` is required.** Task 6 says "Project.swift at repo root,"
+   but Tuist places the generated `.xcodeproj` in the same directory as the
+   `Project.swift` that declares it (confirmed via the Task 0 spike and by
+   direct experiment). Repo-root `Project.swift` would have produced
+   `Auricle.xcodeproj` at the repo root, not `App/Auricle.xcodeproj`, which
+   AC2 and Task 11 both require verbatim. Placed `Project.swift` at
+   `App/Project.swift` (paths inside it are App/-relative:
+   `Auricle/Info.plist`, `Auricle/Auricle.entitlements`, `Auricle/**`,
+   `auricle-cli/**`, `../config/Debug.xcconfig`) and added a `Workspace.swift`
+   at the repo root (`projects: ["App"]`) — without it, `tuist generate` run
+   from the repo root silently ignores `App/Project.swift` and instead
+   auto-generates a preview project for the raw `Package.swift` (this is also
+   why `AuricleKit.xcodeproj` and `Auricle.xcworkspace` appear at the repo
+   root as side effects; both are gitignored via the new `*.xcodeproj/` /
+   `*.xcworkspace/` rules).
+
+3. **A target that's the target of a `.library` product cannot have zero
+   source files on this toolchain.** AC1 asks for "no source files in any
+   target (empty target compilation passes)," but `swift build` hard-errors
+   with `target 'X' referenced in product 'X' is empty` for every one of the
+   25 library products with nothing but a `.gitkeep` in its directory (a
+   target that is *only* a dependency, never a product, tolerates this fine —
+   it's specifically the product-target combination current SwiftPM rejects).
+   Added `Sources/<Target>/ManifestPlaceholder.swift` — a comment-only file,
+   zero lines of code — to all 26 source targets (25 + TestSupport) stating
+   the constraint. The `.gitkeep` files created alongside it in Task 5 were
+   removed once the placeholder existed: git only needs one tracked file to
+   keep a directory, and `ManifestPlaceholder.swift` already is that file (see
+   the removal note near the end of this section).
+
+4. **`swift test` needs at least one real test in the whole package, or it
+   hard-fails with "no tests found."** AC1's "empty test suites pass" holds
+   for 24 of the 25 test targets (each compiles as a genuinely empty
+   `.gitkeep`-only directory and contributes 0 tests, 0 failures). The 25th,
+   `CoreTests`, carries one intentionally trivial `@Test` — the minimum
+   needed so the package-wide test runner doesn't itself fail with "no tests
+   found." Documented in a comment on that test rather than left unexplained.
+
+5. **Plain `swift build` does not enforce SwiftPM module boundaries by
+   default.** This is the one deviation I'd flag as a real risk rather than a
+   cosmetic toolchain gap: AR-INIT-1 / AR-PAT-10 rest on "the build system
+   rejects any accidental import," and Task 11's spot-check assumes a bare
+   `swift build` proves it. Empirically, a `Sources/Capture/` file with
+   `import Transcribe` (never declared as a `Capture` dependency) builds
+   clean with plain `swift build`. The rejection only happens with
+   `swift build --explicit-target-dependency-import-check error` (confirmed:
+   `error: Target Capture imports another target (Transcribe) in the package
+   without declaring it a dependency.`). I ran the spot-check with that flag
+   and then deleted the test file per the task's instructions, so the manifest
+   itself is unaffected — but nothing in this story's file set makes the
+   check happen automatically. **Story 1.8 (lint/CI) should bake
+   `--explicit-target-dependency-import-check error` into whatever `swift
+   build` invocation CI runs**, or the module-boundary enforcement this whole
+   scaffolding exists for is opt-in and silent by default.
+
+Two minor, purely mechanical fixes beyond the deviations above:
+- `App/auricle-cli/main.swift` → renamed to `App/auricle-cli/AuricleCLI.swift`
+  — Swift disallows `@main` in a file named `main.swift` ("cannot be used in a
+  module that contains top-level code"); this is a compiler rule, not a
+  design choice. The file's content is otherwise exactly what Task 9 asked
+  for.
+- `CODE_SIGN_ENTITLEMENTS` in `config/Shared.xcconfig` is
+  `Auricle/Auricle.entitlements` (App/-relative, i.e. relative to
+  `App/Auricle.xcodeproj`'s `SRCROOT`), not `App/Auricle/Auricle.entitlements`
+  as literally written in Task 7 — same repo-root-vs-App/-root reasoning as
+  point 2. Verified by inspecting the codesigned binary's embedded
+  entitlements, which come back correct.
+
+`swift build` / `swift test` emit 24 warnings of the form `Source files for
+target XTests should be located under 'Tests/XTests'…` — one per test target
+that has nothing but `Tests/<Target>Tests/.gitkeep` in it (every test target
+except `CoreTests`). This is SwiftPM's generic "this target looks empty"
+warning, triggered because `.gitkeep` is a dotfile and doesn't count as a
+source file; it is expected and benign until each target's own story adds
+real tests, not a regression to chase.
+
+`.xcode-version` at the repo root pins Xcode 26.4.1 (bundling Swift 6.3.1),
+the toolchain this story was built and verified against — `mise.toml` pins
+tuist/swiftformat/swiftlint but nothing previously pinned Xcode/Swift itself,
+which NFR-M7's byte-identical-rebuild guarantee also depends on. mise.toml
+otherwise pins the latest available exact versions at scaffold time:
+tuist 4.208.0, swiftformat 0.63.0, swiftlint 0.65.1. `tuist install` was run
+once to resolve Tuist's own package cache (cleared an "outdated dependencies"
+warning); this is routine and not itself a deviation.
+
+`Sources/<Target>/.gitkeep` was removed from all 26 library targets — once
+`ManifestPlaceholder.swift` exists there, `.gitkeep` is redundant (git only
+needs one tracked file to keep a directory). `Tests/<Target>Tests/.gitkeep`
+is left alone: those directories are still genuinely empty (see the warning
+note above).
+
+Nothing in Sources/ or Tests/ beyond `ManifestPlaceholder.swift`, the 25
+`Tests/<Target>Tests/.gitkeep` files, and the one `CoreTests` smoke test
+contains real code — scope for Stories 1.2–1.7 is untouched.
 
 ### File List
 
-(to be filled by dev agent)
+**Root manifests:** `Package.swift`, `Package.resolved`, `Tuist.swift`,
+`Workspace.swift`, `mise.toml`, `.xcode-version`, `.gitignore` (extended,
+pre-existing Python-oriented file)
+
+**Xcode/Tuist half:** `App/Project.swift`, `App/Auricle/Info.plist`,
+`App/Auricle/Auricle.entitlements`, `App/Auricle/AuricleApp.swift`,
+`App/auricle-cli/AuricleCLI.swift`, `config/Shared.xcconfig`,
+`config/Debug.xcconfig`, `config/Release.xcconfig`
+
+**SwiftPM targets:** `Sources/<Target>/ManifestPlaceholder.swift` for all 26
+library targets (no `.gitkeep` — the placeholder file itself keeps the
+directory tracked):
+(`Core`, `State`, `Telemetry`, `Orchestrator`, `Permissions`, `Capture`,
+`TranscriberInterface`, `DiarizerInterface`, `SummarizerInterface`,
+`AIReviewerInterface`, `CalendarInterface`, `Transcribe`, `Diarize`,
+`Attribute`, `Summarize`, `ReviewDiarization`, `Persist`, `Verify`,
+`Notifications`, `ClaudeSummarizer`, `ClaudeAIReviewers`,
+`WhisperKitTranscriber`, `WhisperKitDiarizer`, `GoogleCalendarSource`,
+`VaultGlossary`, `TestSupport`)
+
+**SwiftPM test targets:** `Tests/<Target>Tests/.gitkeep` for all 25 test
+targets; `Tests/CoreTests/PackageScaffoldingTests.swift` additionally (the one
+real test — see Completion Notes point 4)
+
+**Placeholders:** `scripts/.gitkeep`, `assets/.gitkeep`
+
+**Planning artifacts (status tracking only):**
+`_bmad-output/implementation-artifacts/1-1-project-initialization-xcode-swiftpm-hybrid.md`
+(this file — Status field + this section),
+`_bmad-output/implementation-artifacts/sprint-status.yaml` (story status)
+
+Nothing was committed — all of the above are working-tree changes, per
+standing instructions not to commit without being asked.
+
+## Review Triage Log
+
+| # | Finding | Verdict | Route | Evidence |
+|---|---------|---------|-------|----------|
+| 1 | `Package.swift` header comment claims unconditional cross-edge rejection (Blind Hunter + Verification Gap) | medium | patch | Verified: plain `swift build` does not reject an undeclared cross-target import (confirmed via the Debug Log's own `import Transcribe` regression in `Capture`); only `--explicit-target-dependency-import-check error` does. The header comment (lines 3-4) states enforcement unconditionally. |
+| 2 | `swift build`/`swift test` emit 24 unaddressed "should be located under..." warnings (Blind Hunter) | low | patch | Verified by independently running `swift build` and `swift test`: one warning per empty test target (24 of 25, all but `CoreTests`), undocumented in Completion Notes. |
+| 3 | `Package.swift` target/product declaration order diverges from Task 2's literal stage order (Blind Hunter) | low | patch | Verified: `ReviewDiarization` sits after `Summarize` instead of after `Notifications`; products array interleaves stages and concrete strategies. Task 2 is checked `[x]` despite the literal order not matching. |
+| 4 | Story status vocabulary (`in-review`) and sprint-status.yaml vocabulary (`review`) name the same state differently (Blind Hunter + Edge Case Hunter) | low | defer | Verified: each value is correct per its own file's documented enum, but the two files describing the same story state now disagree. Pre-existing mismatch between two BMAD tracking conventions, not introduced by this story's code. |
+| 5 | `NSUserNotificationsUsageDescription`'s effect on the runtime permission prompt is asserted as settled fact but not independently confirmed (Blind Hunter) | maybe-false (medium if true) | defer | Could not verify Apple's current documented behavior for this key without a live device/doc check. If the key does not gate the prompt text as claimed, UX-DR44's locked copy silently never displays — real but not build/test-breaking. Settled by: requesting notification authorization on a macOS 14 build and confirming the shown description text. |
+| 6 | Dead `.gitignore` rules (`*.xcodeproj/xcuserdata/`, `*.xcworkspace/xcuserdata/`) fully superseded by broader rules added later in the same file (Blind Hunter) | low | patch | Verified by reading the `.gitignore` diff: the broader `*.xcodeproj/` / `*.xcworkspace/` rules already exclude everything the narrower `xcuserdata/` rules match. |
+| 7 | No pin on the Xcode/Swift toolchain version itself, though `mise.toml`'s own stated rationale is NFR-M7 byte-identical rebuilds (Blind Hunter) | medium | patch | Verified: `mise.toml` pins tuist/swiftformat/swiftlint only; the Xcode/Swift version (26.4.1/6.3.1) used and verified exists only as Debug Log prose, unpinned in any repo file. |
+| 8 | Redundant `.gitkeep` alongside `ManifestPlaceholder.swift` in all 26 `Sources/<Target>/` directories (Blind Hunter) | low | patch | Verified: `ManifestPlaceholder.swift` alone makes git track the directory; `.gitkeep` there is inert. The stated rationale ("kept for when the placeholder is eventually deleted") doesn't hold since real source files will make `.gitkeep` equally redundant at that point too. |
+| 9 | File List entries `scripts/.gitkeep`, `assets/.gitkeep` have no matching Task bullet (Blind Hunter) | false | reject | AC4 explicitly requires both placeholder directories ("scripts/ (empty placeholder...)", "assets/ (empty placeholder...)") — the requirement traces to the Acceptance Criteria, just not restated in a Task bullet. |
+| 10 | "Two documented exceptions" phrasing in Completion Notes could be read as two files instead of two categories spanning 27 files (Blind Hunter) | false | reject | The sentence and its surrounding context (which names both categories, `ManifestPlaceholder.swift` and the `CoreTests` smoke test) reads as two *categories*, and the full File List enumerates every actual file elsewhere in the same section — no reader is materially misled. |
+| 11 | `AuricleApp.swift` has no `.onOpenURL` handler for the newly-registered `auricle://` scheme (Edge Case Hunter) | false | reject | Task 8 is explicit: the app shell is "NOTHING ELSE. No Orchestrator instantiation, no view models, no concrete strategies... implemented incrementally as later stories ship." URL-scheme click handling is explicitly Epic 8's scope (Notifier/NotificationDelegate), not this scaffolding-only story's. |
+| 12 | `ManifestPlaceholder.swift` / `CoreTests` sentinel test flagged as load-bearing claims (Edge Case Hunter) | false | reject | Not a defect — the reviewer's own "claim" entries confirm these files are correctly necessary, which Completion Notes points 3-4 already document in full. |
+| 13 | `Auricle.entitlements` lacks a distinct "notification entitlements" key alongside `com.apple.security.device.audio-input` (Edge Case Hunter) | false | reject | Task 8 is explicit that macOS has no entitlement key for `UNUserNotificationCenter` — authorization is runtime-requested and gated by `NSUserNotificationsUsageDescription` alone. `AuricleApp.swift`'s new comment documents this exact point. AC2's summary wording is loose but the implementation matches the more specific Task guidance. |
