@@ -1489,7 +1489,7 @@ The Citations-vs-substring choice is not deferred to "dogfood guesswork" — the
 - **If Citations matches or beats substring on every transcript:** Citations is locked as MVP default.
 - **If substring catches anything Citations missed (any false-drop, any recall miss) on any transcript in the smoke-test set:** default flips to substring; revisit before dogfood begins. The trust-poison cost of a single missed commitment in dogfood vastly exceeds the cost of running with a slightly-less-capable validator that doesn't drop real items.
 
-**Outcome documentation:** smoke-test results are recorded in a build log (`tests/fixtures/smoke-test-results.md` or similar) — captures which transcripts were used, the metric scores, and the rationale for the default-validator choice. Future maintainers (or future maintainers) can re-run the smoke-test set when Anthropic ships new Citations behavior or when prompt design evolves.
+**Outcome documentation:** smoke-test results are recorded in a build log (`tests/fixtures/smoke-test-results.md` or similar) — captures which transcripts were used, the metric scores, and the rationale for the default-validator choice. Future maintainers can re-run the smoke-test set when Anthropic ships new Citations behavior or when prompt design evolves.
 
 #### Decision 3.7: J1.5 trust-calibration surface (Mary's hidden requirement)
 

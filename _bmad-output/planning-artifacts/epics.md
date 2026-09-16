@@ -1613,7 +1613,7 @@ So that the default-validator choice is made empirically against real captured m
 **And** smoke-test results are recorded at `tests/fixtures/smoke-test-results.md`: which transcripts were used, the metric scores per transcript, and the rationale for the default-validator choice
 **And** **both strategy implementations ship at MVP regardless of outcome** — substring is required for FR33's v1.1+ local-LLM path (per Decision 3.6)
 
-**Given** the future maintainer (or a future maintainer)
+**Given** a future maintainer
 **When** Anthropic ships new Citations behavior or prompt design evolves
 **Then** the smoke-test set can be re-run via the same script with the same fixtures; the outcome documentation pattern allows comparing across runs
 
