@@ -1,63 +1,114 @@
-# The full gate chain in one job, one clean checkout, no artifact caching
-# (Story 1.8's own AC line — a cache could mask a determinism or
-# tuist-generate-cleanliness regression that a from-scratch run would catch).
-# A later story's CI gate extends this job rather than adding a new
-# workflow file.
+# The gate chain, split across three jobs that run in parallel. Each one calls
+# a phase of scripts/check.sh — the same script `make check` runs locally, so
+# the two cannot drift apart. A later story's CI gate extends a job here
+# rather than adding a new workflow file.
 name: CI
 
 on:
   pull_request:
+  # A cache entry written by a PR run is scoped to that PR's own ref and is
+  # unreachable from every other branch; only a run on the default branch
+  # writes one that PRs can restore. Without this trigger every PR would
+  # resolve the package graph from cold, which is what the caching below
+  # exists to avoid.
+  push:
+    branches: [main]
 
-# A fixup push to an open PR should replace the in-flight run for that PR,
-# not queue a second full macOS job behind it.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A fixup push to an open PR should replace that PR's in-flight run. A push
+  # to main must not be cancelled: an interrupted run saves no cache, and main
+  # is the only thing that populates the cache PRs restore from.
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  build-test-lint:
-    runs-on: macos-latest
-    timeout-minutes: 30
-    # mise resolves tool versions against the GitHub releases API; without a
-    # token it shares the runner IP's 60/req-hr unauthenticated limit, which
-    # this job's own `mise install` step is enough to exhaust on its own.
-    # The default GITHUB_TOKEN raises that to 5,000/hr and needs no extra
-    # permissions beyond what `permissions: contents: read` already grants.
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  lint:
+    # Pinned rather than macos-latest: .xcode-version pins Xcode 26.4.1, and a
+    # runner image that has moved on no longer carries it. The pairing has to
+    # be updated deliberately, not discovered through a red build.
+    runs-on: macos-26
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Read pinned Xcode version
-        id: xcode_version
-        run: echo "version=$(cat .xcode-version)" >> "$GITHUB_OUTPUT"
-
-      - name: Select Xcode ${{ steps.xcode_version.outputs.version }}
-        uses: maxim-lobanov/setup-xcode@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          xcode-version: ${{ steps.xcode_version.outputs.version }}
+          persist-credentials: false
 
-      - name: Install mise
-        run: curl https://mise.run | sh
+      # Workspace-relative, not GitHub's newer $/ self-repository form: the
+      # pinned actionlint rejects $/ as malformed, and nothing between the
+      # checkout and this step can write to .github/actions/, which is the
+      # tampering the self-repository form exists to prevent.
+      - uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
 
-      - name: Add mise to PATH
-        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: scripts/check.sh lint
 
-      # scripts/check.sh is the single source of truth for the gate chain —
-      # `make check` runs the identical script locally. Two copies of this
-      # sequence (one here, one for local use) would drift the moment
-      # either changed without the other; one script run from both places
-      # structurally can't.
-      - name: Run the full check (scripts/check.sh — the same script `make check` runs locally)
-        run: scripts/check.sh
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: toolchain
+        uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
+
+      # SwiftPM's shared fetch cache, and nothing else. It holds the bare
+      # mirrors every resolve would otherwise clone from GitHub, which is the
+      # part that costs ~45s; rebuilding .build/checkouts from these mirrors
+      # is local and takes about ten seconds, so caching those too would add
+      # ~580MB to restore for almost no gain. No build product is cached, so
+      # a stale object file can never outlive the source it came from, and
+      # the path is outside the working tree, so neither git-hygiene check in
+      # the app job can be weakened by a restore. Package.resolved is the
+      # exact input that decides the contents; the Xcode version is in the
+      # key because the toolchain owns the layout.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-
+
+      - run: scripts/check.sh swift
+
+      # The release build catches optimizer-level breakage only, which does not
+      # need to gate every fixup push to an open PR. main is the backstop, and
+      # it is also the run whose cache every PR starts from.
+      - if: github.event_name == 'push'
+        run: scripts/check.sh release
+
+  app:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: toolchain
+        uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
+
+      # Xcode and Tuist read the same shared fetch cache SwiftPM writes, so
+      # this is the same entry the swift job uses, under the same key —
+      # whichever job finishes first saves it and the other logs that it
+      # already exists. This is what keeps `tuist generate`'s package
+      # resolution off the network.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-
+
+      - run: scripts/check.sh app
 
       # AR-INIT-4: a committed generated project is a regression — Tuist
-      # regenerates App/Auricle.xcodeproj (plus the repo-root workspace and
-      # the AuricleKit.xcodeproj SwiftPM preview) from Project.swift on
-      # every clone; none of the three is ever hand-committed.
+      # regenerates App/Auricle.xcodeproj (plus the workspace beside it and
+      # the AuricleKit.xcodeproj SwiftPM preview) from Project.swift on every
+      # clone; none of the three is ever hand-committed.
       - name: Fail if a generated Xcode project/workspace is tracked by git
         run: |
           tracked=$(git ls-files | grep -E '\.(xcodeproj|xcworkspace)(/|$)' || true)
@@ -67,11 +118,11 @@ jobs:
             exit 1
           fi
 
-      # The manifest (Project.swift) and the working tree must agree: any
-      # diff here means `tuist generate` produced something .gitignore
-      # doesn't already account for. CI-only (not in scripts/check.sh): this
-      # assumes a clean checkout, true here and never true of a real local
-      # working tree mid-change.
+      # The manifest (Project.swift) and the working tree must agree: any diff
+      # here means `tuist generate` produced something .gitignore doesn't
+      # already account for. CI-only (not in scripts/check.sh): this assumes a
+      # clean checkout, true here and never true of a real local working tree
+      # mid-change.
       - name: Fail if tuist generate left a dirty working tree
         run: |
           dirty=$(git status --porcelain)
