@@ -149,6 +149,13 @@ custom_rules:
       # above — the fixture writes the raw state directly, VaultWriter
       # under test never does.
       - ".*/Tests/PersistTests/VaultWriterTests\\.swift$"
+      # Writes throwaway `promptDir` override files (valid and
+      # invalid-UTF-8) to set up fixture state for
+      # SummarizationPromptBuilder's file-resolution tests. The builder
+      # only ever reads a `promptDir`, never writes one, so this sits
+      # outside AtomicWriter's domain the same way VaultWriterTests.swift's
+      # fixture setup does.
+      - ".*/Tests/SummarizeTests/PromptBuilderSnapshotTests\\.swift$"
       # Plants a pre-existing "original" vault note and a summary.json
       # fixture directly on disk to exercise PersistStage's re-publish and
       # summary-decode paths — same rationale as VaultWriterTests.swift

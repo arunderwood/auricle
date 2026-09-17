@@ -80,7 +80,12 @@ let package = Package(
         .target(name: "Transcribe", dependencies: ["Core", "State", "Telemetry", "TranscriberInterface", "DiarizerInterface"], path: "Sources/Transcribe"),
         .target(name: "Diarize", dependencies: ["Core", "State", "Telemetry", "DiarizerInterface"], path: "Sources/Diarize"),
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
-        .target(name: "Summarize", dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"], path: "Sources/Summarize"),
+        .target(
+            name: "Summarize",
+            dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"],
+            path: "Sources/Summarize",
+            resources: [.copy("Prompts")],
+        ),
         .target(
             name: "Persist",
             dependencies: ["Core", "State", "Telemetry", "Orchestrator", .product(name: "Yams", package: "Yams")],
@@ -135,7 +140,12 @@ let package = Package(
         .testTarget(name: "TranscribeTests", dependencies: ["Transcribe", "TestSupport"], path: "Tests/TranscribeTests"),
         .testTarget(name: "DiarizeTests", dependencies: ["Diarize", "TestSupport"], path: "Tests/DiarizeTests"),
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
-        .testTarget(name: "SummarizeTests", dependencies: ["Summarize", "TestSupport"], path: "Tests/SummarizeTests"),
+        .testTarget(
+            name: "SummarizeTests",
+            dependencies: ["Summarize", "TestSupport"],
+            path: "Tests/SummarizeTests",
+            resources: [.copy("Snapshots")],
+        ),
         .testTarget(name: "ClaudeSummarizerTests", dependencies: ["ClaudeSummarizer", "TestSupport"], path: "Tests/ClaudeSummarizerTests"),
         .testTarget(name: "ClaudeAIReviewersTests", dependencies: ["ClaudeAIReviewers", "TestSupport"], path: "Tests/ClaudeAIReviewersTests"),
         .testTarget(name: "ReviewDiarizationTests", dependencies: ["ReviewDiarization", "TestSupport"], path: "Tests/ReviewDiarizationTests"),
