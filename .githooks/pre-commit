@@ -8,11 +8,26 @@
 # look here unless told to. One-time setup: git config core.hooksPath .githooks
 set -eu
 
+# Not dirname "$0" the way scripts/check.sh does it: core.hooksPath is one
+# absolute path shared by every worktree, so it names the wrong tree.
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "==> swiftformat --lint"
-mise exec -- swiftformat --lint .
+echo "==> linting $repo_root"
 
+# swiftformat applies every .swiftformat between its input and /, and worktrees
+# sit under .claude/worktrees/ inside the main checkout — unpinned, a worktree
+# inherits the main checkout's copy. The file is tracked; older revisions lack it.
+if [ -f "$repo_root/.swiftformat" ]; then
+    set -- --config "$repo_root/.swiftformat"
+else
+    set --
+fi
+
+echo "==> swiftformat --lint"
+mise exec -- swiftformat --lint "$@" .
+
+# No --config counterpart: swiftlint reads .swiftlint.yml from the working
+# directory only, and a path here would re-root every excluded: entry in it.
 echo "==> swiftlint"
 mise exec -- swiftlint lint --strict .
