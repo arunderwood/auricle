@@ -1,0 +1,5 @@
+{"run": "observed-1", "model": "claude-opus-5", "note": "original run", "A": {"blocks": 1, "items": 4, "real_citations": 0, "correct": 0, "of": 4}, "B": {"blocks": 9, "items": 4, "real_citations": 4, "correct": 4, "of": 4}}
+{"run": "observed-2", "model": "claude-opus-5", "note": "last run of the overwriting loop; runs 1-2 of that loop unrecoverable", "A": {"blocks": 1, "items": 4, "real_citations": 0, "correct": 0, "of": 4}, "B": {"blocks": 9, "items": 4, "real_citations": 4, "correct": 4, "of": 4}}
+{"run": "20260917T061325Z", "model": "claude-opus-5", "A": {"blocks": 1, "items": 4, "real_citations": 0, "correct": 0, "of": 4}, "B": {"blocks": 9, "items": 4, "real_citations": 4, "correct": 4, "of": 4}}
+{"run": "20260917T061335Z", "model": "claude-opus-5", "A": {"blocks": 1, "items": 4, "real_citations": 0, "correct": 0, "of": 4}, "B": {"blocks": 9, "items": 4, "real_citations": 4, "correct": 4, "of": 4}}
+{"run": "20260917T061344Z", "model": "claude-opus-5", "A": {"blocks": 1, "items": 4, "real_citations": 0, "correct": 0, "of": 4}, "B": {"blocks": 9, "items": 4, "real_citations": 4, "correct": 4, "of": 4}}

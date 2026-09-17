@@ -1,0 +1,36 @@
+{
+  "verdict": "assistant_surface_complete",
+  "assistant_surface_tool_use": [
+    {
+      "id": "toolu_01916vFegYem2R1TrPGDYhBR",
+      "name": "Grep",
+      "input": {
+        "pattern": "beacon",
+        "glob": "*.md",
+        "output_mode": "content",
+        "-i": true
+      }
+    },
+    {
+      "id": "toolu_016wVdtmiD3JytrUpuvcrx7Y",
+      "name": "Read",
+      "input": {
+        "file_path": "<scratchpad>/vault-fixture/projects/meshcore.md"
+      }
+    }
+  ],
+  "stream_content_block_start": [
+    {
+      "index": 1,
+      "name": "Grep",
+      "input": {}
+    },
+    {
+      "index": 0,
+      "name": "Read",
+      "input": {}
+    }
+  ],
+  "input_json_delta_fragment_count": 42,
+  "input_json_delta_reassembled": "{\"pattern\": \"beacon\", \"glob\": \"*.md\", \"output_mode\": \"content\", \"-i\": true}{\"file_path\": \"<scratchpad>/vault-fixture/projects/meshcore.md\"}"
+}

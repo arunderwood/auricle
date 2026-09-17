@@ -1,0 +1,236 @@
+{
+  "arm_a": {
+    "label": "ARM A — JSON by instruction + citations (the shipping shape)",
+    "ok": true,
+    "item_count": 4,
+    "citation_count": 0,
+    "block_count": 1,
+    "rows": [
+      {
+        "nonce": "4413",
+        "expected": 0,
+        "holder_block": 0,
+        "cited_source_block": null,
+        "model_asserted": null,
+        "verdict": "NO CITATION on the block holding this item"
+      },
+      {
+        "nonce": "7250",
+        "expected": 1,
+        "holder_block": 0,
+        "cited_source_block": null,
+        "model_asserted": null,
+        "verdict": "NO CITATION on the block holding this item"
+      },
+      {
+        "nonce": "1902",
+        "expected": 2,
+        "holder_block": 0,
+        "cited_source_block": null,
+        "model_asserted": null,
+        "verdict": "NO CITATION on the block holding this item"
+      },
+      {
+        "nonce": "6688",
+        "expected": 3,
+        "holder_block": 0,
+        "cited_source_block": null,
+        "model_asserted": null,
+        "verdict": "NO CITATION on the block holding this item"
+      }
+    ],
+    "blocks": [
+      {
+        "start": 0,
+        "end": 953,
+        "text": "{\"items\": [{\"text\": \"Ticket 4413, the antenna order, will be placed on Friday.\", \"assignee\": \"Speaker_1\", \"citation\": \"<citation index=\\\"1-1\\\">ticket 4413 is the antenna order, and I'll place it Friday</citation>\"}, {\"text\": \"Ticket 7250, the repeater siting survey, will be completed by the 9th.\", \"assignee\": \"Speaker_2\", \"citation\": \"<citation index=\\\"1-2\\\">I'm taking ticket 7250, the repeater siting survey, and I'll have it done by the 9th</citation>\"}, {\"text\": \"Ticket 1902 is dropped entirely and will not be picked up by anyone.\", \"assignee\": null, \"citation\": \"<citation index=\\\"1-3\\\">We also agreed ticket 1902 gets dropped entirely. Nobody is picking that up.</citation>\"}, {\"text\": \"Ticket 6688, the firmware migration, will be owned and reported back on at the next standup.\", \"assignee\": \"Speaker_3\", \"citation\": \"<citation index=\\\"1-4\\\">I'll own ticket 6688 — the firmware migration — and report back at the next standup.</citation>\"}]}",
+        "citations": []
+      }
+    ],
+    "json": {
+      "items": [
+        {
+          "text": "Ticket 4413, the antenna order, will be placed on Friday.",
+          "assignee": "Speaker_1",
+          "citation": "<citation index=\"1-1\">ticket 4413 is the antenna order, and I'll place it Friday</citation>"
+        },
+        {
+          "text": "Ticket 7250, the repeater siting survey, will be completed by the 9th.",
+          "assignee": "Speaker_2",
+          "citation": "<citation index=\"1-2\">I'm taking ticket 7250, the repeater siting survey, and I'll have it done by the 9th</citation>"
+        },
+        {
+          "text": "Ticket 1902 is dropped entirely and will not be picked up by anyone.",
+          "assignee": null,
+          "citation": "<citation index=\"1-3\">We also agreed ticket 1902 gets dropped entirely. Nobody is picking that up.</citation>"
+        },
+        {
+          "text": "Ticket 6688, the firmware migration, will be owned and reported back on at the next standup.",
+          "assignee": "Speaker_3",
+          "citation": "<citation index=\"1-4\">I'll own ticket 6688 — the firmware migration — and report back at the next standup.</citation>"
+        }
+      ]
+    }
+  },
+  "arm_b": {
+    "label": "ARM B — same, plus model-asserted source_block_index",
+    "ok": true,
+    "item_count": 4,
+    "citation_count": 4,
+    "block_count": 9,
+    "rows": [
+      {
+        "nonce": "4413",
+        "expected": 0,
+        "holder_block": 1,
+        "cited_source_block": 0,
+        "model_asserted": 0,
+        "verdict": "CORRECT"
+      },
+      {
+        "nonce": "7250",
+        "expected": 1,
+        "holder_block": 3,
+        "cited_source_block": 1,
+        "model_asserted": 1,
+        "verdict": "CORRECT"
+      },
+      {
+        "nonce": "1902",
+        "expected": 2,
+        "holder_block": 5,
+        "cited_source_block": 2,
+        "model_asserted": 2,
+        "verdict": "CORRECT"
+      },
+      {
+        "nonce": "6688",
+        "expected": 3,
+        "holder_block": 7,
+        "cited_source_block": 3,
+        "model_asserted": 3,
+        "verdict": "CORRECT"
+      }
+    ],
+    "blocks": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "{\"items\": [{\"text\": ",
+        "citations": []
+      },
+      {
+        "start": 20,
+        "end": 87,
+        "text": "\"Speaker_1 will place the antenna order for ticket 4413 on Friday.\"",
+        "citations": [
+          {
+            "cited_text": "<Speaker_1>: Morning. Before anything else — ticket 4413 is the antenna order, and I'll place it Friday.",
+            "document_index": 0,
+            "document_title": "Standup transcript",
+            "end_block_index": 1,
+            "file_id": null,
+            "start_block_index": 0,
+            "type": "content_block_location"
+          }
+        ]
+      },
+      {
+        "start": 87,
+        "end": 149,
+        "text": ", \"assignee\": \"Speaker_1\", \"source_block_index\": 0}, {\"text\": ",
+        "citations": []
+      },
+      {
+        "start": 149,
+        "end": 245,
+        "text": "\"Speaker_2 is taking ticket 7250, the repeater siting survey, and will have it done by the 9th.\"",
+        "citations": [
+          {
+            "cited_text": "<Speaker_2>: Fine. I'm taking ticket 7250, the repeater siting survey, and I'll have it done by the 9th.",
+            "document_index": 0,
+            "document_title": "Standup transcript",
+            "end_block_index": 2,
+            "file_id": null,
+            "start_block_index": 1,
+            "type": "content_block_location"
+          }
+        ]
+      },
+      {
+        "start": 245,
+        "end": 307,
+        "text": ", \"assignee\": \"Speaker_2\", \"source_block_index\": 1}, {\"text\": ",
+        "citations": []
+      },
+      {
+        "start": 307,
+        "end": 387,
+        "text": "\"The team decided ticket 1902 gets dropped entirely, with nobody picking it up.\"",
+        "citations": [
+          {
+            "cited_text": "<Speaker_1>: We also agreed ticket 1902 gets dropped entirely. Nobody is picking that up.",
+            "document_index": 0,
+            "document_title": "Standup transcript",
+            "end_block_index": 3,
+            "file_id": null,
+            "start_block_index": 2,
+            "type": "content_block_location"
+          }
+        ]
+      },
+      {
+        "start": 387,
+        "end": 442,
+        "text": ", \"assignee\": null, \"source_block_index\": 2}, {\"text\": ",
+        "citations": []
+      },
+      {
+        "start": 442,
+        "end": 536,
+        "text": "\"Speaker_3 will own ticket 6688, the firmware migration, and report back at the next standup.\"",
+        "citations": [
+          {
+            "cited_text": "<Speaker_3>: I'll own ticket 6688 — the firmware migration — and report back at the next standup.",
+            "document_index": 0,
+            "document_title": "Standup transcript",
+            "end_block_index": 4,
+            "file_id": null,
+            "start_block_index": 3,
+            "type": "content_block_location"
+          }
+        ]
+      },
+      {
+        "start": 536,
+        "end": 589,
+        "text": ", \"assignee\": \"Speaker_3\", \"source_block_index\": 3}]}",
+        "citations": []
+      }
+    ],
+    "json": {
+      "items": [
+        {
+          "text": "Speaker_1 will place the antenna order for ticket 4413 on Friday.",
+          "assignee": "Speaker_1",
+          "source_block_index": 0
+        },
+        {
+          "text": "Speaker_2 is taking ticket 7250, the repeater siting survey, and will have it done by the 9th.",
+          "assignee": "Speaker_2",
+          "source_block_index": 1
+        },
+        {
+          "text": "The team decided ticket 1902 gets dropped entirely, with nobody picking it up.",
+          "assignee": null,
+          "source_block_index": 2
+        },
+        {
+          "text": "Speaker_3 will own ticket 6688, the firmware migration, and report back at the next standup.",
+          "assignee": "Speaker_3",
+          "source_block_index": 3
+        }
+      ]
+    }
+  }
+}

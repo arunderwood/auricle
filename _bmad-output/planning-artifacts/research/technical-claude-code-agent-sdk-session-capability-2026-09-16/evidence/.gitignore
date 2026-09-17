@@ -1,0 +1,5 @@
+# Per-run probe output. A replication loop writes one of these per run; the
+# rolling summary in citation_item_association_runs.jsonl is what the findings
+# cite, and one full example is kept alongside it. Committing every run adds
+# hundreds of lines that differ only in the model's phrasing.
+citation_item_association_2*Z.json
