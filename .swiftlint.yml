@@ -3,6 +3,23 @@
 # codebase's own established, already-reviewed style, plus the 6 custom_rules
 # below for the checks that have no built-in equivalent (AR-PAT-4 helper
 # discipline + UX-DR65's accessibilityLabel check).
+#
+# The custom_rules are plain text/regex matches over tokens — SwiftLint's
+# standard mechanism, with no import resolution, type-checking, or semantic
+# understanding of what a call actually refers to. They catch a call written
+# the way this file expects it to be written; they do not catch a
+# semantically identical bypass spelled differently (a type alias standing
+# in for a vendor type, SQL assembled via string interpolation instead of a
+# single literal, a wrapper function around a banned call). Treat a clean
+# `swiftlint lint` as a cheap first-pass tripwire, not a proof of compliance
+# — architecture.md's own Enforcement Guidelines already pair this layer
+# with a human code-review checklist for exactly what regex can't catch. A
+# rule going quietly blind against a real call shape it was meant to guard
+# (as `log_facade_bypass` did until it was widened to also match
+# `Logger(subsystem:` — the API `Log.swift` itself is actually built on,
+# not just the legacy `os_log(` free function) is the standing risk this
+# whole mechanism carries; re-derive each rule's fixture in the CI
+# self-check step below whenever the real call shape it targets changes.
 
 excluded:
   - .build
@@ -102,10 +119,16 @@ custom_rules:
     name: "Log facade bypass"
     message: >-
       Use a `Log` instance (log.debug/info/warn/error) instead of calling
-      os_log directly. `Log` is the sole logging entry point (AR-PAT-3,
-      AR-PAT-4) and forces every runtime field through `LogSensitivity`
-      tagging — a direct os_log call has no equivalent guard.
-    regex: '\bos_log\('
+      os_log or constructing an os.Logger directly. `Log` is the sole
+      logging entry point (AR-PAT-3, AR-PAT-4) and forces every runtime
+      field through `LogSensitivity` tagging — neither a direct os_log call
+      nor a direct os.Logger(subsystem:category:) has an equivalent guard.
+    # `os_log(` (the legacy free function) is legacy and unused anywhere in
+    # this tree today — `Log.swift` itself is built on the modern
+    # `Logger(subsystem:category:)` struct API, which the original version
+    # of this rule didn't match at all, leaving the facade's own real
+    # bypass vector completely unguarded.
+    regex: '\bos_log\(|\bLogger\(subsystem:'
     match_kinds:
       - identifier
       - keyword

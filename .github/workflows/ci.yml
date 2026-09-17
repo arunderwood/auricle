@@ -71,13 +71,18 @@ jobs:
           fixture_dir=$(mktemp -d)
           cat > "$fixture_dir/CustomRuleFixtures.swift" <<'SWIFT'
           import Foundation
+          import os
 
           func atomicWriterBypassFixture() {
               _ = FileManager.default.createFile(atPath: "x", contents: nil)
           }
 
+          // Exercises the os.Logger(subsystem:category:) bypass, not just
+          // the legacy os_log( free function — Log.swift itself is built
+          // on Logger, so this is the pattern that actually matters.
           func logFacadeBypassFixture() {
-              os_log("test")
+              let logger = Logger(subsystem: "com.auricle.app", category: "probe")
+              logger.info("test")
           }
 
           func transcriptDecodeBypassFixture() {
