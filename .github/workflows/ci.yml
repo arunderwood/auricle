@@ -21,6 +21,13 @@ jobs:
   build-test-lint:
     runs-on: macos-latest
     timeout-minutes: 30
+    # mise resolves tool versions against the GitHub releases API; without a
+    # token it shares the runner IP's 60/req-hr unauthenticated limit, which
+    # this job's own `mise install` step is enough to exhaust on its own.
+    # The default GITHUB_TOKEN raises that to 5,000/hr and needs no extra
+    # permissions beyond what `permissions: contents: read` already grants.
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
