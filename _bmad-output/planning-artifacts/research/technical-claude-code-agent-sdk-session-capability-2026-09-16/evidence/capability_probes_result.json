@@ -1,0 +1,26 @@
+{
+  "cli_version": "2.1.220 (Claude Code)",
+  "e3_schema_limits": {
+    "minLength (documented unsupported)": {
+      "verdict": "ENFORCED (value respects minLength)",
+      "structured_output": {
+        "code": "x                                       "
+      },
+      "error": null,
+      "stderr": ""
+    },
+    "recursive $ref (documented unsupported)": {
+      "verdict": "ACCEPTED (recursive schema produced output)",
+      "structured_output": {
+        "node": {
+          "name": "root",
+          "child": {
+            "name": "leaf"
+          }
+        }
+      },
+      "error": null,
+      "stderr": ""
+    }
+  }
+}
