@@ -46,6 +46,18 @@ public enum VaultWriter {
         return targetURL
     }
 
+    /// Writes `markdown` to an already-resolved, already-validated exact
+    /// target: no `vaultPath`/`meetingsSubdir` validation, no collision
+    /// detection. For a caller that has already picked the exact file it
+    /// wants written — e.g. `PersistStage`'s own rerun-filename construction
+    /// (Decision 2.4: rerun-suffix generation is a different axis than
+    /// `FilenameResolver`'s ordinal and belongs to the persist stage, not
+    /// here) — so persist never reaches past `VaultWriter` to call
+    /// `AtomicWriter` directly.
+    public static func writeExact(_ markdown: String, to url: URL) throws {
+        try AtomicWriter.write(Data(markdown.utf8), to: url)
+    }
+
     // MARK: - vaultPath validation
 
     /// "Exists as a directory" is the actual requirement — a `vaultPath`

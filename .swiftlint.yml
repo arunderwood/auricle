@@ -94,6 +94,17 @@ file_length:
   warning: 500
   error: 1000
 
+# `PersistStage.run(meetingID:isRepublish:cacheDirectory:vaultPath:
+# meetingsSubdir:stateStore:stageRunner:)` (Sources/Persist/PersistStage.swift)
+# is a stage entry point's own specified public signature — 7 caller-resolved
+# inputs, none of them naturally groupable without inventing a parameter
+# object callers would have to assemble just to call it. Raised past exactly
+# that need, with headroom to 9 before erroring, rather than disabled, so a
+# genuinely over-parameterized function still trips it.
+function_parameter_count:
+  warning: 7
+  error: 9
+
 # swiftformat's own trailing-comma default (this repo's .swiftformat) adds
 # trailing commas wherever Swift 6.3 allows them; this must agree; both
 # tools disagreeing on trailing commas would fight every commit.
@@ -138,6 +149,11 @@ custom_rules:
       # above — the fixture writes the raw state directly, VaultWriter
       # under test never does.
       - ".*/Tests/PersistTests/VaultWriterTests\\.swift$"
+      # Plants a pre-existing "original" vault note and a summary.json
+      # fixture directly on disk to exercise PersistStage's re-publish and
+      # summary-decode paths — same rationale as VaultWriterTests.swift
+      # above.
+      - ".*/Tests/PersistTests/PersistStageTests\\.swift$"
 
   log_facade_bypass:
     name: "Log facade bypass"
