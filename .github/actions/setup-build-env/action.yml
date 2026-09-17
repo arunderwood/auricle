@@ -1,0 +1,30 @@
+name: Set up build environment
+description: Selects the Xcode pinned in .xcode-version and installs the mise-managed toolchain.
+
+outputs:
+  xcode-version:
+    description: The Xcode version selected, as read from .xcode-version.
+    value: ${{ steps.xcode.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned Xcode version
+      id: xcode
+      shell: bash
+      run: echo "version=$(cat .xcode-version)" >> "$GITHUB_OUTPUT"
+
+    - name: Select Xcode ${{ steps.xcode.outputs.version }}
+      uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+      with:
+        xcode-version: ${{ steps.xcode.outputs.version }}
+
+    # mise resolves tool versions against the GitHub releases API; without a
+    # token it shares the runner IP's 60/req-hr unauthenticated limit, which a
+    # single `mise install` is enough to exhaust on its own. The default token
+    # raises that to 5,000/hr and needs no permission beyond contents: read.
+    - name: Install the mise toolchain
+      uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      with:
+        version: 2026.9.10
+        github_token: ${{ github.token }}

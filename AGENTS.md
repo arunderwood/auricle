@@ -17,11 +17,12 @@ Local-first macOS meeting notetaker: capture → transcribe → diarize → attr
 
 ## Running and verifying
 
-- `make check` (or `scripts/check.sh`) runs the full gate chain exactly as `ci.yml` does — swiftformat, swiftlint, the custom-lint-rule fixture self-check, `swift build`/`swift test` with `--explicit-target-dependency-import-check error`, a release build, and both Xcode schemes. Run it before pushing — it's the same script CI invokes, not a parallel copy that can drift.
+- `make check` (or `scripts/check.sh`) runs the full gate chain exactly as `ci.yml` does — swiftformat, swiftlint, the custom-lint-rule fixture self-check, actionlint, zizmor, `swift build`/`swift test` with `--explicit-target-dependency-import-check error`, a release build, and both Xcode schemes. Run it before pushing — it's the same script CI invokes, not a parallel copy that can drift.
+- CI runs that chain as three parallel jobs, each calling one phase: `scripts/check.sh lint`, `swift`, and `app` (plus `release`, which runs only on pushes to main). `make check-lint` / `check-swift` / `check-app` / `check-release` reproduce a single job locally when you only need one.
 - One-time setup: `git config core.hooksPath .githooks` enables a fast pre-commit hook (`swiftformat --lint` + `swiftlint` only, ~1s) — off by default, since `.git/hooks/` isn't tracked and git won't look in `.githooks/` unless told to. The full check deliberately stays out of the hook — slow enough to invite `--no-verify`.
 - SwiftPM library alone, while iterating: `swift build && swift test`.
-- Xcode/CLI side alone, not covered by `swift test`: `cd App && tuist generate --no-open`, then `xcodebuild -project Auricle.xcodeproj -scheme auricle-cli build` (or `-scheme AuricleApp`).
-- Toolchain is pinned: Xcode 26.4.1 (`.xcode-version`), Tuist/swiftformat/swiftlint via `mise.toml` — run `mise install` before first build.
+- Xcode/CLI side alone, not covered by `swift test`: `cd App && tuist generate --no-open`, then `xcodebuild -workspace App/Auricle.xcworkspace -scheme auricle-cli build` (or `-scheme AuricleApp`) from the repo root. Build the workspace, not the bare `.xcodeproj` — `tuist generate` resolves the package graph into the workspace's derived data, and the project resolves to a different path, which makes xcodebuild re-resolve all eleven packages.
+- Toolchain is pinned: Xcode 26.4.1 (`.xcode-version`), Tuist/swiftformat/swiftlint/actionlint/zizmor via `mise.toml` — run `mise install` before first build. CI installs the same `mise.toml`, and every GitHub Action it uses is pinned to a full commit SHA (zizmor enforces this).
 
 ## Conventions that differ from defaults
 
