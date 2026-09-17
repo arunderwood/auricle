@@ -1,9 +1,13 @@
 <!-- bmad:context -->
-<!-- Verified 2026-09-16 against bc6c183. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-09-16 against 1221202. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## auricle
 
 Local-first macOS meeting notetaker: capture → transcribe → diarize → attribute → summarize → persist to an Obsidian vault. Hybrid SwiftPM library (`Sources/`) + Tuist-generated Xcode app (`App/`), Swift 6.3, GRDB-backed SQLite state. Planning docs (PRD, architecture, epics) live in `_bmad-output/planning-artifacts/`; per-story implementation specs live in `_bmad-output/implementation-artifacts/`; engineering notes in `docs/`.
+
+## Policy
+
+- Branch names are semantic — describe the change, never opaque (`fix1`, `wip`, `tmp`) and never the `claude/` auto-generated prefix — as `type/short-kebab-description` (`feat/`, `fix/`, `docs/`).
 
 ## Where things are
 
