@@ -763,7 +763,7 @@ CREATE TABLE telemetry (
     transcription_suggestions_rejected_count INTEGER,
     transcription_review_cost_usd REAL,
     transcription_review_model TEXT,
-    audio_retention_status_at_30d TEXT         -- backfilled by a periodic retention scheduler
+    audio_retention_status_at_snapshot TEXT         -- backfilled by a periodic retention scheduler
 );
 
 -- Trigger: maintain meetings.updated_at automatically (removes a class of bug)
@@ -819,7 +819,7 @@ END;
 | `telemetry.diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` subprocess (`DiarizationReviewerStrategy`) | UPSERT; written even when flag is off (count=0, cost=0, model=`'flag_off'`) for sparse-but-explicit telemetry |
 | `telemetry.diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | GUI `attribute` stage (Attribution sheet view model) | UPSERT; debounced incremental writes track user accept/reject actions during the sheet session |
 | `telemetry.transcription_suggestions_*` columns | (declared; no writer in MVP per Decision 5.5 Phase 3) | Slot reserved |
-| `telemetry.audio_retention_status_at_30d` | GUI retention scheduler | Backfilled at 30d mark |
+| `telemetry.audio_retention_status_at_snapshot` | GUI retention scheduler | Backfilled at 30d mark |
 
 Read access is unscoped — any process may read any table. The write-authority discipline is enforced via narrow Orchestrator entry points, not SQLite ACLs.
 
@@ -839,7 +839,7 @@ Read access is unscoped — any process may read any table. The write-authority 
 
 **Why no transcript / diarization / summary content in SQLite:** those are file-shaped artifacts living in the cache-dir per Decision 1.3. SQLite holds the pointer (`audio_cache_path` + the cache-dir convention), not the content.
 
-**Migration approach:** GRDB's `DatabaseMigrator` pattern — each migration is a Swift closure named by string ID, applied in order, never reordered or removed. Forward-only; no rollback support. New schema versions bump only when a table structure changes; data-only migrations (e.g., backfilling `telemetry.audio_retention_status_at_30d`) run as separate maintenance tasks, not as schema migrations.
+**Migration approach:** GRDB's `DatabaseMigrator` pattern — each migration is a Swift closure named by string ID, applied in order, never reordered or removed. Forward-only; no rollback support. New schema versions bump only when a table structure changes; data-only migrations (e.g., backfilling `telemetry.audio_retention_status_at_snapshot`) run as separate maintenance tasks, not as schema migrations.
 
 #### Decision 2.2: Frontmatter schema
 
@@ -1248,7 +1248,7 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 | `diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` stage (Decision Group 5) | Count of AI-emitted suggestions, Haiku cost (or `0` for local-LLM), model id (or `flag_off`/`local:<name>`) |
 | `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | `attribute` stage (Attribution sheet view model writes via UPSERT during sheet session) | Count of user-accepted/rejected AI suggestions; powers Mary's pre-committed kill criteria (Decision 5.7) and the trust-calibration footer (UX spec Step 10 Round-2) |
 | `transcription_suggestions_*` columns | (declared, no MVP writer per Decision 5.5 Phase 3) | Slot reserved for v1.x transcription reviewer |
-| `audio_retention_status_at_30d` | (v1.1) periodic background job | One of `deleted_after_grace` / `kept_explicit` / `unverified_held` |
+| `audio_retention_status_at_snapshot` | (v1.1) periodic background job | One of `deleted_after_grace` / `kept_explicit` / `unverified_held` |
 
 UPSERT pattern: `INSERT INTO telemetry(meeting_id, ...) VALUES (?, ...) ON CONFLICT(meeting_id) DO UPDATE SET ...`. SQLite + WAL handles cross-process UPSERT atomicity; verify GRDB busy-timeout setting handles the rare contention case (Decision 2.1 GRDB rules).
 

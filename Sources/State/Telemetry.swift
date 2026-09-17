@@ -1,5 +1,16 @@
 import GRDB
 
+/// The wedge-validation measurement window `audioRetentionStatusAtSnapshot`
+/// is backfilled at, in days after capture (architecture.md:1251). Kept as a
+/// named constant rather than baked into the column/property name, so a
+/// future change to the window is a one-line edit here instead of another
+/// migration to rename the column again. Independent of the user-configurable
+/// per-meeting retention grace window (FR50), which is a different setting
+/// entirely.
+public enum TelemetrySnapshotPolicy: Sendable {
+    public static let audioRetentionSnapshotDays = 30
+}
+
 /// GRDB record for `telemetry` (architecture.md Decision 2.1) — the
 /// per-meeting telemetry rollup, one row populated incrementally via UPSERT
 /// as different stages contribute different columns. Every wedge-validation
@@ -32,7 +43,7 @@ public struct Telemetry: Codable, Equatable, Sendable {
     public var transcriptionSuggestionsRejectedCount: Int?
     public var transcriptionReviewCostUSD: Double?
     public var transcriptionReviewModel: String?
-    public var audioRetentionStatusAt30d: String?
+    public var audioRetentionStatusAtSnapshot: String?
 
     enum CodingKeys: String, CodingKey {
         case meetingID = "meeting_id"
@@ -55,7 +66,7 @@ public struct Telemetry: Codable, Equatable, Sendable {
         case transcriptionSuggestionsRejectedCount = "transcription_suggestions_rejected_count"
         case transcriptionReviewCostUSD = "transcription_review_cost_usd"
         case transcriptionReviewModel = "transcription_review_model"
-        case audioRetentionStatusAt30d = "audio_retention_status_at_30d"
+        case audioRetentionStatusAtSnapshot = "audio_retention_status_at_snapshot"
     }
 
     public init(
@@ -79,7 +90,7 @@ public struct Telemetry: Codable, Equatable, Sendable {
         transcriptionSuggestionsRejectedCount: Int? = nil,
         transcriptionReviewCostUSD: Double? = nil,
         transcriptionReviewModel: String? = nil,
-        audioRetentionStatusAt30d: String? = nil,
+        audioRetentionStatusAtSnapshot: String? = nil,
     ) {
         self.meetingID = meetingID
         self.timeToAttributionReadySeconds = timeToAttributionReadySeconds
@@ -101,7 +112,7 @@ public struct Telemetry: Codable, Equatable, Sendable {
         self.transcriptionSuggestionsRejectedCount = transcriptionSuggestionsRejectedCount
         self.transcriptionReviewCostUSD = transcriptionReviewCostUSD
         self.transcriptionReviewModel = transcriptionReviewModel
-        self.audioRetentionStatusAt30d = audioRetentionStatusAt30d
+        self.audioRetentionStatusAtSnapshot = audioRetentionStatusAtSnapshot
     }
 }
 

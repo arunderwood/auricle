@@ -26,6 +26,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     #expect(appliedIdentifiers == [
         Migration001Initial.identifier,
         Migration002StageEventsMetadataSchemaVersion.identifier,
+        Migration003RenameAudioRetentionStatusColumn.identifier,
     ])
 }
 
@@ -67,6 +68,51 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         )
     }
     #expect(backfilledVersion == 1)
+}
+
+/// The second genuine schema-upgrade path: a database that already has
+/// migrations #1 and #2 applied, with a real `telemetry` row written under
+/// the original `audio_retention_status_at_30d` column name, upgraded in
+/// place by migration #3's rename. The value must survive the rename
+/// unchanged, readable under the new column name.
+@Test func migrationThreeRenamesAudioRetentionStatusColumnPreservingExistingData() throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let queue = try DatabasePoolFactory.makeQueue(path: path)
+    var migrationsOneAndTwoOnly = DatabaseMigrator()
+    migrationsOneAndTwoOnly.registerMigration(Migration001Initial.identifier, migrate: Migration001Initial.migrate)
+    migrationsOneAndTwoOnly.registerMigration(
+        Migration002StageEventsMetadataSchemaVersion.identifier,
+        migrate: Migration002StageEventsMetadataSchemaVersion.migrate,
+    )
+    try migrationsOneAndTwoOnly.migrate(queue)
+
+    try queue.write { db in
+        try db.execute(
+            sql: """
+            INSERT INTO meetings (id, state, created_at, updated_at)
+            VALUES ('01PREMIGRATION3MEETINGID0', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+            """,
+        )
+        try db.execute(
+            sql: "INSERT INTO telemetry (meeting_id, audio_retention_status_at_30d) VALUES ('01PREMIGRATION3MEETINGID0', 'kept_explicit')",
+        )
+    }
+
+    try MigrationRegistrar.migrator.migrate(queue)
+
+    let columns = try queue.read { db in try db.columns(in: "telemetry") }
+    #expect(columnInfo("audio_retention_status_at_30d", in: columns) == nil)
+    #expect(columnInfo("audio_retention_status_at_snapshot", in: columns) != nil)
+
+    let preservedValue = try queue.read { db in
+        try String.fetchOne(
+            db,
+            sql: "SELECT audio_retention_status_at_snapshot FROM telemetry WHERE meeting_id = '01PREMIGRATION3MEETINGID0'",
+        )
+    }
+    #expect(preservedValue == "kept_explicit")
 }
 
 @Test func journalModeIsWALForBothOpeners() throws {
@@ -291,7 +337,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         "transcription_suggestions_rejected_count",
         "transcription_review_cost_usd",
         "transcription_review_model",
-        "audio_retention_status_at_30d",
+        "audio_retention_status_at_snapshot",
     ]
     for expectedColumn in expectedColumns {
         #expect(columnInfo(expectedColumn, in: columns) != nil, "expected telemetry column \(expectedColumn) to exist")

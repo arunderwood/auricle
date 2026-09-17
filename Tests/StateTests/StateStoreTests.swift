@@ -124,7 +124,7 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
         transcriptionSuggestionsRejectedCount: nil,
         transcriptionReviewCostUSD: nil,
         transcriptionReviewModel: nil,
-        audioRetentionStatusAt30d: "retained",
+        audioRetentionStatusAtSnapshot: "retained",
     )
     try await store.insertTelemetry(telemetry)
 

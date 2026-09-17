@@ -12,6 +12,10 @@ enum MigrationRegistrar {
             Migration002StageEventsMetadataSchemaVersion.identifier,
             migrate: Migration002StageEventsMetadataSchemaVersion.migrate,
         )
+        migrator.registerMigration(
+            Migration003RenameAudioRetentionStatusColumn.identifier,
+            migrate: Migration003RenameAudioRetentionStatusColumn.migrate,
+        )
         return migrator
     }
 }
