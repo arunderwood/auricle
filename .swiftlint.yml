@@ -109,7 +109,11 @@ custom_rules:
       FR36, architecture.md's Atomic-Write Enforcement) — every artifact
       write must go through it so a crash mid-write can never leave a
       partially-written target file on disk.
-    regex: '\.write\(to:|FileManager\(\)\.createFile\(|FileManager\.(default\.)?createFile\('
+    # `to(File)?:` because Foundation spells the same write two ways —
+    # `write(to:)` takes a URL, `write(toFile:)` a path String — and only
+    # the URL spelling was matched, leaving the path spelling a silent way
+    # past the primitive.
+    regex: '\.write\(to(File)?:|FileManager\(\)\.createFile\(|FileManager\.(default\.)?createFile\('
     match_kinds:
       - identifier
       - keyword
