@@ -1,0 +1,42 @@
+[
+  {
+    "label": "A (precomposed / already NFC)",
+    "prefix_counts": {
+      "utf8_bytes": 69,
+      "utf16_units": 56,
+      "codepoints": 53,
+      "graphemes": 50
+    },
+    "citations": [
+      {
+        "cited_text": "The Auricle beacon transmits at exactly 1427 hertz. ",
+        "start_char_index": 53,
+        "end_char_index": 105,
+        "matching_units": [
+          "codepoints"
+        ],
+        "cited_text_verbatim_in_submitted_doc": true
+      }
+    ]
+  },
+  {
+    "label": "B (decomposed / NFD sequences)",
+    "prefix_counts": {
+      "utf8_bytes": 73,
+      "utf16_units": 60,
+      "codepoints": 57,
+      "graphemes": 50
+    },
+    "citations": [
+      {
+        "cited_text": "The Auricle beacon transmits at exactly 1427 hertz. ",
+        "start_char_index": 57,
+        "end_char_index": 109,
+        "matching_units": [
+          "codepoints"
+        ],
+        "cited_text_verbatim_in_submitted_doc": true
+      }
+    ]
+  }
+]

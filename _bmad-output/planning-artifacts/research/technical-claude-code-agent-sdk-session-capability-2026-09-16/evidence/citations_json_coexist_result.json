@@ -1,0 +1,85 @@
+{
+  "CONTROL": {
+    "label": "CONTROL — plain text + output_config.format (expected 400)",
+    "http_status": 400,
+    "error": "Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Citations cannot be enabled when output format is set. Please disable citations on uploaded document blocks.'}, 'request_id': 'req_011Cf8MAcd71aZ7ascF6haEZ'}",
+    "json_parsed": false,
+    "citation_count": 0,
+    "both_together": false
+  },
+  "A1": {
+    "label": "A1 — plain text + JSON by prompt instruction (DECISIVE)",
+    "http_status": 200,
+    "stop_reason": "end_turn",
+    "json_parsed": true,
+    "json": {
+      "frequency_hz": 1427,
+      "source_quote": "The Auricle beacon transmits at exactly 1427 hertz."
+    },
+    "citation_count": 1,
+    "citations": [
+      {
+        "cited_text": "The Auricle beacon transmits at exactly 1427 hertz. ",
+        "document_index": 0,
+        "document_title": "Beacon field log",
+        "end_char_index": 105,
+        "file_id": null,
+        "start_char_index": 53,
+        "type": "char_location"
+      }
+    ],
+    "citation_types": [
+      "char_location"
+    ],
+    "both_together": true
+  },
+  "A2": {
+    "label": "A2 — custom content + citations, no JSON",
+    "http_status": 200,
+    "stop_reason": "end_turn",
+    "json_parsed": false,
+    "json": null,
+    "citation_count": 1,
+    "citations": [
+      {
+        "cited_text": "<Speaker_2>: The Auricle beacon transmits at exactly 1427 hertz.",
+        "document_index": 0,
+        "document_title": "Beacon field log",
+        "end_block_index": 2,
+        "file_id": null,
+        "start_block_index": 1,
+        "type": "content_block_location"
+      }
+    ],
+    "citation_types": [
+      "content_block_location"
+    ],
+    "both_together": false
+  },
+  "A3": {
+    "label": "A3 — custom content + citations + JSON by instruction (shipping shape)",
+    "http_status": 200,
+    "stop_reason": "end_turn",
+    "json_parsed": true,
+    "json": {
+      "frequency_hz": 1427,
+      "source_quote": "The Auricle beacon transmits at exactly 1427 hertz."
+    },
+    "citation_count": 1,
+    "citations": [
+      {
+        "cited_text": "<Speaker_2>: The Auricle beacon transmits at exactly 1427 hertz.",
+        "document_index": 0,
+        "document_title": "Beacon field log",
+        "end_block_index": 2,
+        "file_id": null,
+        "start_block_index": 1,
+        "type": "content_block_location"
+      }
+    ],
+    "citation_types": [
+      "content_block_location"
+    ],
+    "both_together": true
+  }
+}

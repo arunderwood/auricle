@@ -533,8 +533,12 @@ as an **end-turn tool**, not as `output_config.format`, and the documented incom
 specific to `output_config.format`. The constraint is real at the layer where it is documented,
 and does not transfer to the layer above it.
 
-**This is a capability the direct-call path does not have.** Not a recommendation — a difference
-in what the two paths can express.
+~~**This is a capability the direct-call path does not have.**~~ **OVERTURNED BY [P9].** The
+direct path has it too, by a different route: the documented 400 fires on `output_config.format`
+specifically, and asking for JSON by prompt instruction alongside citations returns both, no
+error. What [P5] actually established is narrower than it was written — that the *documented
+parameter-level* incompatibility does not reach the session layer. It is not a capability gap
+between the two paths, because the direct path was never tested against the route that works.
 
 ### [P6] All three location types traverse a session
 
@@ -575,6 +579,315 @@ constrained decoder and a retry loop would both produce a conforming value. The 
 returned `error_max_turns` under `--max-turns 1` and succeeded at 5, which is consistent with
 retries but does not prove them. Recorded as an open mechanism, not a claim.
 
+### [P8] The direct Messages API agrees with the session, offset for offset
+
+`citation_offset_probe.py` — built during the [P2] work and left unrun for want of a
+credential — was run on 2026-09-16 against `claude-opus-5` on the **direct Messages API**,
+bypassing Claude Code entirely.
+
+| arm | prefix | codepoint prediction | observed `start_char_index` | sole matching unit | session result [P2] |
+|---|---|---|---|---|---|
+| A | precomposed (NFC) | 53 | **53** | `codepoints` | 53 |
+| B | decomposed (NFD) | 57 | **57** | `codepoints` | 57 |
+
+Identical on both arms. `cited_text_verbatim_in_submitted_doc` was true in both, and the
+codepoint slice reproduced the server's own `cited_text` exactly — the same self-validating
+test [P2] used.
+
+**What this adds beyond [P2].** [P2] could not distinguish API behavior from Claude Code
+harness behavior, because it only ever observed the API *through* the harness. [P8] observes
+it directly and gets the same answer, which moves the codepoint finding from "how the
+harness presents offsets" to "what the API returns." The finding is still undocumented and
+still carries a one-month staleness bar — a behavior with no published contract can change
+without a release note whichever path you reach it by — but it is now known to be a property
+of the API rather than of the tool in front of it.
+
+**What it does not address.** This probe measures the offset unit only. Whether citations
+and JSON can be obtained from one direct call — open question #11 — is untouched by it; see
+`citations_json_coexist_probe.py`, written for exactly that and unrun at time of writing.
+
+### [P9] Citations and JSON coexist on the direct API — and custom-content block indices traverse it
+
+`citations_json_coexist_probe.py`, four arms against `claude-opus-5` on the direct Messages
+API, 2026-09-16. Each arm passes only if **both** halves arrive in one response — parseable
+JSON *and* at least one citation carrying a location — so a 200 that silently dropped the
+citations counts as a failure.
+
+| Arm | Request | HTTP | JSON | Citation | Both? |
+|---|---|---|---|---|---|
+| CONTROL | plain text + `output_config.format` | **400** | — | — | no |
+| **A1** | plain text + **JSON by prompt instruction** | 200 | yes | `char_location` [53, 105) | **YES** |
+| A2 | custom content + citations, no JSON | 200 | n/a | `content_block_location` blocks [1, 2) | n/a |
+| A3 | custom content + citations + JSON by instruction | 200 | yes | `content_block_location` blocks [1, 2) | **YES** |
+
+**CONTROL anchors the rest.** The 400 fired with a message more specific than the published
+warning: *"Citations cannot be enabled when output format is set. Please disable citations on
+uploaded document blocks."* The documented incompatibility is live on this account and this
+model, so A1's 200 is a genuine difference between two routes to JSON — not an environment
+that happens to permit everything.
+
+**A1 is the load-bearing result.** The 400 is a property of the `output_config.format`
+parameter, not of citations-plus-JSON as a combination. Requesting the same JSON contract in
+the prompt returns both. A1's offsets — 53 and 105 — are the same ones [P2] and [P8] produced,
+so the citation machinery is unchanged by the way the JSON was asked for.
+
+**A2/A3 confirm block indices on the direct path.** [P6] observed `content_block_location`
+through a session; it traverses the direct API identically. `start_block_index: 1`,
+`end_block_index: 2` — zero-indexed, exclusive end, pointing at exactly the one utterance
+block that carried the target. No character offset is involved in the exchange at all.
+
+**One detail with downstream consequences.** In A3, the model's `source_quote` field read
+`"The Auricle beacon transmits at exactly 1427 hertz."` while the citation's `cited_text` read
+`"<Speaker_2>: The Auricle beacon transmits at exactly 1427 hertz."` — the model dropped the
+speaker prefix in the text it wrote, while the server's citation carried the whole block. A
+consumer that assumes the two agree byte-for-byte will be wrong. The server-constructed
+pointer and the model-asserted quote are different artifacts and only the first is
+authoritative about span.
+
+### [P10] Tool arguments DO reach the assistant message — and the cost breakdown rewrites the cost picture
+
+`tool_use_provenance_probe.py`, one `claude -p` run on CLI 2.1.220, 2026-09-16, subscription
+login (`ANTHROPIC_API_KEY` stripped from the child environment), in a synthetic four-file
+fixture with no `CLAUDE.md` and no `.claude/` directory. Prompt forced a Grep then a Read.
+Exit 0, `is_error: False`, `num_turns: 3`, 10.8 s.
+
+**Both surfaces checked, because [P1] taught that they can disagree.**
+
+| Surface | tool_use | Arguments |
+|---|---|---|
+| Reassembled `assistant` message | 2 blocks | **Complete.** `Grep {"pattern":"beacon","glob":"*.md","output_mode":"content","-i":true}`; `Read {"file_path":"<absolute path>"}` |
+| `stream_event` `content_block_start` | 2 blocks | opens `input: {}` — empty, as citations do |
+| `stream_event` `input_json_delta` | 42 fragments | reassembles to the same JSON |
+
+**The assistant-message surface is complete and correct for `tool_use`.** A host needs no
+`--include-partial-messages` plumbing to record what a session read. The `file_path` arrives
+fully qualified, and Grep arguments carry the pattern and glob as well — so the recoverable
+record is richer than "which files": it is what was searched for and where.
+
+**This sharpens [P4] rather than contradicting it.** The stream opens a `tool_use` block empty
+and fills it by delta, structurally identical to how citations arrive. The difference is what
+Claude Code's accumulator does next: it folds `input_json_delta` in correctly — it must, since
+the tool has to run — while `citations_delta` hits `case "citations_delta": break;`. Two delta
+types, the same shape, opposite handling. That is strong corroboration that the citations
+discard is a deliberate, specific choice and not a general weakness in the accumulator.
+
+#### The cost breakdown — and the model the session chose for itself
+
+`total_cost_usd: 1.747011` for this three-turn run. The decomposition is the finding:
+
+| Field | Value |
+|---|---|
+| `input_tokens` | **6** |
+| `cache_creation_input_tokens` | **84,376** — all `ephemeral_1h`, none `ephemeral_5m` |
+| `cache_read_input_tokens` | 41,881 |
+| `output_tokens` | 351 |
+| model | **`claude-fable-5`** — the session's own default; the host pinned nothing |
+
+At Fable 5's $10/$50 per MTok, with the documented 2x multiplier on a 1-hour cache write and
+0.1x on cache reads:
+
+```
+  84,376 x $10/1M x 2.0   = $1.68752   cache creation (1h TTL)
+  41,881 x $10/1M x 0.1   = $0.04188   cache reads
+     351 x $50/1M         = $0.01755   output
+       6 x $10/1M         = $0.00006   input
+                            ---------
+                            $1.74701   vs observed 1.747011
+```
+
+Exact to five decimals. Three things follow, and they do not all point the same way:
+
+1. **The session picks its own model unless told otherwise.** It ran `claude-fable-5`, priced
+   at 2x Opus 5 on both input and output. A host that cares which model runs — NFR-I6 makes the
+   model identifier configurable with `claude-opus-5` as the default — must pass `--model`
+   explicitly, or the requirement is violated silently and at double the token price. The same
+   tokens on Opus 5 come to roughly **$0.87**.
+2. **The bill is a cold cache, not generation.** 351 output tokens cost under two cents. 84,376
+   tokens of cache creation is 96.6% of the total. A second run inside the hour reads that
+   prefix at 0.1x instead of writing it at 2x, so the marginal cost of a warm run is a small
+   fraction of the cold one.
+3. **The session cached automatically, at the 1-hour TTL, with no host configuration** —
+   `ephemeral_1h_input_tokens: 84376`, consistent with the documented subscription default.
+   Decision 3.5's manual `cache_control` tiering exists to achieve what happened here for free.
+   The gap between the layers is control over *what* is cached and at what granularity, not
+   whether caching happens.
+
+**Scope.** One run, one fixture, one CLI version, no `CLAUDE.md` in the working directory. A
+run whose cwd holds a project `CLAUDE.md` and `settings.local.json` would load both and the
+84,376 would be larger. Under a subscription these figures are notional list price rather than
+money owed — see *What `total_cost_usd` means under a subscription* above — so they measure
+usage-allowance draw, not spend.
+
+### [P11] The same probe against a real vault, model pinned — and a privacy finding in the provenance record
+
+Re-run of `tool_use_provenance_probe.py` with `--model claude-opus-5`, `--tools Read,Grep,Glob`,
+and mutating tools denied outright, in a real Obsidian vault of a few hundred markdown files carrying
+its own `CLAUDE.md` and `.claude/settings.*`. Prompt: resolve a term mentioned in a
+meeting transcript by searching the vault. Exit 0, 5 turns, 23.4 s. **Raw stream held outside
+the repository; it contains vault content and home paths.**
+
+#### Cost, against the fixture run
+
+| | [P10] fixture | [P11] real vault |
+|---|---|---|
+| model | `claude-fable-5` (session default) | `claude-opus-5` (**pinned**) |
+| available tools | full built-in set | `--tools Read,Grep,Glob` |
+| corpus | 4 files, no `CLAUDE.md` | a few hundred files, vault `CLAUDE.md` + settings |
+| `cache_creation_input_tokens` | 84,376 | **41,885** |
+| `cache_read_input_tokens` | 41,881 | 28,636 |
+| `output_tokens` | 351 | 920 |
+| turns | 3 | 5 |
+| `total_cost_usd` | **1.747011** | **0.456198** |
+
+```
+  41,885 x $5/1M x 2.0  = $0.41885   cache creation (1h TTL)
+  28,636 x $5/1M x 0.1  = $0.01432   cache reads
+     920 x $25/1M       = $0.02300   output
+       6 x $5/1M        = $0.00003   input
+                          ---------
+                          $0.45620   vs observed 0.456198
+```
+
+Both runs reconcile to five decimals, which independently confirms Opus 5 at $5/$25, Fable 5 at
+$10/$50, the 2x one-hour cache-write multiplier, and 0.1x cache reads.
+
+**A 3.8x reduction while doing more work on a corpus roughly two orders of magnitude larger.** Two levers moved together:
+
+1. **Pinning the model** halves the price of every token (Opus 5 is half Fable 5 on both input
+   and output). This is a price effect, not a token effect.
+2. **Restricting the available tool set** appears to halve the cached context — 84,376 to
+   41,885 — most plausibly because `--tools` removes the definitions of the tools that are no
+   longer available from the prefix.
+
+**Confound, stated rather than glossed:** both levers moved in the same run, so the split
+between them is inferred, not measured. A price change cannot alter a token count, so the
+token halving must come from context rather than from the model — unless Opus 5 and Fable 5
+tokenize differently enough to account for 2x, which is implausible but untested. A clean A/B
+holding the model fixed and toggling `--tools` would settle it in one run, and is worth doing
+before anyone budgets on the 2x.
+
+**A restricted tool set is therefore a cost lever, not only a safety measure.** That was not
+anticipated: `--tools` was passed here to bound what the session could do, and it appears to
+have paid for itself twice.
+
+#### The provenance record carries third-party personal data
+
+[P10] established that tool arguments reach the host complete, and proposed that record as a
+better substitute for a pre-computed glossary. [P11] shows what is actually in it.
+
+Across four calls the model searched the term, globbed for filename variants, invented a
+disjunction of related spellings, **and then grepped for the names of three people it had
+discovered in the vault along the way** — a pattern of the literal form
+`"pattern": "<Name>|<Name>|<Name>"`.
+
+Those names are real people. None of them was a participant in the hypothetical meeting. They
+reached the tool-argument record because the model followed a reference in a note, which is
+precisely the behavior that makes vault-reading valuable.
+
+**The consequence is structural, not incidental.** Any host that records tool arguments as a
+provenance trail is building an artifact that can contain the personal data of third parties
+who are not participants in the thing being recorded. That artifact then inherits every
+handling obligation of the vault itself — retention, redaction, and any onward sharing —
+despite looking like operational telemetry. A design that files it under "telemetry" and
+retains it on a telemetry schedule has quietly widened the blast radius of the vault.
+
+Stated as a fact about the record's contents. What to do about it is a design decision this
+document does not make.
+
+#### Answer quality, recorded because the probe measured it incidentally
+
+The session returned a two-sentence answer identifying the term as specific firmware, naming
+the radio band, the prior system it replaced, the date of the migration, and an in-progress
+related project — all assembled from notes it located itself. A wikilink-enumeration glossary
+of the kind specified in FR55-57 would have supplied the term's spelling and nothing else.
+One observation on one term is not an evaluation, but it is the first direct evidence on the
+question, and it points the way the feature's advocates expected.
+
+#### Probe defect noted
+
+The probe's nonce check is fixture-specific and reports a spurious `WARNING: may not have
+read` on any run outside the fixture. The tool-call record is the real evidence of reading;
+the nonce line should be suppressed when `--prompt` is overridden.
+
+### [P12] Multi-item grounding: the block structure is ideal, and real citations are model-discretionary
+
+`citation_item_association_probe.py`, two arms against `claude-opus-5` on the direct Messages
+API, 2026-09-16. A four-utterance transcript, one commitment and one unique ticket nonce per
+utterance, submitted as a custom content document. Both arms request JSON by prompt instruction
+and say "cite the document"; they differ in **one variable** — arm B additionally asks each item
+to carry a `source_block_index` field.
+
+**Replicated 5x on 2026-09-16/17 with zero variance on every measured dimension** — rolling log
+at `evidence/citation_item_association_runs.jsonl`, one timestamped result file per run.
+
+| | Arm A | Arm B |
+|---|---|---|
+| response text blocks | **1** — all 5 runs | **9** — all 5 runs |
+| items returned | 4 | 4 |
+| **real citations** | **0** — all 5 runs | **4** — all 5 runs |
+| items correctly grounded | 0 (nothing to ground with) | **20 / 20** across the 5 runs |
+| model-asserted index vs server citation | n/a | agreed on every item, every run |
+
+The block counts are not merely stable, they are structurally determined: 9 = one leading
+scaffolding block + four repetitions of (cited `text` value, trailing scaffolding). The API's
+block splitting is a deterministic function of where citations attach, not a stochastic
+chunking.
+
+#### Arm A satisfied "cite the document" with prose
+
+The model invented a `citation` string field and filled it with markup:
+
+```json
+"citation": "<cite index=\"1-1\">ticket 4413 is the antenna order, and I'll place it Friday</cite>"
+```
+
+The response was well-formed, complete, correct on the facts, and **fully parseable** — with
+fabricated grounding. The citations mechanism never fired. Nothing in the payload marks this
+as ungrounded except the absence of citation objects, which a caller has to go looking for.
+
+#### Arm B's block structure is close to ideal for a consumer
+
+The API split the response at JSON value boundaries and attached exactly one citation to each
+item's `text` value:
+
+```
+block 0  cits=0   {"items": [{"text":
+block 1  cits=1   "Speaker_1 will place the antenna order for ticket 4413 on Friday."
+block 2  cits=0   , "assignee": "Speaker_1", "source_block_index": 0}, {"text":
+block 3  cits=1   "Speaker_2 is taking ticket 7250, the repeater siting survey, ..."
+...
+```
+
+**The cited block *is* the item's text field.** Associating citation to item by position is
+therefore near-exact rather than heuristic: find the response block holding an item's text, read
+its citation. All four resolved to the correct source utterance, and the model's own
+`source_block_index` agreed with the server citation on all four.
+
+#### What is established, and what is not
+
+**Established.** A model can satisfy an instruction to cite by emitting citation-shaped *text*
+instead of triggering the citations mechanism, producing a response that is indistinguishable
+from a grounded one without an explicit check for citation objects. That is a real failure mode
+regardless of what causes it.
+
+**Established on replication.** That asking for `source_block_index` is what makes real
+citations appear. The two arms differ in exactly that one variable and produced opposite,
+perfectly repeatable outcomes across five runs each — 0/5 runs with any citation on arm A,
+5/5 runs with complete and correct citations on arm B. Run-to-run variance is excluded: there
+was none, on any dimension.
+
+**The remaining limit is generalization, not repetition.** Five runs of the *same* fixture on
+the same model on the same day. Determinism on one four-utterance transcript does not establish
+that a different transcript — longer, with more items, with items spanning multiple utterances,
+or with an item the document does not actually support — behaves the same way. That is exactly
+what Story 3.8's smoke test is for: five real captured meetings, the rig whose comparison axis
+this pack's roundtable generalized. The probe is the throwaway; 3.8 is the instrument.
+
+**Relation to [P9].** [P9]'s arm A1 obtained a real citation from a prompt-instruction request —
+on a *single-item* document. [P12] arm A is the same prompt shape at four items and got none. So
+[P9] should not be read as establishing that the route reliably grounds; it established that the
+route *can*, which is a weaker claim than it appeared when the only test had one item.
+
 ### Scope of these measurements
 
 - One CLI version (2.1.220), one model (`claude-fable-5`), one day. All three document source
@@ -598,7 +911,7 @@ These are the things only the combination shows.
 
 > "This is because citations require interleaving citation blocks with text output, which is incompatible with the strict JSON schema constraints of structured outputs."
 
-**Measured correction [P5]: this constraint does not reach the session layer.** A session given a citations-enabled document and `--json-schema` returned both, no 400. The documented incompatibility is specific to `output_config.format`; a session uses an end-turn tool instead. So the constraint is real where it is documented and simply absent one layer up — which inverts what it implies for the two paths. The documentation is also stated in exactly one direction: the warning appears only on the citations page. An explicit search of the structured-outputs page for any mention of citations, document blocks, or `search_result` blocks found none [6]. A team reading only the structured-outputs page would not learn it.
+**Measured correction [P5]: this constraint does not reach the session layer.** A session given a citations-enabled document and `--json-schema` returned both, no 400. The documented incompatibility is specific to `output_config.format`; a session uses an end-turn tool instead. So the constraint is real where it is documented and simply absent one layer up. **[P9] then removed the asymmetry this seemed to imply:** the direct Messages API also returns citations and JSON together when the JSON is requested by prompt instruction rather than by `output_config.format`. The constraint is a property of one parameter, not of a layer — and the CONTROL arm's own error text says so: *"Citations cannot be enabled when output format is set."* The documentation is also stated in exactly one direction: the warning appears only on the citations page. An explicit search of the structured-outputs page for any mention of citations, document blocks, or `search_result` blocks found none [6]. A team reading only the structured-outputs page would not learn it.
 
 **Scope note, stated carefully.** The documented 400 is specific to `output_config.format` (or deprecated `output_format`) combined with citations. It does **not** say that asking for JSON *by prompt instruction* alongside citations fails — that is a different mechanism and the docs are silent on it. Separately, the session's `outputFormat` is implemented as an end-turn tool rather than as `output_config.format` [4], so whether a session hits this same 400 is **not determined by the quoted statement**. Both of those were open questions; **both are now measured** — [P5] for the session's `outputFormat`, and the prompt-instruction variant remains untested and undocumented.
 
@@ -620,7 +933,7 @@ Factual mapping only. No recommendation is offered or implied.
 | architecture.md:1356-1362 — `ClaudeCitationsSummarizer` built on `CitationCharLocation` offsets | Citations reaching the host, with known offset semantics | **Measured available [P1]** — but only off `citations_delta` stream events; the assistant-message surface returns `citations: []`. Offset semantics **measured as codepoints [P2]**. Both are observations, not documented contracts. |
 | architecture.md:1417-1426 — canonicalization invariant, UTF-8 byte offsets into NFC-normalized text | A documented offset contract to verify against | No contract is published. **Measured behavior differs from the invariant on both axes [P2]:** codepoints, not UTF-8 bytes; text as submitted, not NFC-normalized. The invariant's own translation-step escape hatch anticipated this. |
 | architecture.md:1430-1441 (Decision 3.5) — `cache_control` tiering across system prompt / glossary / attendee context | Per-block breakpoint placement | Messages API: available, 4 breakpoints, documents cacheable. Session: CONFIRMED UNAVAILABLE — zero `cache_control` occurrences, no `systemPrompt` shape accepting blocks. TTL-bucket control only. |
-| architecture.md:1356-1362 — structured JSON items each carrying a citations array | Schema-constrained output and citations together | **Measured available through a session [P5]; returns 400 on the direct Messages API [5].** The two paths differ on exactly this combination. |
+| architecture.md:1356-1362 — structured JSON items each carrying a citations array | Schema-constrained output and citations together | **Measured available on BOTH paths [P5][P9].** Session: via `--json-schema`. Direct API: via prompt-instructed JSON — `output_config.format` still 400s [5], but that parameter is not the only route to JSON. No path difference. |
 | prd.md:705 (NFR-C1) — per-meeting cost ceiling, ≤$0.50 default | A cost figure to enforce against | A session provides `total_cost_usd` and a `maxBudgetUsd` enforcement option. Both rest on the same client-side estimate the docs warn against using for financial decisions; the authoritative alternative named by the docs is the Usage and Cost API, which is out-of-band and after the fact. |
 
 ---
@@ -637,9 +950,9 @@ What this research could not answer, and what it would take.
 6. **What is the npm-published version history?** The npm web page returned 403 to automated fetch; the version was obtained from the registry API instead [4]. Not a gap that affects any verdict.
 7. ~~**Is the empty `citations: []` intentional or a defect?**~~ **ANSWERED [P4]** — a deliberate no-op. Claude Code's own accumulator carries an explicit `case "citations_delta": break;`, while the Anthropic SDK accumulator bundled beside it folds the payload in correctly. Settled harness behavior, not an accident. Whether Anthropic intends to change it remains unknowable from the artifact.
 8. ~~**Do `page_location` and `content_block_location` traverse a session?**~~ **ANSWERED [P6]** — all three types traverse. PDFs carry page numbers only and their `cited_text` did not byte-match the source (CRLF from the text layer); custom content returns block indices and involves no character offsets at all.
-9. **Does the direct Messages API path agree with [P2]?** `citation_offset_probe.py` is built but unrun — it needs `ANTHROPIC_API_KEY`. No reason to expect divergence; unconfirmed all the same.
+9. ~~**Does the direct Messages API path agree with [P2]?**~~ **ANSWERED [P8]** — yes, exactly. `citation_offset_probe.py` was run against `claude-opus-5` on 2026-09-16; both arms returned the same offsets the session returned, with `codepoints` the sole matching unit on each. The convention is API behavior, not harness behavior.
 10. **How is `minLength` satisfied — constrained decoding or a retry loop?** [P7] shows a conforming value; it does not show the mechanism. It matters for cost and latency: retries are billable turns. Distinguishable by counting `num_turns` across schemas of increasing difficulty.
-11. **Does the prompt-instruction route to JSON coexist with citations on the direct API?** The documented 400 covers `output_config.format` only. Untested, undocumented.
+11. ~~**Does the prompt-instruction route to JSON coexist with citations on the direct API?**~~ **ANSWERED [P9]** — yes. Parseable JSON and a `char_location` citation arrived in one 200 response, with the offsets matching [P2]/[P8] exactly. The CONTROL arm confirmed the documented 400 is live on the same account and model, so the 200 is a real difference between the two routes to JSON rather than a permissive environment.
 12. **`search_result_location` and `web_search_result_location`** appear in the API reference schema but not in the citations guide's document-type table [8]. Out of scope here; flagged if tool-result citations ever matter.
 
 ---
@@ -688,6 +1001,11 @@ One further distinction was enforced throughout: an UNVERIFIABLE returned by an 
 | [P5] | Session returned `structured_output` and `char_location` citations in one call, no 400 | Own measurement — `capability_probes.py` E1, `evidence/capability_probes_result.json` | run 2026-09-16 | 2026-09-16 | high |
 | [P6] | All three location types traverse a session; PDF `cited_text` carries CRLF; custom content returns block indices | Own measurement — `capability_probes.py` E2 | run 2026-09-16 | 2026-09-16 | high |
 | [P7] | `minLength` respected and recursive `$ref` accepted through a session, both documented unsupported on the Messages API | Own measurement — `capability_probes.py` E3 | run 2026-09-16 | 2026-09-16 | medium-high — outcome clear, mechanism undetermined |
+| [P8] | Direct Messages API returns the same codepoint offsets as the session on both NFC and NFD arms | Own measurement — `citation_offset_probe.py`, `evidence/citation_offset_probe_result.json` | run 2026-09-16, `claude-opus-5`, direct API | 2026-09-16 | high — sole matching unit on two differing inputs, matches [P2] exactly |
+| [P9] | CONTROL 400 with verbatim error text; prompt-instructed JSON + citations returning both on the direct API; `content_block_location` on the direct path; `source_quote` diverging from `cited_text` | Own measurement — `citations_json_coexist_probe.py`, `evidence/citations_json_coexist_result.json` | run 2026-09-16, `claude-opus-5`, direct API | 2026-09-16 | high — four arms, anchored by a reproducing CONTROL |
+| [P10] | `tool_use` arguments complete on the assistant message; `input_json_delta` accumulated correctly where `citations_delta` is not; cost decomposition reconciling to $1.747011; session defaulting to `claude-fable-5` | Own measurement — `tool_use_provenance_probe.py`, `evidence/tool_use_provenance_result.json` | run 2026-09-16, CLI 2.1.220, subscription login | 2026-09-16 | high — raw stream archived, arithmetic reconciles exactly |
+| [P11] | Real-vault run with model pinned and tools restricted; cost reconciliation at $0.456198; the 84,376 -> 41,885 context reduction; third-party personal names appearing in tool arguments | Own measurement — `tool_use_provenance_probe.py`; raw stream deliberately held outside the repository | run 2026-09-16, CLI 2.1.220, `claude-opus-5`, subscription login | 2026-09-16 | high for the figures (arithmetic reconciles exactly); single-run for the answer-quality observation |
+| [P12] | Multi-item arms: arm A returned 0 real citations and fabricated `<cite>` markup in a string field; arm B returned 4/4 correct with one citation per item `text` value; model-asserted index agreed with the server citation 4/4 | Own measurement — `citation_item_association_probe.py`, `evidence/citation_item_association_result.json` | run 2026-09-16, `claude-opus-5`, direct API | 2026-09-16 | high for what each arm returned; **n=1 per arm**, so the causal claim about `source_block_index` is unproven |
 | [13] | `CitationCharLocation` response model carrying `file_id`; no field docstrings | [github.com/anthropics/anthropic-sdk-python — citation_char_location.py](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/citation_char_location.py) | main branch | 2026-09-16 | high — generated from schema |
 
 **Host note:** `docs.claude.com` 302-redirects to `platform.claude.com`. Verified: `https://docs.claude.com/en/docs/build-with-claude/citations` → 302 → `https://platform.claude.com/docs/en/build-with-claude/citations`. Claude Code documentation lives on `code.claude.com`; Claude API documentation on `platform.claude.com`. Both hosts are canonical for their respective products.
@@ -704,7 +1022,7 @@ Per the technical pack's freshness bars, mapped to this run's claim classes.
 | Capability surface (AI-adjacent landscape) | ≤ 3 months | All five verdicts; the citations↔structured-outputs 400; per-model cache minimums and pricing multipliers | **2026-12-16** |
 | Ecosystem signals | ≤ 6 months | Credential precedence order; bare mode becoming the `-p` default | 2027-03-16 |
 
-| **Measured behavior (undocumented)** | **≤ 1 month** | **[P1]–[P7]: stream-delta-only citations, codepoint offsets, session/API divergence on structured-output+citations and on schema limits** | **2026-10-16** |
+| **Measured behavior (undocumented)** | **≤ 1 month** | **[P1]–[P12]: stream-delta-only citations, codepoint offsets (both paths), direct-API citations+JSON coexistence, custom-content block indices, complete tool_use arguments, cold-cache cost decomposition, the --tools context reduction, multi-item citation association and the fabricated-citation failure mode** | **2026-10-16** |
 
 **Earliest re-check: 2026-10-16.** The SDK shipped a new version the day this ran (registry-modified 2026-09-17T00:12Z), and three findings are explicitly version-gated — `thinkingTokens` records "only turns run on CLI versions that record this field," `costBasis` requires v2.1.246+, and bare mode "will become the default for `-p` in a future release." A Refresh against `sdk.d.ts` at the then-current version is the work order; it is one `npm pack` and four greps.
 
