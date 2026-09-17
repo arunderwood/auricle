@@ -61,67 +61,12 @@ jobs:
       # Every custom_rules regex is a hand-written string with no compiler
       # to catch a typo that silently stops it matching — `swiftlint lint`
       # against the real tree exits 0 identically whether a rule works or
-      # is dead, since nothing in the tree matches any of the six patterns
-      # outside their own exclusions. This feeds one known-violating
-      # one-liner per custom rule through the real .swiftlint.yml and
-      # fails if any expected rule id doesn't show up in the output.
+      # is dead. scripts/verify-custom-lint-rules.sh lints
+      # scripts/lint-fixtures/CustomLintRuleFixtures.swift (a tracked
+      # fixture deliberately violating all six) and fails if any expected
+      # rule id doesn't fire — runs identically here and locally.
       - name: Verify custom_rules still fire (fixture self-check)
-        run: |
-          set -euo pipefail
-          fixture_dir=$(mktemp -d)
-          cat > "$fixture_dir/CustomRuleFixtures.swift" <<'SWIFT'
-          import Foundation
-          import os
-
-          func atomicWriterBypassFixture() {
-              _ = FileManager.default.createFile(atPath: "x", contents: nil)
-          }
-
-          // Exercises the os.Logger(subsystem:category:) bypass, not just
-          // the legacy os_log( free function — Log.swift itself is built
-          // on Logger, so this is the pattern that actually matters.
-          func logFacadeBypassFixture() {
-              let logger = Logger(subsystem: "com.auricle.app", category: "probe")
-              logger.info("test")
-          }
-
-          func transcriptDecodeBypassFixture() {
-              _ = try? JSONDecoder().decode(TranscriptPayload.self, from: Data())
-          }
-
-          func telemetrySQLBypassFixture() {
-              let sql = "INSERT INTO telemetry (meeting_id) VALUES ('x')"
-              _ = sql
-          }
-
-          func compositionRootStrategyBypassFixture() {
-              _ = ClaudeCitationsSummarizer()
-          }
-
-          func accessibilityLabelMissingFixture() {
-              Button("Save") { }
-          }
-
-          struct TranscriptPayload: Decodable {}
-          struct ClaudeCitationsSummarizer {}
-          struct Button {
-              init(_ title: String, action: () -> Void) {}
-          }
-          SWIFT
-
-          output=$(mise exec -- swiftlint lint --no-cache --config "$GITHUB_WORKSPACE/.swiftlint.yml" --force-exclude "$fixture_dir" || true)
-          echo "$output"
-
-          missing=0
-          for rule in atomic_writer_bypass log_facade_bypass transcript_decode_bypass telemetry_sql_bypass composition_root_strategy_bypass accessibility_label_missing; do
-            if ! echo "$output" | grep -q "($rule)"; then
-              echo "::error::Fixture self-check: custom rule '$rule' did not fire against its known-violating fixture — the rule may be dead."
-              missing=1
-            fi
-          done
-
-          rm -rf "$fixture_dir"
-          exit "$missing"
+        run: scripts/verify-custom-lint-rules.sh
 
       # AR-INIT-2 (Package.swift:1-6): plain `swift build` does not reject an
       # undeclared cross-target import — this flag is what makes the module

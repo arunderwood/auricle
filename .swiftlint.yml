@@ -18,8 +18,9 @@
 # (as `log_facade_bypass` did until it was widened to also match
 # `Logger(subsystem:` — the API `Log.swift` itself is actually built on,
 # not just the legacy `os_log(` free function) is the standing risk this
-# whole mechanism carries; re-derive each rule's fixture in the CI
-# self-check step below whenever the real call shape it targets changes.
+# whole mechanism carries; keep scripts/lint-fixtures/CustomLintRuleFixtures.swift
+# (verified by scripts/verify-custom-lint-rules.sh, wired into ci.yml) in
+# sync with each rule's regex whenever either changes.
 
 excluded:
   - .build
@@ -30,6 +31,12 @@ excluded:
   - DerivedData
   - .tuist
   - Derived
+  # Deliberately violates every custom_rules entry below — excluded from
+  # the normal repo-wide pass; scripts/verify-custom-lint-rules.sh lints it
+  # explicitly by path (bypassing this exclusion, since an explicitly
+  # named path is linted regardless of `excluded` unless --force-exclude
+  # is also passed) to prove each rule still fires.
+  - scripts/lint-fixtures
 
 # GRDB's own convention for a write/read closure's database handle
 # (`writer.write { db in ... }`) appears dozens of times across Sources/State
