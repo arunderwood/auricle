@@ -2,7 +2,7 @@
 title: 'Persist Stage Entry Point — Compose Renderer + Writer + Re-publish Semantics'
 type: 'feature'
 created: '2026-09-17'
-status: 'blocked'
+status: 'done'
 baseline_revision: '0070c45d8cceb2d67859e8c1f2ac4a633039a1e0'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -208,3 +208,5 @@ StageRunner's two-transaction pattern, adding a new SummaryArtifact
 cache-artifact contract and a narrow VaultWriter.writeExact entry point
 for re-publish (--reattribute) rerun-suffix writes.
 ```
+
+**Resolution:** The user unlocked 1Password; `git commit` succeeded as commit `e2532f37df2cf04caaa2b6ecee025a3dd51b4d1b` on branch `claude/epic-2-stories-2-4-2-5-efc114`. All 8 staged files landed together. No code changes were needed — the blocker was purely the commit-signing credential, as diagnosed above.
