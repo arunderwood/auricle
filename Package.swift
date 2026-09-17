@@ -83,7 +83,7 @@ let package = Package(
         .target(name: "Summarize", dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"], path: "Sources/Summarize"),
         .target(
             name: "Persist",
-            dependencies: ["Core", "State", "Telemetry", .product(name: "Yams", package: "Yams")],
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", .product(name: "Yams", package: "Yams")],
             path: "Sources/Persist",
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
@@ -143,7 +143,11 @@ let package = Package(
         .testTarget(name: "WhisperKitDiarizerTests", dependencies: ["WhisperKitDiarizer", "TestSupport"], path: "Tests/WhisperKitDiarizerTests"),
         .testTarget(name: "GoogleCalendarSourceTests", dependencies: ["GoogleCalendarSource", "TestSupport"], path: "Tests/GoogleCalendarSourceTests"),
         .testTarget(name: "VaultGlossaryTests", dependencies: ["VaultGlossary", "TestSupport"], path: "Tests/VaultGlossaryTests"),
-        .testTarget(name: "PersistTests", dependencies: ["Persist", "TestSupport"], path: "Tests/PersistTests"),
+        .testTarget(
+            name: "PersistTests",
+            dependencies: ["Persist", "TestSupport", "Orchestrator", "State", .product(name: "GRDB", package: "GRDB.swift")],
+            path: "Tests/PersistTests",
+        ),
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
         .testTarget(name: "NotificationsTests", dependencies: ["Notifications", "TestSupport"], path: "Tests/NotificationsTests"),
     ],

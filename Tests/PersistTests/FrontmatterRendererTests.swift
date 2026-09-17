@@ -6,8 +6,11 @@ import TestSupport
 private let meetingID = MeetingID(ulid: "01HJK3PQXY7N8M3FT4QHNWVZRP")!
 
 /// Builds the standard-variant fixture by default; each test overrides only
-/// the fields its scenario calls out, per the spec's I/O matrix.
-private func makeMeeting(
+/// the fields its scenario calls out, per the spec's I/O matrix. Internal,
+/// not `private`: `FrontmatterReaderTests.swift` builds its own read-back
+/// fixtures from this same meeting shape so the two test files can't drift
+/// apart into two hand-maintained copies of "the standard variant."
+func makeMeeting(
     title: String = "Tuesday Sync with Ben",
     attendees: [String] = ["[[Ben]]"],
     supersedes: String? = nil,
