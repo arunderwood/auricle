@@ -1,0 +1,12 @@
+[
+  {"claim":"CLI flags, hidden subcommands, --help contents on 2.1.220","class":"version","pub_date":"2026-09"},
+  {"claim":"JSON result field names incl. is_error/subtype mismatch","class":"version","pub_date":"2026-09"},
+  {"claim":"--bg ignores --session-id; short id is human-facing text","class":"behavior","pub_date":"2026-09"},
+  {"claim":"agents --json lacks state/waitingFor on 2.1.220","class":"behavior","pub_date":"2026-09"},
+  {"claim":"All five CVEs patched at or below 2.1.128","class":"version","pub_date":"2026-09"},
+  {"claim":"blockReadsOutsideWorkingDirectories off by default","class":"behavior","pub_date":"2026-09"},
+  {"claim":"-p without --bare runs untrusted project hooks and MCP servers","class":"behavior","pub_date":"2026-09"},
+  {"claim":"No wall-clock timeout flag exists","class":"version","pub_date":"2026-09"},
+  {"claim":"Skills versioned only at plugin granularity","class":"ecosystem","pub_date":"2026-09"},
+  {"claim":"The -p vs --bg attachability split","class":"landscape","pub_date":"2026-09"}
+]
