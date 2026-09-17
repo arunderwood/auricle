@@ -25,6 +25,12 @@
 excluded:
   - .build
   - .swiftpm
+  # core.hooksPath is an absolute path into the main checkout, so this
+  # config also governs lint runs triggered from any git worktree — and
+  # every worktree's own .build lives under here. `excluded` isn't
+  # recursive, so without this entry those nested SPM checkouts (GRDB,
+  # WhisperKit, etc., thousands of files) get walked as project sources.
+  - .claude/worktrees
   - App/Auricle.xcodeproj
   - AuricleKit.xcodeproj
   - "*.xcworkspace"
