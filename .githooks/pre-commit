@@ -1,0 +1,18 @@
+#!/bin/sh
+# Fast checks only (format + lint) — seconds, not minutes. The full
+# build/test/xcodebuild gate (scripts/check.sh / `make check`) deliberately
+# stays manual and CI's job: a hook that slow trains people to reach for
+# `git commit --no-verify`, which defeats the point of having one.
+#
+# Not installed automatically — .git/hooks/ isn't tracked, so git doesn't
+# look here unless told to. One-time setup: git config core.hooksPath .githooks
+set -eu
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repo_root"
+
+echo "==> swiftformat --lint"
+mise exec -- swiftformat --lint .
+
+echo "==> swiftlint"
+mise exec -- swiftlint lint --strict .
