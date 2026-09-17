@@ -49,6 +49,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
         .package(url: "https://github.com/yaslab/ULID.swift.git", from: "1.3.1"),
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
     ],
     targets: [
         // === Cross-cutting ===
@@ -80,7 +81,11 @@ let package = Package(
         .target(name: "Diarize", dependencies: ["Core", "State", "Telemetry", "DiarizerInterface"], path: "Sources/Diarize"),
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
         .target(name: "Summarize", dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"], path: "Sources/Summarize"),
-        .target(name: "Persist", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Persist"),
+        .target(
+            name: "Persist",
+            dependencies: ["Core", "State", "Telemetry", .product(name: "Yams", package: "Yams")],
+            path: "Sources/Persist",
+        ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
         .target(name: "Notifications", dependencies: ["Core", "State"], path: "Sources/Notifications"),
         .target(name: "ReviewDiarization", dependencies: ["Core", "State", "Telemetry", "AIReviewerInterface"], path: "Sources/ReviewDiarization"),
