@@ -1,5 +1,5 @@
 <!-- bmad:context -->
-<!-- Verified 2026-09-16 against 1221202. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-09-16 against d54d691. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## auricle
 
@@ -17,8 +17,10 @@ Local-first macOS meeting notetaker: capture → transcribe → diarize → attr
 
 ## Running and verifying
 
-- SwiftPM library: `swift build && swift test`.
-- Xcode/CLI side, not covered by `swift test`: `cd App && tuist generate --no-open`, then `xcodebuild -project Auricle.xcodeproj -scheme auricle-cli build` (or `-scheme AuricleApp`).
+- `make check` (or `scripts/check.sh`) runs the full gate chain exactly as `ci.yml` does — swiftformat, swiftlint, the custom-lint-rule fixture self-check, `swift build`/`swift test` with `--explicit-target-dependency-import-check error`, a release build, and both Xcode schemes. Run it before pushing — it's the same script CI invokes, not a parallel copy that can drift.
+- One-time setup: `git config core.hooksPath .githooks` enables a fast pre-commit hook (`swiftformat --lint` + `swiftlint` only, ~1s) — off by default, since `.git/hooks/` isn't tracked and git won't look in `.githooks/` unless told to. The full check deliberately stays out of the hook — slow enough to invite `--no-verify`.
+- SwiftPM library alone, while iterating: `swift build && swift test`.
+- Xcode/CLI side alone, not covered by `swift test`: `cd App && tuist generate --no-open`, then `xcodebuild -project Auricle.xcodeproj -scheme auricle-cli build` (or `-scheme AuricleApp`).
 - Toolchain is pinned: Xcode 26.4.1 (`.xcode-version`), Tuist/swiftformat/swiftlint via `mise.toml` — run `mise install` before first build.
 
 ## Conventions that differ from defaults
