@@ -111,7 +111,7 @@ Per-meeting metrics auricle records to local telemetry (no remote reporting):
 - `ai_corrections_applied` — count of AI corrections applied to this meeting's artifacts, broken down by sibling (`jargon`, `diarization`, `transcription`)
 - `summarization_path` — `claude_api` | `local_llm` (post-MVP)
 - `cost_usd` — Claude API spend (zero for local path)
-- `audio_retention_status_at_30d` — `deleted_after_grace` | `kept_explicit` | `unverified_held`
+- `audio_retention_status_at_snapshot` — `deleted_after_grace` | `kept_explicit` | `unverified_held`
 
 Aggregate health metrics reviewed weekly during MVP dogfood:
 - % of meetings where `publish_anyway` was used (target: ≤10%; high values mean attribution UX is broken)

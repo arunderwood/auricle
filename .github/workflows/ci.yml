@@ -1,0 +1,82 @@
+# The full gate chain in one job, one clean checkout, no artifact caching
+# (Story 1.8's own AC line — a cache could mask a determinism or
+# tuist-generate-cleanliness regression that a from-scratch run would catch).
+# A later story's CI gate extends this job rather than adding a new
+# workflow file.
+name: CI
+
+on:
+  pull_request:
+
+# A fixup push to an open PR should replace the in-flight run for that PR,
+# not queue a second full macOS job behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-lint:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    # mise resolves tool versions against the GitHub releases API; without a
+    # token it shares the runner IP's 60/req-hr unauthenticated limit, which
+    # this job's own `mise install` step is enough to exhaust on its own.
+    # The default GITHUB_TOKEN raises that to 5,000/hr and needs no extra
+    # permissions beyond what `permissions: contents: read` already grants.
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned Xcode version
+        id: xcode_version
+        run: echo "version=$(cat .xcode-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode ${{ steps.xcode_version.outputs.version }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ steps.xcode_version.outputs.version }}
+
+      - name: Install mise
+        run: curl https://mise.run | sh
+
+      - name: Add mise to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # scripts/check.sh is the single source of truth for the gate chain —
+      # `make check` runs the identical script locally. Two copies of this
+      # sequence (one here, one for local use) would drift the moment
+      # either changed without the other; one script run from both places
+      # structurally can't.
+      - name: Run the full check (scripts/check.sh — the same script `make check` runs locally)
+        run: scripts/check.sh
+
+      # AR-INIT-4: a committed generated project is a regression — Tuist
+      # regenerates App/Auricle.xcodeproj (plus the repo-root workspace and
+      # the AuricleKit.xcodeproj SwiftPM preview) from Project.swift on
+      # every clone; none of the three is ever hand-committed.
+      - name: Fail if a generated Xcode project/workspace is tracked by git
+        run: |
+          tracked=$(git ls-files | grep -E '\.(xcodeproj|xcworkspace)(/|$)' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::A Tuist-generated Xcode project/workspace is tracked by git — it must stay gitignored. Tracked paths:"
+            echo "$tracked"
+            exit 1
+          fi
+
+      # The manifest (Project.swift) and the working tree must agree: any
+      # diff here means `tuist generate` produced something .gitignore
+      # doesn't already account for. CI-only (not in scripts/check.sh): this
+      # assumes a clean checkout, true here and never true of a real local
+      # working tree mid-change.
+      - name: Fail if tuist generate left a dirty working tree
+        run: |
+          dirty=$(git status --porcelain)
+          if [ -n "$dirty" ]; then
+            echo "::error::tuist generate left a non-empty git status outside the gitignored project:"
+            echo "$dirty"
+            exit 1
+          fi

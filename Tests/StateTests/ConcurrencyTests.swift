@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
-import Testing
 @testable import State
+import Testing
 
 private func makeTestDatabasePath() -> (directory: URL, path: String) {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -57,7 +57,7 @@ private func insertMeetingSQL(id: String) -> String {
     defer { try? FileManager.default.removeItem(at: directory) }
 
     // Seed the schema before the contending connections open.
-    try MigrationRegistrar.migrator.migrate(try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
+    try MigrationRegistrar.migrator.migrate(DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
 
     let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 2))
     let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 2))
@@ -104,7 +104,7 @@ private func insertMeetingSQL(id: String) -> String {
     let (directory, path) = makeTestDatabasePath()
     defer { try? FileManager.default.removeItem(at: directory) }
 
-    try MigrationRegistrar.migrator.migrate(try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
+    try MigrationRegistrar.migrator.migrate(DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
 
     let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 0.3))
     let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 0.3))

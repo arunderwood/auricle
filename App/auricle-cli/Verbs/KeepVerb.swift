@@ -3,7 +3,7 @@ import ArgumentParser
 struct KeepVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "keep",
-        abstract: "Confirm a meeting note has been reviewed and arm its retention timer."
+        abstract: "Confirm a meeting note has been reviewed and arm its retention timer.",
     )
 
     @Argument(help: "Meeting ID.")

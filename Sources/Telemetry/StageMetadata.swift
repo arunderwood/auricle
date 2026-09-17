@@ -39,7 +39,7 @@ extension StageMetadata: Codable {
             throw DecodingError.dataCorrupted(DecodingError.Context(
                 codingPath: container.codingPath,
                 debugDescription:
-                    "Expected exactly one recognized StageMetadata case key, found \(container.allKeys.count)"
+                "Expected exactly one recognized StageMetadata case key, found \(container.allKeys.count)",
             ))
         }
         if let meta = try container.decodeIfPresent(CaptureMeta.self, forKey: .capture) {
@@ -59,7 +59,7 @@ extension StageMetadata: Codable {
         } else {
             throw DecodingError.dataCorrupted(DecodingError.Context(
                 codingPath: container.codingPath,
-                debugDescription: "No recognized StageMetadata case key present"
+                debugDescription: "No recognized StageMetadata case key present",
             ))
         }
     }
@@ -67,13 +67,13 @@ extension StageMetadata: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .capture(let meta): try container.encode(meta, forKey: .capture)
-        case .transcribe(let meta): try container.encode(meta, forKey: .transcribe)
-        case .reviewDiarization(let meta): try container.encode(meta, forKey: .reviewDiarization)
-        case .attribute(let meta): try container.encode(meta, forKey: .attribute)
-        case .summarize(let meta): try container.encode(meta, forKey: .summarize)
-        case .persist(let meta): try container.encode(meta, forKey: .persist)
-        case .notify(let meta): try container.encode(meta, forKey: .notify)
+        case let .capture(meta): try container.encode(meta, forKey: .capture)
+        case let .transcribe(meta): try container.encode(meta, forKey: .transcribe)
+        case let .reviewDiarization(meta): try container.encode(meta, forKey: .reviewDiarization)
+        case let .attribute(meta): try container.encode(meta, forKey: .attribute)
+        case let .summarize(meta): try container.encode(meta, forKey: .summarize)
+        case let .persist(meta): try container.encode(meta, forKey: .persist)
+        case let .notify(meta): try container.encode(meta, forKey: .notify)
         }
     }
 }
@@ -134,7 +134,7 @@ public struct ReviewDiarizationMeta: Codable, Equatable, Sendable {
         outputTokens: Int,
         costUSD: Double,
         suggestionsCount: Int,
-        reviewSkipped: Bool
+        reviewSkipped: Bool,
     ) {
         self.modelID = modelID
         self.inputTokens = inputTokens
@@ -184,7 +184,7 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         thinkingTokens: Int,
         costUSD: Double,
         quoteValidationDropCount: Int,
-        groundingMethod: String
+        groundingMethod: String,
     ) {
         self.modelID = modelID
         self.effortBudget = effortBudget

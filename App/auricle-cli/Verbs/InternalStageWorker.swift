@@ -9,7 +9,7 @@ import Foundation
 struct InternalStageWorker: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "__internal-stage",
-        shouldDisplay: false
+        shouldDisplay: false,
     )
 
     @Argument(help: "Pipeline stage to run.")
@@ -26,18 +26,18 @@ struct InternalStageWorker: AsyncParsableCommand {
         case .valid:
             try notYetImplemented("__internal-stage")
 
-        case .unknownStage(let stage):
+        case let .unknownStage(stage):
             writeStderr("__internal-stage: unrecognized stage '\(stage)'.")
             throw ExitCode(1)
 
-        case .protocolVersionMismatch(let mismatch):
+        case let .protocolVersionMismatch(mismatch):
             if let json = try? JSONEncoder().encode(mismatch),
                let jsonString = String(data: json, encoding: .utf8) {
                 writeStderr(jsonString)
             } else {
                 writeStderr(
                     "__internal-stage: worker protocol version mismatch "
-                        + "(expected \(mismatch.expected), received \(mismatch.received))."
+                        + "(expected \(mismatch.expected), received \(mismatch.received)).",
                 )
             }
             throw ExitCode(2)

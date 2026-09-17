@@ -49,7 +49,7 @@ public struct Meeting: Codable, Equatable, Sendable {
         vaultNotePath: String? = nil,
         audioCachePath: String? = nil,
         verifiedAt: String? = nil,
-        retentionPolicy: String? = nil
+        retentionPolicy: String? = nil,
     ) {
         self.id = id
         self.state = state

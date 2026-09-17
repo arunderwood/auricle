@@ -1,0 +1,236 @@
+# SwiftLint's built-in naming rules (identifier_name, type_name, etc.) cover
+# AR-PAT-1 out of the box — this file only tunes their thresholds to this
+# codebase's own established, already-reviewed style, plus the 6 custom_rules
+# below for the checks that have no built-in equivalent (AR-PAT-4 helper
+# discipline + UX-DR65's accessibilityLabel check).
+#
+# The custom_rules are plain text/regex matches over tokens — SwiftLint's
+# standard mechanism, with no import resolution, type-checking, or semantic
+# understanding of what a call actually refers to. They catch a call written
+# the way this file expects it to be written; they do not catch a
+# semantically identical bypass spelled differently (a type alias standing
+# in for a vendor type, SQL assembled via string interpolation instead of a
+# single literal, a wrapper function around a banned call). Treat a clean
+# `swiftlint lint` as a cheap first-pass tripwire, not a proof of compliance
+# — architecture.md's own Enforcement Guidelines already pair this layer
+# with a human code-review checklist for exactly what regex can't catch. A
+# rule going quietly blind against a real call shape it was meant to guard
+# (as `log_facade_bypass` did until it was widened to also match
+# `Logger(subsystem:` — the API `Log.swift` itself is actually built on,
+# not just the legacy `os_log(` free function) is the standing risk this
+# whole mechanism carries; keep scripts/lint-fixtures/CustomLintRuleFixtures.swift
+# (verified by scripts/verify-custom-lint-rules.sh, wired into ci.yml) in
+# sync with each rule's regex whenever either changes.
+
+excluded:
+  - .build
+  - .swiftpm
+  - App/Auricle.xcodeproj
+  - AuricleKit.xcodeproj
+  - "*.xcworkspace"
+  - DerivedData
+  - .tuist
+  - Derived
+  # Deliberately violates every custom_rules entry below — excluded from
+  # the normal repo-wide pass; scripts/verify-custom-lint-rules.sh lints it
+  # explicitly by path (bypassing this exclusion, since an explicitly
+  # named path is linted regardless of `excluded` unless --force-exclude
+  # is also passed) to prove each rule still fires.
+  - scripts/lint-fixtures
+
+# GRDB's own convention for a write/read closure's database handle
+# (`writer.write { db in ... }`) appears dozens of times across Sources/State
+# and its tests — `db` is clearer at every call site than a longer name would
+# be, so it joins the default `^id$` exception rather than getting flagged
+# repo-wide. `to` is Swift API Design Guidelines' own prepositional-label
+# convention (AtomicWriter's `write(_:to:)`, the CLI's `run --to <stage>`
+# flag) — the guideline this rule exists to enforce is what names it this
+# short.
+identifier_name:
+  excluded:
+    - id
+    - db
+    - to
+
+# RetentionScheduler's `init(stateStore:now:onFired:)` takes a clock-
+# injection closure and a completion closure — `now: { fixedNow }` labeled
+# plus a trailing `{ timer in ... }` reads clearly at every call site in
+# RetentionSchedulerTests.swift; this rule's alternative (labeling both, or
+# restructuring the initializer around the test rather than the production
+# call sites Story 1.5 already settled) isn't a readability improvement.
+disabled_rules:
+  - multiple_closures_with_trailing_closure
+
+# `Migration002StageEventsMetadataSchemaVersion` (Sources/State/Migrations)
+# follows this repo's own `Migration<NNN>_<Description>` naming convention at
+# 45 characters, just past the swiftlint default's 40-character warning
+# threshold. Raised, not disabled, so a genuinely oversized type name still
+# trips it.
+type_name:
+  max_length:
+    warning: 50
+    error: 60
+
+# migration files interleave a `CREATE TABLE` column list with an inline `--`
+# comment documenting each column (Sources/State/Migrations) — wrapping those
+# would separate the column from its own explanation. Raised past the longest
+# line in the current tree (Package.swift:82, 169 chars) with real headroom
+# rather than disabled, so runaway lines elsewhere still trip it.
+line_length:
+  warning: 180
+  error: 240
+
+# MigrationTests.swift covers every migration's forward-apply and backfill
+# behavior in one file per the "one test target per source target"
+# convention (architecture.md Test Organization) rather than splitting by
+# migration number, which would fragment a single logical test story.
+file_length:
+  warning: 500
+  error: 1000
+
+# swiftformat's own trailing-comma default (this repo's .swiftformat) adds
+# trailing commas wherever Swift 6.3 allows them; this must agree; both
+# tools disagreeing on trailing commas would fight every commit.
+trailing_comma:
+  mandatory_comma: true
+
+custom_rules:
+  atomic_writer_bypass:
+    name: "AtomicWriter bypass"
+    message: >-
+      Use AtomicWriter.write(_:to:) instead of a direct filesystem write.
+      AtomicWriter is the sole write-temp/fsync/rename primitive (NFR-R1,
+      FR36, architecture.md's Atomic-Write Enforcement) — every artifact
+      write must go through it so a crash mid-write can never leave a
+      partially-written target file on disk.
+    regex: '\.write\(to:|FileManager\(\)\.createFile\(|FileManager\.(default\.)?createFile\('
+    match_kinds:
+      - identifier
+      - keyword
+    severity: error
+    excluded:
+      # The primitive's own implementation.
+      - ".*/Sources/Core/AtomicWriter\\.swift$"
+      # Simulates a killed-before-rename temp file left on disk — the test
+      # exists to exercise AtomicWriter's crash-recovery behavior, so it
+      # must write the corrupt state directly rather than through the
+      # primitive under test.
+      - ".*/Tests/CoreTests/AtomicWriterTests\\.swift$"
+      # Write a throwaway executable shell-script fixture for subprocess
+      # dispatch tests — a test tool, not a vault/cache artifact, so it
+      # sits outside AtomicWriter's domain entirely.
+      - ".*/Tests/OrchestratorTests/CrashRecoveryTests\\.swift$"
+      - ".*/Tests/OrchestratorTests/SubprocessDispatcherTests\\.swift$"
+
+  log_facade_bypass:
+    name: "Log facade bypass"
+    message: >-
+      Use a `Log` instance (log.debug/info/warn/error) instead of calling
+      os_log or constructing an os.Logger directly. `Log` is the sole
+      logging entry point (AR-PAT-3, AR-PAT-4) and forces every runtime
+      field through `LogSensitivity` tagging — neither a direct os_log call
+      nor a direct os.Logger(subsystem:category:) has an equivalent guard.
+    # `os_log(` (the legacy free function) is legacy and unused anywhere in
+    # this tree today — `Log.swift` itself is built on the modern
+    # `Logger(subsystem:category:)` struct API, which the original version
+    # of this rule didn't match at all, leaving the facade's own real
+    # bypass vector completely unguarded.
+    regex: '\bos_log\(|\bLogger\(subsystem:'
+    match_kinds:
+      - identifier
+      - keyword
+    severity: error
+    excluded:
+      - ".*/Sources/Core/Log\\.swift$"
+
+  transcript_decode_bypass:
+    name: "Transcript decode bypass"
+    message: >-
+      Decode transcript JSON only through the canonicalization layer
+      (CanonicalTranscript, deferred past Epic 1 per deferred-work.md).
+      A direct JSONDecoder().decode(...) on a transcript payload skips the
+      NFC/LF/`<Speaker_N>:`/byte-offset normalization later stages and
+      quote-grounding depend on being applied uniformly.
+    regex: 'JSONDecoder\(\)\.decode\([^)]*[Tt]ranscript'
+    match_kinds:
+      - identifier
+      - keyword
+    severity: error
+    # No exclusion list: no canonicalization-layer file exists yet in this
+    # tree (Sources/State/CanonicalTranscript* per deferred-work.md:13-15).
+    # A future story adds its file here once that layer exists.
+
+  telemetry_sql_bypass:
+    name: "stage_events/telemetry SQL bypass"
+    message: >-
+      Write `stage_events` and `telemetry` rows only through
+      StageEventLogger.record(event:) / TelemetryRecorder.record(meetingID:
+      patch:) — every other caller funnels through those actors (AR-PAT-4),
+      which are themselves the only callers of StateStore's typed insert/
+      upsert methods. Direct SQL bypasses the single-writer discipline the
+      write-authority matrix depends on.
+    regex: '(?i)INSERT INTO stage_events|INSERT INTO telemetry'
+    # `string`, not `identifier`/`keyword`: the pattern's whole point is text
+    # that only ever appears inside a `sql:` string-literal argument
+    # (`db.execute(sql: "INSERT INTO telemetry ...")`) — restricting to
+    # `string` still excludes a comment merely mentioning the phrase, which
+    # `identifier`/`keyword` would too, but unlike those two, `string` still
+    # matches the literal the rule exists to catch.
+    match_kinds:
+      - string
+    severity: error
+    excluded:
+      # StateStore is StageEventLogger's and TelemetryRecorder's sole
+      # dependency for reaching SQLite (architecture.md:1968) — the literal
+      # INSERT statements live here, not in the two actors that wrap it.
+      - ".*/Sources/State/StateStore\\.swift$"
+      - ".*/Sources/Telemetry/StageEventLogger\\.swift$"
+      - ".*/Sources/Telemetry/TelemetryRecorder\\.swift$"
+      # Seeds pre-migration rows via raw SQL to test that a migration
+      # backfills them correctly — the test's entire point is bypassing the
+      # typed API to construct a pre-migration database state.
+      - ".*/Tests/StateTests/MigrationTests\\.swift$"
+
+  composition_root_strategy_bypass:
+    name: "Concrete-strategy instantiation outside a composition root"
+    message: >-
+      Instantiate concrete strategies (the `<Vendor><Concern>` targets —
+      ClaudeSummarizer, ClaudeAIReviewers, WhisperKitTranscriber,
+      WhisperKitDiarizer, GoogleCalendarSource) only inside a composition
+      root: AuricleApp.swift, auricle-cli's entry point, or
+      Tests/TestSupport/TestComposition.swift. Everywhere else depends on
+      the strategy's interface protocol instead (architecture.md's
+      Composition Roots pattern).
+    regex: '\b(Claude[A-Z]\w*|WhisperKit[A-Z]\w*|GoogleCalendarSource)(\.init)?\('
+    match_kinds:
+      - identifier
+    severity: error
+    excluded:
+      - ".*/App/Auricle/AuricleApp\\.swift$"
+      - ".*/App/auricle-cli/AuricleCLI\\.swift$"
+      # Doesn't exist yet (Package.swift's own comment on the test-helper
+      # composition root) — pre-excluded so it needs no lint-config change
+      # the day it's added.
+      - ".*/Tests/TestSupport/TestComposition\\.swift$"
+      # The five concrete-strategy targets' own implementation directories
+      # (today just ManifestPlaceholder.swift stubs) — a type's own file
+      # instantiating itself isn't a composition-root bypass; only a
+      # *caller* reaching past the interface into one of these types is.
+      - ".*/Sources/ClaudeSummarizer/.*\\.swift$"
+      - ".*/Sources/ClaudeAIReviewers/.*\\.swift$"
+      - ".*/Sources/WhisperKitTranscriber/.*\\.swift$"
+      - ".*/Sources/WhisperKitDiarizer/.*\\.swift$"
+      - ".*/Sources/GoogleCalendarSource/.*\\.swift$"
+
+  accessibility_label_missing:
+    name: "Missing accessibilityLabel"
+    message: >-
+      Set accessibilityLabel on every interactive control per UX-DR65 /
+      NFR-A1 — VoiceOver has nothing else to read for this control. This is
+      a best-effort, line-level check with a real false-negative rate (e.g.
+      a label applied several lines below the control); it cannot see
+      SwiftUI's modifier-chain structure, only nearby text.
+    regex: '\b(Button|Toggle|TextField)\((?![\s\S]{0,300}?\.accessibilityLabel\()'
+    match_kinds:
+      - identifier
+    severity: error

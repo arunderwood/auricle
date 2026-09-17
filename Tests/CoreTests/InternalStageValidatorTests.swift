@@ -6,7 +6,7 @@ import Testing
     let outcome = InternalStageValidator.validate(
         stage: "transcribe",
         workerProtocolVersion: 1,
-        expectedProtocolVersion: 1
+        expectedProtocolVersion: 1,
     )
 
     #expect(outcome == .valid)
@@ -16,7 +16,7 @@ import Testing
     let outcome = InternalStageValidator.validate(
         stage: "bogus",
         workerProtocolVersion: 1,
-        expectedProtocolVersion: 1
+        expectedProtocolVersion: 1,
     )
 
     #expect(outcome == .unknownStage("bogus"))
@@ -26,7 +26,7 @@ import Testing
     let outcome = InternalStageValidator.validate(
         stage: "transcribe",
         workerProtocolVersion: 99,
-        expectedProtocolVersion: 1
+        expectedProtocolVersion: 1,
     )
 
     #expect(outcome == .protocolVersionMismatch(WorkerProtocolVersionMismatch(expected: 1, received: 99)))

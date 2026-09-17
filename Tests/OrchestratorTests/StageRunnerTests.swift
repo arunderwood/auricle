@@ -1,13 +1,13 @@
 import Core
 import Foundation
 import GRDB
-import Testing
 @testable import Orchestrator
 @testable import State
 @testable import Telemetry
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 /// Every test constructs its `StageRunner` through this helper rather than
@@ -52,7 +52,7 @@ private struct StubWorkError: Error, Equatable {}
         .completed(targetState: .awaitingAttribution)
     }
 
-    guard case .completed(let targetState, _) = outcome else {
+    guard case let .completed(targetState, _) = outcome else {
         Issue.record("expected .completed outcome, got \(outcome)")
         return
     }
@@ -78,7 +78,7 @@ private struct StubWorkError: Error, Equatable {}
             targetState: .transcriptionFailed,
             errorClass: "whisperkit_oom",
             errorMessage: "model load failed",
-            metadataJSON: "{\"cost_usd\":0.5}"
+            metadataJSON: "{\"cost_usd\":0.5}",
         )
     }
 
@@ -131,7 +131,7 @@ private struct StubWorkError: Error, Equatable {}
         meetingID: resolvedID,
         stage: .reviewDiarization,
         activeState: .reviewingDiarization,
-        reason: .staleActiveState(budgetSeconds: 90)
+        reason: .staleActiveState(budgetSeconds: 90),
     )
 
     let meeting = try #require(try await store.fetchMeeting(id: id))
@@ -153,7 +153,7 @@ private struct StubWorkError: Error, Equatable {}
         meetingID: resolvedID,
         stage: .notify,
         activeState: .published,
-        reason: .staleActiveState(budgetSeconds: 30)
+        reason: .staleActiveState(budgetSeconds: 30),
     )
 
     let meeting = try #require(try await store.fetchMeeting(id: id))
@@ -175,7 +175,7 @@ private struct StubWorkError: Error, Equatable {}
         meetingID: resolvedID,
         stage: .transcribe,
         activeState: .transcribing,
-        reason: .staleActiveState(budgetSeconds: 60)
+        reason: .staleActiveState(budgetSeconds: 60),
     )
 
     let meeting = try #require(try await store.fetchMeeting(id: id))
@@ -197,7 +197,7 @@ private struct StubWorkError: Error, Equatable {}
         meetingID: resolvedID,
         stage: .summarize,
         activeState: .summarizing,
-        reason: .staleActiveState(budgetSeconds: 720)
+        reason: .staleActiveState(budgetSeconds: 720),
     )
 
     let meeting = try #require(try await store.fetchMeeting(id: id))
@@ -220,7 +220,7 @@ private struct StubWorkError: Error, Equatable {}
             meetingID: resolvedID,
             stage: .attribute,
             activeState: .attributing,
-            reason: .staleActiveState(budgetSeconds: 0)
+            reason: .staleActiveState(budgetSeconds: 0),
         )
         Issue.record("expected synthesizeFailure to throw for .attributing")
     } catch let error as StageRunner.SynthesizeFailureError {

@@ -31,7 +31,7 @@ public enum InternalStageValidator {
     public static func validate(
         stage: String,
         workerProtocolVersion: Int,
-        expectedProtocolVersion: Int = WorkerProtocolVersion.current
+        expectedProtocolVersion: Int = WorkerProtocolVersion.current,
     ) -> InternalStageValidation {
         guard PipelineStage(rawValue: stage) != nil else {
             return .unknownStage(stage)
@@ -40,8 +40,8 @@ public enum InternalStageValidator {
             return .protocolVersionMismatch(
                 WorkerProtocolVersionMismatch(
                     expected: expectedProtocolVersion,
-                    received: workerProtocolVersion
-                )
+                    received: workerProtocolVersion,
+                ),
             )
         }
         return .valid

@@ -1,12 +1,12 @@
 import Core
 import Foundation
 import GRDB
-import Testing
 @testable import Orchestrator
 @testable import State
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 /// A 26-character, Crockford-base32-safe (no `I`/`L`/`O`/`U`) stand-in ULID.
@@ -57,7 +57,7 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
     let outcomes = try await recovery.reconcile()
 
     let redispatched = Dictionary(uniqueKeysWithValues: outcomes.compactMap { outcome -> (String, PipelineStage)? in
-        guard case .redispatched(let id, let stage) = outcome else { return nil }
+        guard case let .redispatched(id, stage) = outcome else { return nil }
         return (id.rawValue, stage)
     })
 
@@ -88,7 +88,7 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
     let outcomes = try await recovery.reconcile()
 
     #expect(outcomes.count == 1)
-    guard case .loggedOnly(let id, let state) = outcomes[0] else {
+    guard case let .loggedOnly(id, state) = outcomes[0] else {
         Issue.record("expected a .loggedOnly outcome, got \(outcomes)")
         return
     }
@@ -108,7 +108,7 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
     let outcomes = try await recovery.reconcile()
 
     #expect(outcomes.count == 1)
-    guard case .loggedOnly(let id, let state) = outcomes[0] else {
+    guard case let .loggedOnly(id, state) = outcomes[0] else {
         Issue.record("expected a .loggedOnly outcome, got \(outcomes)")
         return
     }

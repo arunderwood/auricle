@@ -21,7 +21,7 @@ public actor RetentionScheduler {
         stateStore: StateStore,
         interval: TimeInterval = 10,
         now: @escaping @Sendable () -> Date = { Date() },
-        handler: @escaping Handler
+        handler: @escaping Handler,
     ) {
         self.stateStore = stateStore
         self.interval = interval

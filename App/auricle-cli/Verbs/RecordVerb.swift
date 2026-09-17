@@ -3,7 +3,7 @@ import ArgumentParser
 struct RecordVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "record",
-        abstract: "Start capture."
+        abstract: "Start capture.",
     )
 
     @Argument(help: "Meeting ID to use. A new one is generated if omitted.")

@@ -15,7 +15,7 @@ enum DatabasePoolFactory {
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
-            create: true
+            create: true,
         )
         let directory = appSupport.appendingPathComponent("com.auricle.app", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

@@ -23,7 +23,7 @@ public actor StageRunner {
     public init(
         stateStore: StateStore,
         stageEventLogger: StageEventLogger,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
     ) {
         self.stateStore = stateStore
         self.stageEventLogger = stageEventLogger
@@ -45,8 +45,8 @@ public actor StageRunner {
 
         var errorMessage: String {
             switch self {
-            case .staleActiveState(let budgetSeconds):
-                return "stale active state: exceeded \(budgetSeconds)s wall-clock budget"
+            case let .staleActiveState(budgetSeconds):
+                "stale active state: exceeded \(budgetSeconds)s wall-clock budget"
             }
         }
     }
@@ -64,7 +64,7 @@ public actor StageRunner {
         stage: PipelineStage,
         meetingID: MeetingID,
         activeState: PipelineState,
-        work: @Sendable () async throws -> StageOutcome
+        work: @Sendable () async throws -> StageOutcome,
     ) async throws -> StageOutcome {
         try await stageEventLogger.record(event: StageEventRecord(
             meetingID: meetingID,
@@ -72,23 +72,23 @@ public actor StageRunner {
             kind: .started,
             occurredAt: ISO8601UTC.string(from: now()),
             targetState: activeState,
-            metadataJSON: "{}"
+            metadataJSON: "{}",
         ))
 
         let outcome = try await work()
         let occurredAt = ISO8601UTC.string(from: now())
 
         switch outcome {
-        case .completed(let targetState, let metadataJSON):
+        case let .completed(targetState, metadataJSON):
             try await stageEventLogger.record(event: StageEventRecord(
                 meetingID: meetingID,
                 stage: stage,
                 kind: .completed,
                 occurredAt: occurredAt,
                 targetState: targetState,
-                metadataJSON: metadataJSON
+                metadataJSON: metadataJSON,
             ))
-        case .failed(let targetState, let errorClass, let errorMessage, let metadataJSON):
+        case let .failed(targetState, errorClass, errorMessage, metadataJSON):
             try await stageEventLogger.record(event: StageEventRecord(
                 meetingID: meetingID,
                 stage: stage,
@@ -96,7 +96,7 @@ public actor StageRunner {
                 occurredAt: occurredAt,
                 targetState: targetState,
                 errorMessage: errorMessage,
-                metadataJSON: buildFailedMetadataJSON(errorClass: errorClass, mergingInto: metadataJSON)
+                metadataJSON: buildFailedMetadataJSON(errorClass: errorClass, mergingInto: metadataJSON),
             ))
         }
         return outcome
@@ -132,15 +132,15 @@ public actor StageRunner {
     private static func staleTransition(for activeState: PipelineState) -> StaleTransition? {
         switch activeState {
         case .transcribing:
-            return StaleTransition(targetState: .transcriptionFailed, errorClass: "stale_active_state")
+            StaleTransition(targetState: .transcriptionFailed, errorClass: "stale_active_state")
         case .reviewingDiarization:
-            return StaleTransition(targetState: .awaitingAttribution, errorClass: "ai_reviewer_timeout")
+            StaleTransition(targetState: .awaitingAttribution, errorClass: "ai_reviewer_timeout")
         case .summarizing:
-            return StaleTransition(targetState: .summarizationFailed, errorClass: "stale_active_state")
+            StaleTransition(targetState: .summarizationFailed, errorClass: "stale_active_state")
         case .published:
-            return StaleTransition(targetState: .awaitingVerification, errorClass: "stale_active_state")
+            StaleTransition(targetState: .awaitingVerification, errorClass: "stale_active_state")
         default:
-            return nil
+            nil
         }
     }
 
@@ -157,7 +157,7 @@ public actor StageRunner {
         meetingID: MeetingID,
         stage: PipelineStage,
         activeState: PipelineState,
-        reason: StaleFailureReason
+        reason: StaleFailureReason,
     ) async throws {
         guard let transition = Self.staleTransition(for: activeState) else {
             throw SynthesizeFailureError.noStaleTransition(activeState: activeState)
@@ -170,7 +170,7 @@ public actor StageRunner {
             occurredAt: ISO8601UTC.string(from: now()),
             targetState: transition.targetState,
             errorMessage: reason.errorMessage,
-            metadataJSON: buildFailedMetadataJSON(errorClass: transition.errorClass, mergingInto: nil)
+            metadataJSON: buildFailedMetadataJSON(errorClass: transition.errorClass, mergingInto: nil),
         ))
     }
 
@@ -217,7 +217,7 @@ public actor StageRunner {
                     meetingID: meetingID,
                     stage: stage,
                     activeState: activeState,
-                    reason: .staleActiveState(budgetSeconds: budgetSeconds)
+                    reason: .staleActiveState(budgetSeconds: budgetSeconds),
                 )
                 log.info("stale-detection sweep synthesized failure", [
                     "meetingID": .publicSafe(meetingID),

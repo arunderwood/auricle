@@ -23,7 +23,7 @@ public struct RetentionTimer: Codable, Equatable, Sendable {
         armedAt: String,
         firesAt: String,
         lastRemindedAt: String? = nil,
-        status: String = "pending"
+        status: String = "pending",
     ) {
         self.meetingID = meetingID
         self.armedAt = armedAt
