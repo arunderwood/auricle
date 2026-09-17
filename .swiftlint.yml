@@ -131,6 +131,13 @@ custom_rules:
       # sits outside AtomicWriter's domain entirely.
       - ".*/Tests/OrchestratorTests/CrashRecoveryTests\\.swift$"
       - ".*/Tests/OrchestratorTests/SubprocessDispatcherTests\\.swift$"
+      # Sets up vault-side state VaultWriter must detect rather than
+      # produce itself: a stray file standing in for meetingsSubdir, a
+      # same-day filename collision, a leftover temp file from an
+      # interrupted prior write. Same rationale as AtomicWriterTests.swift
+      # above — the fixture writes the raw state directly, VaultWriter
+      # under test never does.
+      - ".*/Tests/PersistTests/VaultWriterTests\\.swift$"
 
   log_facade_bypass:
     name: "Log facade bypass"
