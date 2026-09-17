@@ -53,7 +53,7 @@ public struct Log: Sendable {
     /// message assembly — compiles to nothing outside `DEBUG`.
     public func debug(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         #if DEBUG
-        emit(.debug, message, fields)
+            emit(.debug, message, fields)
         #endif
     }
 
@@ -97,10 +97,10 @@ public struct Log: Sendable {
             .sorted { $0.key < $1.key }
             .map { key, value -> String in
                 switch value {
-                case .publicSafe(let stringValue):
-                    return "\(key)=\(stringValue)"
+                case let .publicSafe(stringValue):
+                    "\(key)=\(stringValue)"
                 case .sensitive:
-                    return "\(key)=\(redactionMarker)"
+                    "\(key)=\(redactionMarker)"
                 }
             }
             .joined(separator: " ")

@@ -79,7 +79,7 @@ public struct Telemetry: Codable, Equatable, Sendable {
         transcriptionSuggestionsRejectedCount: Int? = nil,
         transcriptionReviewCostUSD: Double? = nil,
         transcriptionReviewModel: String? = nil,
-        audioRetentionStatusAt30d: String? = nil
+        audioRetentionStatusAt30d: String? = nil,
     ) {
         self.meetingID = meetingID
         self.timeToAttributionReadySeconds = timeToAttributionReadySeconds

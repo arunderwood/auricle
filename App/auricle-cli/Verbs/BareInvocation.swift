@@ -11,7 +11,7 @@ import State
 struct BareInvocation: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "__bare-status",
-        shouldDisplay: false
+        shouldDisplay: false,
     )
 
     func run() async throws {
@@ -28,12 +28,12 @@ struct BareInvocation: AsyncParsableCommand {
             PendingMeetingSummary(
                 id: $0.id,
                 state: $0.state,
-                referenceTimestamp: $0.captureStartedAt ?? $0.createdAt
+                referenceTimestamp: $0.captureStartedAt ?? $0.createdAt,
             )
         }
 
         switch BareInvocationResolver.resolve(pending: summaries) {
-        case .recording(let id, let elapsed):
+        case let .recording(id, elapsed):
             print("Recording \(id) — \(elapsed)")
         case .awaitingAttribution:
             print("Last meeting awaiting attribution: auricle attribute current")

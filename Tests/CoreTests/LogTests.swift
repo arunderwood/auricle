@@ -1,6 +1,6 @@
+@testable import Core
 import Foundation
 import Testing
-@testable import Core
 
 @Test func categoryIsPlumbedFromInitAndSubsystemIsLocked() {
     let log = Log(category: "transcribe")

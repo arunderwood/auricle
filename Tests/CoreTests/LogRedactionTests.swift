@@ -1,11 +1,11 @@
+@testable import Core
 import Foundation
 import Testing
-@testable import Core
 
 @Test func mixedFieldsRedactSensitiveAndKeepPublicSafeVerbatim() {
     let built = Log.buildMessage(
         "request completed",
-        ["statusCode": .publicSafe(200), "authToken": .sensitive("sk-live-abc123")]
+        ["statusCode": .publicSafe(200), "authToken": .sensitive("sk-live-abc123")],
     )
 
     #expect(built.contains("statusCode=200"))
@@ -20,7 +20,7 @@ import Testing
             "meetingId": .publicSafe("01ABC"),
             "attendeeEmail": .sensitive("user@example.com"),
             "durationMs": .publicSafe(4200),
-        ]
+        ],
     )
 
     #expect(built == "meeting persisted attendeeEmail=\(Log.redactionMarker) durationMs=4200 meetingId=01ABC")

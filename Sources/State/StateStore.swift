@@ -129,7 +129,7 @@ public actor StateStore {
         durationMS: Int? = nil,
         errorMessage: String? = nil,
         metadataJSON: String? = nil,
-        metadataSchemaVersion: Int? = nil
+        metadataSchemaVersion: Int? = nil,
     ) async throws -> StageEvent {
         try await writer.write { db in
             var stageEvent = StageEvent(
@@ -140,7 +140,7 @@ public actor StateStore {
                 durationMS: durationMS,
                 errorMessage: errorMessage,
                 metadataJSON: metadataJSON,
-                metadataSchemaVersion: metadataSchemaVersion
+                metadataSchemaVersion: metadataSchemaVersion,
             )
             try stageEvent.insert(db)
             try db.execute(sql: "UPDATE meetings SET state = ? WHERE id = ?", arguments: [targetState, meetingID])
@@ -235,10 +235,10 @@ public actor StateStore {
         try await writer.write { db in
             let placeholders = Array(repeating: "?", count: columns.count).joined(separator: ", ")
             var sql = """
-                INSERT INTO telemetry (\(columns.joined(separator: ", "))) \
-                VALUES (\(placeholders)) \
-                ON CONFLICT(meeting_id)
-                """
+            INSERT INTO telemetry (\(columns.joined(separator: ", "))) \
+            VALUES (\(placeholders)) \
+            ON CONFLICT(meeting_id)
+            """
             if columnsToUpdate.isEmpty {
                 sql += " DO NOTHING"
             } else {

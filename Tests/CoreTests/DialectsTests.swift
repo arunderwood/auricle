@@ -1,11 +1,11 @@
+@testable import Core
 import Foundation
 import Testing
-@testable import Core
 
 @Test func snakeCaseDialectRoundTripsAndUsesSnakeCaseKeys() throws {
     let value = CacheArtifactDialectExample(
         meetingId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-        createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
     )
 
     let data = try JSONEncoder().encode(value)
@@ -21,7 +21,7 @@ import Testing
 @Test func camelCaseDialectRoundTripsAndUsesCamelCaseKeys() throws {
     let value = CLIOutputDialectExample(
         meetingId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-        createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
     )
 
     let data = try JSONEncoder().encode(value)

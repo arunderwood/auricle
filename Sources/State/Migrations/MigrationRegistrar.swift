@@ -10,7 +10,7 @@ enum MigrationRegistrar {
         migrator.registerMigration(Migration001Initial.identifier, migrate: Migration001Initial.migrate)
         migrator.registerMigration(
             Migration002StageEventsMetadataSchemaVersion.identifier,
-            migrate: Migration002StageEventsMetadataSchemaVersion.migrate
+            migrate: Migration002StageEventsMetadataSchemaVersion.migrate,
         )
         return migrator
     }

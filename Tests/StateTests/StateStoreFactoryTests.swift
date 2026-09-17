@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
-import Testing
 @testable import State
+import Testing
 
 /// Exercises `StateStore.production(path:)` and `StateStore.subprocess(path:)`
 /// themselves — the two factory methods the I/O matrix names directly as
@@ -62,7 +62,7 @@ private func makeTestDatabasePath() -> (directory: URL, path: String) {
     let store = try StateStore.production(path: path)
 
     try await store.insertMeeting(
-        Meeting(id: "01REOPENEDPRODUCTIONMEETIN", state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z")
+        Meeting(id: "01REOPENEDPRODUCTIONMEETIN", state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"),
     )
     let fetched = try await store.fetchMeeting(id: "01REOPENEDPRODUCTIONMEETIN")
     #expect(fetched?.id == "01REOPENEDPRODUCTIONMEETIN")
@@ -85,7 +85,7 @@ private func makeTestDatabasePath() -> (directory: URL, path: String) {
 
     let guiStore = try StateStore.production(path: path)
     try await guiStore.insertMeeting(
-        Meeting(id: "01SHAREDPATHMEETINGID00000", state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z")
+        Meeting(id: "01SHAREDPATHMEETINGID00000", state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"),
     )
 
     let subprocessStore = try StateStore.subprocess(path: path)

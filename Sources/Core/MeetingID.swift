@@ -22,5 +22,7 @@ public struct MeetingID: Hashable, Sendable {
 }
 
 extension MeetingID: CustomStringConvertible {
-    public var description: String { rawValue }
+    public var description: String {
+        rawValue
+    }
 }

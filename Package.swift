@@ -6,6 +6,7 @@
 // which Story 1.8 wires into CI so the boundary becomes build-enforced there.
 //
 // MARK: - Deferred to v1.1 (AR-INIT-2)
+
 // Sparkle: https://github.com/sparkle-project/Sparkle.git from: "2.10.0"
 
 import PackageDescription
@@ -57,7 +58,7 @@ let package = Package(
                 .product(name: "TOMLKit", package: "TOMLKit"),
                 .product(name: "ULID", package: "ULID.swift"), // wrapped as `ULIDFormat` — see Sources/Core/ULIDFormat.swift
             ],
-            path: "Sources/Core"
+            path: "Sources/Core",
         ),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/State"),
         .target(name: "Telemetry", dependencies: ["Core", "State", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
@@ -93,7 +94,7 @@ let package = Package(
                 "Core", "TranscriberInterface",
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/WhisperKitTranscriber"
+            path: "Sources/WhisperKitTranscriber",
         ),
         .target(
             name: "WhisperKitDiarizer",
@@ -101,7 +102,7 @@ let package = Package(
                 "Core", "DiarizerInterface",
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/WhisperKitDiarizer"
+            path: "Sources/WhisperKitDiarizer",
         ),
         .target(name: "GoogleCalendarSource", dependencies: ["Core", "CalendarInterface"], path: "Sources/GoogleCalendarSource"),
         .target(name: "VaultGlossary", dependencies: ["Core"], path: "Sources/VaultGlossary"),
@@ -140,5 +141,5 @@ let package = Package(
         .testTarget(name: "PersistTests", dependencies: ["Persist", "TestSupport"], path: "Tests/PersistTests"),
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
         .testTarget(name: "NotificationsTests", dependencies: ["Notifications", "TestSupport"], path: "Tests/NotificationsTests"),
-    ]
+    ],
 )

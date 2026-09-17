@@ -1,8 +1,8 @@
 import ProjectDescription
 
-// Every library product AuricleKit declares except TestSupport — both executables
-// are full composition roots per AR-PAT-5: AuricleApp wires the GUI, auricle-cli
-// exposes every stage per AR-PIPE-1, so both need the complete strategy set.
+/// Every library product AuricleKit declares except TestSupport — both executables
+/// are full composition roots per AR-PAT-5: AuricleApp wires the GUI, auricle-cli
+/// exposes every stage per AR-PIPE-1, so both need the complete strategy set.
 let auricleKitProducts: [TargetDependency] = [
     .package(product: "Core"),
     .package(product: "State"),
@@ -34,7 +34,7 @@ let auricleKitProducts: [TargetDependency] = [
 let project = Project(
     name: "Auricle",
     packages: [
-        .local(path: "..")
+        .local(path: ".."),
     ],
     settings: .settings(
         configurations: [
@@ -43,7 +43,7 @@ let project = Project(
         ],
         // Tuist injects its own build settings unless told not to, which would
         // silently shadow the xcconfigs and make the plain-text files a lie.
-        defaultSettings: .none
+        defaultSettings: .none,
     ),
     targets: [
         .target(
@@ -55,10 +55,10 @@ let project = Project(
             infoPlist: .file(path: "Auricle/Info.plist"),
             sources: ["Auricle/**"],
             copyFiles: [
-                .executables(name: "Embed auricle-cli", subpath: ".", files: [.buildProduct(name: "auricle-cli", codeSignOnCopy: true)])
+                .executables(name: "Embed auricle-cli", subpath: ".", files: [.buildProduct(name: "auricle-cli", codeSignOnCopy: true)]),
             ],
             entitlements: .file(path: "Auricle/Auricle.entitlements"),
-            dependencies: auricleKitProducts + [.target(name: "auricle-cli")]
+            dependencies: auricleKitProducts + [.target(name: "auricle-cli")],
         ),
         .target(
             name: "auricle-cli",
@@ -69,8 +69,8 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             sources: ["auricle-cli/**"],
             dependencies: auricleKitProducts + [
-                .package(product: "ArgumentParser")
-            ]
+                .package(product: "ArgumentParser"),
+            ],
         ),
-    ]
+    ],
 )

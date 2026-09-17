@@ -1,5 +1,5 @@
-import Testing
 @testable import Core
+import Testing
 
 private final class FakeMeetingIDDataSource: MeetingIDDataSource {
     var pool: [MeetingID] = []
@@ -10,8 +10,13 @@ private final class FakeMeetingIDDataSource: MeetingIDDataSource {
         pool.filter { $0.rawValue.hasPrefix(prefix) }
     }
 
-    func currentMeetingID() -> MeetingID? { current }
-    func lastMeetingID() -> MeetingID? { last }
+    func currentMeetingID() -> MeetingID? {
+        current
+    }
+
+    func lastMeetingID() -> MeetingID? {
+        last
+    }
 }
 
 // Fixed, valid (Crockford-alphabet, 26-char) fixture IDs. `idA` and `idB`

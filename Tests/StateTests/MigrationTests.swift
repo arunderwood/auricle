@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
-import Testing
 @testable import State
+import Testing
 
 private func makeTestDatabasePath() -> (directory: URL, path: String) {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -48,13 +48,13 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
             sql: """
             INSERT INTO meetings (id, state, created_at, updated_at)
             VALUES ('01PREMIGRATIONMEETINGID00', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
-            """
+            """,
         )
         try db.execute(
             sql: """
             INSERT INTO stage_events (meeting_id, stage, event, occurred_at)
             VALUES ('01PREMIGRATIONMEETINGID00', 'capture', 'started', '2026-01-01T00:00:00Z')
-            """
+            """,
         )
     }
 
@@ -63,7 +63,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     let backfilledVersion = try queue.read { db in
         try Int.fetchOne(
             db,
-            sql: "SELECT metadata_schema_version FROM stage_events WHERE meeting_id = '01PREMIGRATIONMEETINGID00'"
+            sql: "SELECT metadata_schema_version FROM stage_events WHERE meeting_id = '01PREMIGRATIONMEETINGID00'",
         )
     }
     #expect(backfilledVersion == 1)
@@ -138,7 +138,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
             sql: """
             INSERT INTO meetings (id, state, created_at, updated_at)
             VALUES ('01TESTMEETINGID0000000000', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
-            """
+            """,
         )
     }
     let originalUpdatedAt = try queue.read { db in
@@ -359,7 +359,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     let sql = try queue.read { db in
         try String.fetchOne(
             db,
-            sql: "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_retention_pending_fires_at'"
+            sql: "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_retention_pending_fires_at'",
         )
     }
     let indexSQL = try #require(sql)
@@ -380,19 +380,19 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
             sql: """
             INSERT INTO meetings (id, state, created_at, updated_at)
             VALUES ('01CASCADETESTMEETINGID000', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
-            """
+            """,
         )
         try db.execute(
             sql: """
             INSERT INTO stage_events (meeting_id, stage, event, occurred_at)
             VALUES ('01CASCADETESTMEETINGID000', 'capture', 'started', '2026-01-01T00:00:00Z')
-            """
+            """,
         )
         try db.execute(
             sql: """
             INSERT INTO retention_timers (meeting_id, armed_at, fires_at)
             VALUES ('01CASCADETESTMEETINGID000', '2026-01-01T00:00:00Z', '2026-01-31T00:00:00Z')
-            """
+            """,
         )
         try db.execute(sql: "INSERT INTO telemetry (meeting_id) VALUES ('01CASCADETESTMEETINGID000')")
     }
@@ -403,15 +403,15 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
 
     try queue.read { db in
         let stageEventsCount = try Int.fetchOne(
-            db, sql: "SELECT COUNT(*) FROM stage_events WHERE meeting_id = '01CASCADETESTMEETINGID000'"
+            db, sql: "SELECT COUNT(*) FROM stage_events WHERE meeting_id = '01CASCADETESTMEETINGID000'",
         )
         #expect(stageEventsCount == 0)
         let retentionTimersCount = try Int.fetchOne(
-            db, sql: "SELECT COUNT(*) FROM retention_timers WHERE meeting_id = '01CASCADETESTMEETINGID000'"
+            db, sql: "SELECT COUNT(*) FROM retention_timers WHERE meeting_id = '01CASCADETESTMEETINGID000'",
         )
         #expect(retentionTimersCount == 0)
         let telemetryCount = try Int.fetchOne(
-            db, sql: "SELECT COUNT(*) FROM telemetry WHERE meeting_id = '01CASCADETESTMEETINGID000'"
+            db, sql: "SELECT COUNT(*) FROM telemetry WHERE meeting_id = '01CASCADETESTMEETINGID000'",
         )
         #expect(telemetryCount == 0)
     }
@@ -432,7 +432,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
                 sql: """
                 INSERT INTO stage_events (meeting_id, stage, event, occurred_at)
                 VALUES ('01NONEXISTENTMEETINGID000', 'capture', 'started', '2026-01-01T00:00:00Z')
-                """
+                """,
             )
         }
     }

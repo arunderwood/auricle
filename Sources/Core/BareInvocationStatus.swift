@@ -36,12 +36,12 @@ public enum BareInvocationResolver {
     /// boundary on it.
     public static func resolve(
         pending: [PendingMeetingSummary],
-        now: Date = Date()
+        now: Date = Date(),
     ) -> BareInvocationStatus {
         if let recording = pending.first(where: { $0.state == "recording" }) {
             return .recording(
                 id: recording.id,
-                elapsed: elapsed(since: recording.referenceTimestamp, now: now)
+                elapsed: elapsed(since: recording.referenceTimestamp, now: now),
             )
         }
         if pending.contains(where: { $0.state == "awaiting_attribution" }) {

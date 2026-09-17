@@ -36,7 +36,7 @@ public struct StageEvent: Codable, Equatable, Sendable {
         durationMS: Int? = nil,
         errorMessage: String? = nil,
         metadataJSON: String? = nil,
-        metadataSchemaVersion: Int? = nil
+        metadataSchemaVersion: Int? = nil,
     ) {
         self.id = id
         self.meetingID = meetingID

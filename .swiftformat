@@ -1,0 +1,12 @@
+# Swift API Design Guidelines layout/spacing, matching the pinned toolchain
+# (mise.toml: swiftformat 0.63.0, swift-tools-version 6.3 in Package.swift).
+--swiftversion 6.3
+
+# Backtick-quoted, sentence-form test names would fight AR-PAT-1's camelCase
+# rule for functions, which architecture.md does not carve out an exception
+# for test functions from — every other rule here is an unmodified default.
+--disable swiftTestingTestCaseNames
+
+# Conflicts with swiftlint's default `opening_brace` rule (same-line brace):
+# this rule would move a multiline condition's brace to its own line.
+--disable wrapMultilineStatementBraces

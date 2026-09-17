@@ -3,7 +3,7 @@ import ArgumentParser
 struct DiscardVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "discard",
-        abstract: "Delete cached audio and state for a captured-but-unwanted meeting."
+        abstract: "Delete cached audio and state for a captured-but-unwanted meeting.",
     )
 
     @Argument(help: "Meeting ID.")

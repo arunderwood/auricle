@@ -1,11 +1,11 @@
 import Core
 import GRDB
-import Testing
 @testable import State
 @testable import Telemetry
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 /// A 26-character, Crockford-base32-safe (no `I`/`L`/`O`/`U`) stand-in ULID.
@@ -29,7 +29,7 @@ private func makeMeeting(id: String) -> Meeting {
         meetingID: id.rawValue,
         summarizationPath: "claude_api",
         summarizationModel: "claude-opus-5",
-        costUSD: 0.32
+        costUSD: 0.32,
     ))
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
@@ -50,13 +50,13 @@ private func makeMeeting(id: String) -> Meeting {
         meetingID: id.rawValue,
         summarizationPath: "claude_api",
         summarizationModel: "claude-opus-5",
-        costUSD: 0.32
+        costUSD: 0.32,
     ))
     try await recorder.record(meetingID: id, patch: State.Telemetry(
         meetingID: id.rawValue,
         diarizationSuggestionsCount: 5,
         diarizationSuggestionsAppliedCount: 3,
-        diarizationReviewModel: "claude-haiku-4-5"
+        diarizationReviewModel: "claude-haiku-4-5",
     ))
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
@@ -93,7 +93,7 @@ private func makeMeeting(id: String) -> Meeting {
 
     try await recorder.record(
         meetingID: id,
-        patch: State.Telemetry(meetingID: "wrong-id-should-be-overwritten", costUSD: 0.05)
+        patch: State.Telemetry(meetingID: "wrong-id-should-be-overwritten", costUSD: 0.05),
     )
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))

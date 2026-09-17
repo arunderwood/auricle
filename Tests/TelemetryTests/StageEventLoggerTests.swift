@@ -1,11 +1,11 @@
 import Core
 import GRDB
-import Testing
 @testable import State
 @testable import Telemetry
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 /// A 26-character, Crockford-base32-safe (no `I`/`L`/`O`/`U`) stand-in ULID.
@@ -32,7 +32,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
         stage: .transcribe,
         kind: .started,
         occurredAt: "2026-01-01T00:05:00Z",
-        targetState: .transcribing
+        targetState: .transcribing,
     ))
 
     let events = try await store.fetchStageEvents(meetingID: id.rawValue)
@@ -55,7 +55,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
         kind: .completed,
         occurredAt: "2026-01-01T00:06:00Z",
         targetState: .awaitingAttribution,
-        metadataJSON: "{\"model_id\":\"whisper-large-v3-turbo\"}"
+        metadataJSON: "{\"model_id\":\"whisper-large-v3-turbo\"}",
     ))
 
     let events = try await store.fetchStageEvents(meetingID: id.rawValue)
@@ -79,7 +79,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
         kind: .failed,
         occurredAt: "2026-01-01T00:06:00Z",
         targetState: .transcriptionFailed,
-        errorMessage: "model load failed"
+        errorMessage: "model load failed",
     ))
 
     let events = try await store.fetchStageEvents(meetingID: id.rawValue)
@@ -102,7 +102,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
             meetingID: id,
             stage: .transcribe,
             kind: .started,
-            occurredAt: "2026-01-01T00:05:00Z"
+            occurredAt: "2026-01-01T00:05:00Z",
         ))
     }
     await #expect(throws: StageEventLogger.RecordError.self) {
@@ -110,7 +110,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
             meetingID: id,
             stage: .transcribe,
             kind: .completed,
-            occurredAt: "2026-01-01T00:05:00Z"
+            occurredAt: "2026-01-01T00:05:00Z",
         ))
     }
     await #expect(throws: StageEventLogger.RecordError.self) {
@@ -118,7 +118,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
             meetingID: id,
             stage: .transcribe,
             kind: .failed,
-            occurredAt: "2026-01-01T00:05:00Z"
+            occurredAt: "2026-01-01T00:05:00Z",
         ))
     }
 
@@ -140,7 +140,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
         kind: .retried,
         occurredAt: "2026-01-01T00:07:00Z",
         durationMS: 1500,
-        metadataJSON: "{\"attempt_number\":2}"
+        metadataJSON: "{\"attempt_number\":2}",
     ))
 
     let events = try await store.fetchStageEvents(meetingID: id.rawValue)
@@ -165,7 +165,7 @@ private func makeMeeting(id: String, state: String) -> Meeting {
             stage: .summarize,
             kind: .retried,
             occurredAt: "2026-01-01T00:07:00Z",
-            targetState: .summarizing
+            targetState: .summarizing,
         ))
     }
 

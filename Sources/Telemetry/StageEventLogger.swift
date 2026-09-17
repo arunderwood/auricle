@@ -39,7 +39,7 @@ public struct StageEventRecord: Sendable {
         targetState: PipelineState? = nil,
         durationMS: Int? = nil,
         errorMessage: String? = nil,
-        metadataJSON: String? = nil
+        metadataJSON: String? = nil,
     ) {
         self.meetingID = meetingID
         self.stage = stage
@@ -99,7 +99,7 @@ public actor StageEventLogger {
                 durationMS: event.durationMS,
                 errorMessage: event.errorMessage,
                 metadataJSON: event.metadataJSON,
-                metadataSchemaVersion: Self.currentMetadataSchemaVersion
+                metadataSchemaVersion: Self.currentMetadataSchemaVersion,
             )
         case .retried:
             guard event.targetState == nil else {
@@ -114,8 +114,8 @@ public actor StageEventLogger {
                     durationMS: event.durationMS,
                     errorMessage: event.errorMessage,
                     metadataJSON: event.metadataJSON,
-                    metadataSchemaVersion: Self.currentMetadataSchemaVersion
-                )
+                    metadataSchemaVersion: Self.currentMetadataSchemaVersion,
+                ),
             )
         }
     }

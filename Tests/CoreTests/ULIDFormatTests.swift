@@ -1,6 +1,6 @@
+@testable import Core
 import Foundation
 import Testing
-@testable import Core
 
 private let crockfordAlphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 

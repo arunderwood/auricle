@@ -1,12 +1,12 @@
 import Core
 import Foundation
 import GRDB
-import Testing
 @testable import Orchestrator
 @testable import State
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 /// A 26-character, Crockford-base32-safe (no `I`/`L`/`O`/`U`) stand-in ULID.
@@ -27,7 +27,9 @@ private func isoString(_ date: Date) -> String {
 
 private actor HandledTimersRecorder {
     private(set) var handledMeetingIDs: [String] = []
-    func record(_ meetingID: String) { handledMeetingIDs.append(meetingID) }
+    func record(_ meetingID: String) {
+        handledMeetingIDs.append(meetingID)
+    }
 }
 
 @Test func pollOnceInvokesHandlerOnlyForDuePendingTimers() async throws {
@@ -44,7 +46,7 @@ private actor HandledTimersRecorder {
         meetingID: due,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(-10)),
-        status: "pending"
+        status: "pending",
     ))
 
     try await store.insertMeeting(makeMeeting(id: notYetDue))
@@ -52,7 +54,7 @@ private actor HandledTimersRecorder {
         meetingID: notYetDue,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(3600)),
-        status: "pending"
+        status: "pending",
     ))
 
     try await store.insertMeeting(makeMeeting(id: alreadyFired))
@@ -60,7 +62,7 @@ private actor HandledTimersRecorder {
         meetingID: alreadyFired,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(-10)),
-        status: "fired"
+        status: "fired",
     ))
 
     let scheduler = RetentionScheduler(stateStore: store, now: { fixedNow }) { timer in
@@ -85,7 +87,7 @@ private actor HandledTimersRecorder {
         meetingID: notYetDue,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(60)),
-        status: "pending"
+        status: "pending",
     ))
 
     let scheduler = RetentionScheduler(stateStore: store, now: { fixedNow }) { timer in
@@ -112,7 +114,7 @@ private actor HandledTimersRecorder {
         meetingID: dueA,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(-10)),
-        status: "pending"
+        status: "pending",
     ))
 
     try await store.insertMeeting(makeMeeting(id: dueB))
@@ -120,7 +122,7 @@ private actor HandledTimersRecorder {
         meetingID: dueB,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(-5)),
-        status: "pending"
+        status: "pending",
     ))
 
     let scheduler = RetentionScheduler(stateStore: store, now: { fixedNow }) { timer in
@@ -152,7 +154,7 @@ private actor HandledTimersRecorder {
         meetingID: alwaysDue,
         armedAt: "2026-01-01T00:00:00Z",
         firesAt: isoString(fixedNow.addingTimeInterval(-10)),
-        status: "pending"
+        status: "pending",
     ))
 
     let scheduler = RetentionScheduler(stateStore: store, interval: 0.05, now: { fixedNow }) { timer in

@@ -1,10 +1,10 @@
 import Foundation
 import GRDB
-import Testing
 @testable import State
+import Testing
 
 private func makeStore() throws -> StateStore {
-    try StateStore.forTesting(writer: try DatabaseQueue())
+    try StateStore.forTesting(writer: DatabaseQueue())
 }
 
 private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
@@ -21,7 +21,7 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
         vaultNotePath: nil,
         audioCachePath: "/tmp/01STATESTORETESTMEETING00/audio.wav",
         verifiedAt: nil,
-        retentionPolicy: nil
+        retentionPolicy: nil,
     )
 }
 
@@ -70,7 +70,7 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
         meetingID: "01STATESTORETESTMEETING00",
         stage: "transcribe",
         event: "started",
-        occurredAt: "2026-01-01T00:05:00Z"
+        occurredAt: "2026-01-01T00:05:00Z",
     )
     let inserted = try await store.insertStageEvent(event)
     #expect(inserted.id != nil)
@@ -89,7 +89,7 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
     let timer = RetentionTimer(
         meetingID: "01STATESTORETESTMEETING00",
         armedAt: "2026-01-01T01:00:00Z",
-        firesAt: "2026-01-31T01:00:00Z"
+        firesAt: "2026-01-31T01:00:00Z",
     )
     try await store.insertRetentionTimer(timer)
 
@@ -124,7 +124,7 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
         transcriptionSuggestionsRejectedCount: nil,
         transcriptionReviewCostUSD: nil,
         transcriptionReviewModel: nil,
-        audioRetentionStatusAt30d: "retained"
+        audioRetentionStatusAt30d: "retained",
     )
     try await store.insertTelemetry(telemetry)
 
@@ -132,8 +132,8 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
     #expect(fetched == telemetry)
 }
 
-extension Meeting {
-    fileprivate func with(state: String) -> Meeting {
+private extension Meeting {
+    func with(state: String) -> Meeting {
         var copy = self
         copy.state = state
         return copy

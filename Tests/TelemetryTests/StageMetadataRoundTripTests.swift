@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Telemetry
+import Testing
 
 private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     let encoded = try JSONEncoder().encode(metadata)
@@ -16,7 +16,7 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     let original = StageMetadata.transcribe(TranscribeMeta(
         modelID: "whisper-large-v3-turbo",
         audioDurationSeconds: 1827,
-        transcriptChars: 23847
+        transcriptChars: 23847,
     ))
     #expect(try roundTrip(original) == original)
 }
@@ -28,7 +28,7 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
         outputTokens: 128,
         costUSD: 0.004,
         suggestionsCount: 3,
-        reviewSkipped: false
+        reviewSkipped: false,
     ))
     #expect(try roundTrip(original) == original)
 }
@@ -44,7 +44,7 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
         outputTokens: 0,
         costUSD: 0,
         suggestionsCount: 0,
-        reviewSkipped: true
+        reviewSkipped: true,
     ))
     #expect(try roundTrip(original) == original)
 }
@@ -63,7 +63,7 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
         thinkingTokens: 1200,
         costUSD: 0.32,
         quoteValidationDropCount: 2,
-        groundingMethod: "citations"
+        groundingMethod: "citations",
     ))
     #expect(try roundTrip(original) == original)
 }
@@ -71,7 +71,7 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
 @Test func persistMetaRoundTripsLosslessly() throws {
     let original = StageMetadata.persist(PersistMeta(
         vaultNotePath: "/Users/testuser/ObsidianVault/Meetings/2026-01-01 Tuesday Sync.md",
-        frontmatterSchemaVersion: 1
+        frontmatterSchemaVersion: 1,
     ))
     #expect(try roundTrip(original) == original)
 }

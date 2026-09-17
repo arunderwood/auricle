@@ -10,11 +10,11 @@ import Core
 enum ActiveStageInFlight {
     static func stage(for activeState: PipelineState) -> PipelineStage? {
         switch activeState {
-        case .transcribing: return .transcribe
-        case .reviewingDiarization: return .reviewDiarization
-        case .summarizing: return .summarize
-        case .published: return .notify
-        default: return nil
+        case .transcribing: .transcribe
+        case .reviewingDiarization: .reviewDiarization
+        case .summarizing: .summarize
+        case .published: .notify
+        default: nil
         }
     }
 }
