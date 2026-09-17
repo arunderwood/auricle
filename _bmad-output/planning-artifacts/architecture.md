@@ -93,7 +93,8 @@ The architecture-shaping NFRs:
 
 **Filesystem layout (architectural fixture, not a runtime question):**
 
-- `~/Library/Application Support/com.auricle.app/` — config (TOML or JSON), SQLite database, schema-version markers.
+- `~/.auricle/` — **everything the user is expected to edit**: `config.toml` (FR59). A plain directory, versionable by the user; deliberately not inside `~/Library/`, which is Finder-hidden and awkward to keep under version control.
+- `~/Library/Application Support/com.auricle.app/` — machine-managed operational state only: SQLite database, schema-version markers. Not hand-edited; the interface is `auricle status`.
 - `~/Library/Caches/com.auricle.app/<meeting-id>/` — per-meeting in-flight artifacts: `audio.wav`, `transcript.json`, `diarization.json`, `snippets/speaker_N.wav`, `summary.json`. 0600 permissions (NFR-S3).
 - `~/checkouts/SecondBrain/Meetings/` (configurable, FR35) — output markdown notes with frontmatter contract.
 - macOS Keychain — Anthropic API key, Google OAuth refresh token (NFR-S1).
@@ -751,6 +752,10 @@ CREATE TABLE telemetry (
     summarization_effort_budget TEXT,          -- 'low'|'medium'|'high'|'xhigh'|'max' (named levels only;
                                                 -- no numeric-token-budget option on this model generation's API)
     cost_usd REAL,                             -- summarize stage cost only (Opus); see *_cost_usd siblings below for AI-reviewer costs
+    summarization_prompt_set_hash TEXT,        -- SHA-256 over the prompt files that produced this summary (Decision 3.2).
+                                               -- Operational state, not frontmatter: cross-cutting concern #11 puts model
+                                               -- identifiers in SQLite, and a prompt-set hash is a model identifier's sibling.
+                                               -- Surfaced by `auricle status <id>` per Decision 3.7.
     -- AI-reviewer category telemetry (Decision Group 5; sparse — populated only when corresponding feature runs)
     diarization_suggestions_count INTEGER,         -- count of AI-proposed corrections emitted by reviewer
     diarization_suggestions_applied_count INTEGER, -- count user accepted (per-suggestion Apply or Apply all)
@@ -814,7 +819,7 @@ END;
 | `retention_timers.last_reminded_at`, `status` | GUI retention scheduler | Periodic background task in the GUI |
 | `telemetry.time_to_notification_seconds` | GUI `notify` stage | UPSERT |
 | `telemetry.transcription_wer_estimate` | `transcribe` subprocess | UPSERT |
-| `telemetry.quote_validation_drop_count`, `summarization_path`, `summarization_model`, `summarization_effort_budget`, `cost_usd` | `summarize` subprocess | UPSERT (row may not exist yet) |
+| `telemetry.quote_validation_drop_count`, `summarization_path`, `summarization_model`, `summarization_effort_budget`, `cost_usd`, `summarization_prompt_set_hash` | `summarize` subprocess | UPSERT (row may not exist yet) |
 | `telemetry.attribution_completion_path` | GUI `attribute` stage | UPSERT |
 | `telemetry.diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` subprocess (`DiarizationReviewerStrategy`) | UPSERT; written even when flag is off (count=0, cost=0, model=`'flag_off'`) for sparse-but-explicit telemetry |
 | `telemetry.diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | GUI `attribute` stage (Attribution sheet view model) | UPSERT; debounced incremental writes track user accept/reject actions during the sheet session |
@@ -1245,6 +1250,7 @@ A `metadata_schema_version` column on `stage_events` allows migration of metadat
 | `attribution_completion_path` | `attribute` stage | One of `inline_ui` / `cli_speakers_flag` / `publish_anyway` |
 | `summarization_path` | `summarize` stage | `claude_api` (MVP) or `local_llm` (v1.1+) |
 | `summarization_model`, `summarization_effort_budget`, `cost_usd` | `summarize` stage | From the Claude API response metadata |
+| `summarization_prompt_set_hash` | `summarize` stage | SHA-256 over the resolved prompt files, computed by `SummarizationPromptBuilder` before the call |
 | `diarization_suggestions_count`, `diarization_review_cost_usd`, `diarization_review_model` | `reviewing_diarization` stage (Decision Group 5) | Count of AI-emitted suggestions, Haiku cost (or `0` for local-LLM), model id (or `flag_off`/`local:<name>`) |
 | `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count` | `attribute` stage (Attribution sheet view model writes via UPSERT during sheet session) | Count of user-accepted/rejected AI suggestions; powers Mary's pre-committed kill criteria (Decision 5.7) and the trust-calibration footer (UX spec Step 10 Round-2) |
 | `transcription_suggestions_*` columns | (declared, no MVP writer per Decision 5.5 Phase 3) | Slot reserved for v1.x transcription reviewer |
@@ -1354,10 +1360,20 @@ public enum GroundingMethod: String, Codable {
 #### Decision 3.2: Two grounding strategies — Citations primary, substring as v1.1 + fallback
 
 **`ClaudeCitationsSummarizer` (MVP default):**
-- Calls `messages.create` on `claude-opus-5` with the transcript provided as a Document with `citations: { enabled: true }`
+
+> `[Pn]` markers below and under Decision 3.4 are measured-behaviour findings from
+> [`research/technical-claude-code-agent-sdk-session-capability-2026-09-16/research.md`](research/technical-claude-code-agent-sdk-session-capability-2026-09-16/research.md) — see that document's *Empirical findings* section and source
+> appendix. They are observations against a live API, not published contracts, and each
+> carries a staleness bar there.
+
+- Calls `messages.create` on `claude-opus-5` with the transcript provided as a **custom content document** — `{"type": "document", "source": {"type": "content", "content": [...]}}`, one content block per utterance — with `citations: { enabled: true }`
 - Asks for action items and decisions in structured JSON; each item must include a `citations` array referencing the document
-- Receives Anthropic-constructed `CitationCharLocation` objects with `start_char_index` / `end_char_index` (verify against current API docs at implementation time — these are offsets into the canonical transcript representation that was submitted; encoding TBD by API spec, see canonicalization invariant below)
-- Maps each `CitationCharLocation` directly to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }`
+- Receives Anthropic-constructed `content_block_location` objects with `start_block_index` / `end_block_index` — zero-indexed, exclusive end, pointing at whole utterances. **Measured on the direct API 2026-09-16 [P6][P9].**
+- Maps each block index to the utterance's known character range in the canonical transcript, producing a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }`. auricle performed the segmentation, so the map is internal and exact.
+- **Requests its structured JSON by prompt instruction, not `output_config.format`.** The Messages API returns a 400 for citations combined with `output_config.format` — confirmed live [P9], *"Citations cannot be enabled when output format is set"* — while the prompt-instruction route returns both in one call. This is a hard constraint on the prompt shape, not a style preference.
+- **Each item carries a `source_block_index` field, and the item JSON shape is load-bearing.** [P12] measured two prompt shapes differing only in that field, **replicated 5x with zero variance**: without it the model returned **zero real citations on every run**, satisfying "cite the document" by writing `<cite>…</cite>` markup into a string field; with it the API split the response at JSON value boundaries and attached exactly one real citation to each item's `text` value — **20/20 items correctly grounded across the five runs**. The field is not a stylistic preference in the prompt; removing it removes grounding entirely. Story 3.8's smoke test generalizes this from one fixture to five real transcripts.
+- **Citation→item association is positional and near-exact when citations are present.** The cited response block *is* the item's `text` value, so the mapping is: find the response text block holding an item's text, read that block's citation. The model's own `source_block_index` is a **cross-check, never the grounding** — a model asserting a pointer is the property that makes Citations worth more than the substring path.
+- **A fabricated citation is an ungrounded item and must be dropped.** A response can be well-formed, complete, correct on the facts, and carry citation-shaped prose with no citation objects behind it [P12]. `CitationGroundingValidator` therefore counts **real citation objects**, never a citation-looking field in the model's JSON; zero real citations on a response that requested them raises `SummarizerError.citationsUnavailable` and falls back per Decision 3.3. NFR-R7's hard gate is what makes this safe: an item whose grounding cannot be validated is dropped, not rendered.
 - Validates each pointer via `CitationGroundingValidator` (sanity-checks bounds; well-formed responses always pass)
 
 **`ClaudeSubstringSummarizer` (MVP fallback + v1.1 local-LLM path):**
@@ -1421,8 +1437,16 @@ Fallback is bounded to one attempt. If fallback also fails, meeting transitions 
 **Implementation rules:**
 
 1. The transcribe stage emits a `CanonicalTranscript` value containing the transcript text in a single explicit form: NFC-normalized Unicode, LF line endings, no leading/trailing whitespace per line, speaker labels prefixed as `<Speaker_N>: ` at the start of each utterance (no other formatting).
-2. Character offsets are **UTF-8 byte offsets into the NFC-normalized representation.** This is verified against Anthropic's API spec at implementation time — if Anthropic uses a different convention (UTF-16 code units, codepoints, or graphemes), the canonical representation includes a translation step in `CanonicalTranscript` that exposes the same offset semantics Anthropic returns. (Verify at implementation time; documented as a per-stage `verify` item per Decision 4.5.)
-3. **Build-time contract test** (`tests/CanonicalTranscriptContractTests.swift`): asserts that the same `CanonicalTranscript` value, when serialized to JSON and re-deserialized, produces byte-identical text; that the API-submission representation matches the on-disk representation; and that the substring validator's offset interpretation matches the Citations-validator's offset interpretation. **Build fails if these invariants are violated.**
+2. Character offsets are **UTF-8 byte offsets into the NFC-normalized representation** — and this is now purely auricle's internal convention, with no external contract to honour.
+
+   **Revised 2026-09-16.** This rule previously promised to match whatever unit Anthropic returns, with a translation step as the escape hatch. Measurement killed the premise on both axes: the API returns **Unicode codepoints** against the text **exactly as submitted**, with no server-side normalization, and it publishes no contract for either — the behaviour carries a one-month staleness bar because nothing would announce a change [P2][P8].
+
+   The resolution is not a translation layer but a change of document representation. Submitting the transcript as a **custom content document**, one block per utterance, returns `content_block_location` block indices instead of character offsets [P6][P9]. **The encoding question is deleted rather than translated:** no character index crosses the API boundary in either direction, so Swift chooses the unit and the renderer's unit is the validator's unit by construction. The translation-step escape hatch is retired; it would only return if block-index citations became unavailable.
+3. **Build-time contract test** (`tests/CanonicalTranscriptContractTests.swift`) asserts three properties, all internal — none depends on an Anthropic convention:
+   a. the same `CanonicalTranscript` value, serialized to JSON and re-deserialized, produces byte-identical text;
+   b. the utterance segmentation used to build the API content blocks is the *same* segmentation carried in `CanonicalTranscript`, and block index *N* round-trips to a stable `[start, end)` character range;
+   c. the substring validator resolves into that same character space as the block-index mapping.
+   **Build fails if any is violated.** Property (b) replaces the old "API-submission representation matches the on-disk representation" clause, which presumed the API was handed a flat string.
 4. **Cross-mode fixture test:** golden transcript fixtures with hand-curated expected items run through BOTH grounding strategies (with stubbed LLM responses producing equivalent content via different shapes) and assert byte-identical renderer output. This proves the swap is real, not aspirational.
 
 This is the single most important architectural detail of Group 3. Without it, the dual-strategy approach is unsound; with it, it is genuinely robust.
@@ -1503,7 +1527,7 @@ J1's success criterion is "the user defaults to auricle's notes by month 2." Tha
 
 | Surface | Tier | Content |
 |---|---|---|
-| `auricle status <id>` (MVP) | MVP | Shows `grounding_method` for the meeting, total items, drop count, and a copy-pasteable `log show` invocation that surfaces per-item grounding details (item text + grounding pointer + transcript span text) |
+| `auricle status <id>` (MVP) | MVP | Shows `grounding_method` for the meeting, total items, drop count, `summarization_prompt_set_hash`, and a copy-pasteable `log show` invocation that surfaces per-item grounding details (item text + grounding pointer + transcript span text). The prompt hash is what makes *"why did last Tuesday's note come out badly?"* answerable once the user edits prompts — it says whether the prompt moved when the drop rate did |
 | `auricle logs <id> --stage summarize` (v1.1) | v1.1 | Direct surfacing of per-item grounding details without needing to construct a `log show` command. JSON output with `--json`. |
 | `auricle stats` (v1.1+, FR-equivalent forward-compat) | v1.1+ | Aggregate drop rates / costs / latencies by grounding_method over time |
 | Telemetry in `telemetry` table | MVP | `grounding_method`, `quote_validation_drop_count`, populated per Decision 4.5 |
@@ -2642,7 +2666,7 @@ The GUI spawns the CLI via `Bundle.main.url(forAuxiliaryExecutable: "auricle-cli
 | Vault notes (the user-facing output) | `<vault_path>/<meetings_subdir>/<filename>.md` (Dec 2.5) | Obsidian, the user; (read by `Persist` for `--reattribute`) | `Persist` via `VaultWriter` |
 | Secrets (Anthropic key, Google OAuth refresh token) | macOS Keychain (NFR-S1) | `ClaudeSummarizer/KeychainAPIKey`, `GoogleCalendarSource/GoogleOAuthFlow` | OAuth flow + first-run config setup |
 | Glossary cache | `~/Library/Caches/com.auricle.app/glossary-cache.json` | `Summarize`'s `GlossaryInjector` | `VaultGlossary/VaultGlossaryBuilder` |
-| Configuration | TOML or JSON at `~/Library/Application Support/com.auricle.app/config.toml` | All processes via `Core/Config` | GUI Settings UI; `auricle-cli config set` |
+| Configuration | TOML or JSON at `~/.auricle/config.toml` | All processes via `Core/Config` | GUI Settings UI; `auricle-cli config set` |
 | Logs | `os_log` (subsystem `com.auricle.app`) | `auricle status <id>` (`log show` invocation); macOS Console.app | `Core/Log` facade |
 
 **No data crosses these boundaries by any mechanism other than the ones in the table.** No XPC, no shared memory, no UserDefaults for cross-process state. (UserDefaults may be used for in-process GUI window state — geometry, last-selected meeting ID — but never for state that subprocesses also need to read.)
@@ -2833,7 +2857,7 @@ Every arrow is either:
 #### Configuration Files
 - Repo-level config: `Package.swift`, `.swiftformat`, `.swiftlint.yml`, `.github/workflows/*.yml`, `scripts/*.sh`
 - Per-target config: not used — targets self-describe via `Package.swift`
-- Runtime config (user): `~/Library/Application Support/com.auricle.app/config.toml` (managed by `Core/Config`)
+- Runtime config (user): `~/.auricle/config.toml` (managed by `Core/Config`)
 
 #### Source Organization
 Per step-05 structural rules: one primary type per file, flat layout within each target until a target exceeds ~15 source files. The targets above are sized to stay within that bound; if any exceeds it, it splits rather than introduces subdirectories.

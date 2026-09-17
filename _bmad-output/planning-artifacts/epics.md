@@ -115,8 +115,8 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Configuration & Permissions (FR58–FR60)
 
-- **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity. Includes `diarization_review.enabled` and `diarization_review.model` per FR74.
-- **FR59 [MVP]:** auricle can persist configuration in `~/Library/Application Support/com.auricle.app/` as a structured file (TOML or JSON), separate from secrets which live in Keychain.
+- **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity, and `summarization.prompt_dir` (override directory under `~/.auricle/prompts/`; default is the prompt set bundled with the build). Includes `diarization_review.enabled` and `diarization_review.model` per FR74.
+- **FR59 [MVP]:** auricle can persist user-editable configuration in `~/.auricle/` as a structured file (TOML or JSON), separate from secrets (Keychain, NFR-S1) and from machine-managed operational state (the SQLite database, FR66). Any file the user is expected to edit, extend, or place config into lives under `~/.auricle/`.
 - **FR60 [MVP]:** auricle can detect missing required permissions (Screen Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
 
 #### Operations & Failure Recovery (FR61–FR66)
@@ -132,7 +132,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 - **FR67 [v2+]:** Auto-detect "meeting in progress" by observing running meeting-app processes.
 - **FR68 [v2+]:** Persist speaker voice-print embeddings (via pyannote 3.1 sidecar) and match unlabeled speakers across meetings.
-- **FR69 [v2+]:** Apply meeting-type-specific summarization templates (1:1, standup, external pitch, interview, brainstorm).
+- **FR69 [v2+]:** **Select** a meeting-type-specific summarization template automatically from calendar metadata, from a curated set. Having per-meeting-type prompts is available from MVP via FR58's `summarization.prompt_dir`; what defers is auricle choosing for the user.
 - **FR70 [v2+]:** Produce a "series-overview" auto-aggregated note for recurring meetings.
 - **FR71 [v2+]:** Use chain-of-summarize fallback for very long transcripts (≥90 min) when single-call drift is detected.
 - **FR72 [v2+]:** Use Apple SpeechAnalyzer as a fallback ASR path on macOS 26+.
@@ -275,7 +275,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **AR-SUM-1:** `SummarizerStrategy` protocol with normalized output `SummaryWithGrounding` (containing `summary`, `actionItems`, `decisions`, `groundingMethod`, `cost`). All grounding pointers normalized to `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod }` at validator boundary. Renderer reads `transcript[start..<end]` regardless of source strategy.
 - **AR-SUM-2:** Two MVP grounding strategies: `ClaudeCitationsSummarizer` (primary, Citations API on `claude-opus-5`) and `ClaudeSubstringSummarizer` (fallback + v1.1+ local-LLM path). Both share a single `SummarizationPromptBuilder` (snapshot tests fail build on prompt drift between strategies).
 - **AR-SUM-3:** `SummarizerOrchestrator` mediates fallback (NOT in-strategy retry). Fallback triggers on typed errors (`citationsUnavailable`, `malformedResponse`, `rateLimited`, `featureToggleDisabled`); bounded to one attempt; NFR-C1 cost ceiling applies across primary + fallback.
-- **AR-SUM-4:** Canonicalization invariant — exactly ONE canonical transcript representation: NFC-normalized Unicode, LF line endings, no leading/trailing whitespace per line, speaker labels prefixed `<Speaker_N>: `. Character offsets are UTF-8 byte offsets into the NFC-normalized representation. Build-time contract test (`tests/CanonicalTranscriptContractTests.swift`) and cross-mode fixture tests (golden transcripts run through both strategies producing byte-identical renderer output) fail the build on violation.
+- **AR-SUM-4:** Canonicalization invariant — exactly ONE canonical transcript representation: NFC-normalized Unicode, LF line endings, no leading/trailing whitespace per line, speaker labels prefixed `<Speaker_N>: `. Character offsets are UTF-8 byte offsets into that representation, **an internal convention with no external contract**: the Citations path submits a custom content document (one block per utterance) and receives `content_block_location` block indices, so no character index crosses the API boundary. Build-time contract test (`tests/CanonicalTranscriptContractTests.swift`) asserts round-trip stability, that block index *N* maps to a stable `[start, end)` range under the same segmentation, and that the substring validator resolves into that space; cross-mode fixture tests (golden transcripts through both strategies producing byte-identical renderer output) fail the build on violation.
 - **AR-SUM-5:** Anthropic prompt caching: system prompt + glossary + attendee context use `cache_control` blocks; transcript is never cached (unique per meeting). Smoke-test protocol (Story N hour 1, runs before dogfood): both strategies on ≥5 real captured meetings (≥1 1:1, ≥1 multi-party); default flips to substring if substring catches anything Citations missed. Smoke-test results recorded at `tests/fixtures/smoke-test-results.md`.
 - **AR-SUM-6:** Trust-calibration surfaces (preserving DP2 — no confidence flags in vault): `auricle status <id>` (MVP) shows `grounding_method`, total items, drop count, and a copy-pasteable `log show` invocation. `auricle logs <id> --stage summarize` (v1.1) and `auricle stats` (v1.1+) build on the same `telemetry` columns.
 
@@ -489,7 +489,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 | FR56 | Epic 3 | Glossary scoping by attendees/topics |
 | FR57 | Epic 3 | Glossary injection into summarization prompt |
 | FR58 | Epic 5 + Epic 9 | Initial config scaffold (Ep 5) + full SettingsView (Ep 9) |
-| FR59 | Epic 1 | Config persistence in Application Support / TOML |
+| FR59 | Epic 1 | Config persistence in `~/.auricle/` / TOML |
 | FR60 | Epic 9 (primary) + Epic 5 (mid-capture revocation handling) | Permission detection-on-launch + Doctor surfacing live together in Epic 9 (Winston's "hidden coupling" fix — detection logic and Doctor surface are the same feature). Epic 5 owns mid-capture revocation handling (capture stage's TCC error path) since that's a capture-stage runtime concern. PermissionChecker scaffold lives in Epic 5 (where it's first exercised). |
 | FR61 | Epic 1 | Structured os_log logging per stage |
 | FR62 | Epic 1 | Crash recovery via state-machine reconciliation |
@@ -866,7 +866,7 @@ So that no downstream story reinvents file I/O, ID generation, transcript canoni
 **When** I serialize a `CanonicalTranscript` value to JSON and deserialize it back
 **Then** the round-trip produces byte-identical text per AR-SUM-4
 **And** `CanonicalTranscript` enforces NFC Unicode normalization, LF line endings, no leading/trailing whitespace per line, and `<Speaker_N>: ` prefix at utterance start
-**And** character offsets are UTF-8 byte offsets into the NFC-normalized representation
+**And** character offsets are UTF-8 byte offsets into the NFC-normalized representation (auricle's internal convention; no API contract depends on it per AR-SUM-4)
 **And** `Tests/CoreTests/CanonicalTranscriptContractTests.swift` is the canonical build-time invariant test for AR-SUM-4 (extended with cross-strategy assertions in Epic 3)
 
 **Given** the `Core` target
@@ -876,7 +876,7 @@ So that no downstream story reinvents file I/O, ID generation, transcript canoni
 **And** every JSON-shaped contract type in the codebase has a round-trip test (encode → decode → equality) per AR-PAT-2 enforcement
 
 **Given** the `Core` target
-**When** I read or write the user's TOML config at `~/Library/Application Support/com.auricle.app/config.toml`
+**When** I read or write the user's TOML config at `~/.auricle/config.toml`
 **Then** `Core/Config.swift` provides typed accessors for every config key per FR58 (vault path, meetings_subdir, retention grace window, summarization engine choice, model identifier, effort budget, log verbosity, `diarization_review.enabled`, `diarization_review.model`, `attribution.heuristic_self_preselect`, `attribution.show_coverage_strip`, `attribution.snippet_duration_seconds`, `attribution.max_suggestions`, `attribution.recurring_meeting_threshold`, `self.wikilink`)
 **And** tilde expansion + symlink resolution happens once at config load; the canonical absolute path is what's stored
 **And** secrets (Anthropic API key, Google OAuth refresh token) are NEVER read from or written to this file (Keychain-only per NFR-S1)
@@ -952,7 +952,7 @@ So that every subsequent epic can read/write state without ever needing a schema
 
 **Given** the `telemetry` table is created
 **When** I inspect the schema
-**Then** every wedge-validation + trust-calibration counter column exists per AR-DATA-1 + Decision 4.5 + Decision 5.7: `time_to_attribution_ready_seconds`, `time_to_vault_note_seconds`, `transcription_wer_estimate`, `quote_validation_drop_count`, `attribution_completion_path`, `summarization_path`, `summarization_model`, `summarization_effort_budget`, `cost_usd`, `diarization_suggestions_count`, `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count`, `diarization_review_cost_usd`, `diarization_review_model`, `transcription_suggestions_count`, `transcription_suggestions_applied_count`, `transcription_suggestions_rejected_count`, `transcription_review_cost_usd`, `transcription_review_model`, `audio_retention_status_at_snapshot`
+**Then** every wedge-validation + trust-calibration counter column exists per AR-DATA-1 + Decision 4.5 + Decision 5.7: `time_to_attribution_ready_seconds`, `time_to_vault_note_seconds`, `transcription_wer_estimate`, `quote_validation_drop_count`, `attribution_completion_path`, `summarization_path`, `summarization_model`, `summarization_effort_budget`, `cost_usd`, `summarization_prompt_set_hash`, `diarization_suggestions_count`, `diarization_suggestions_applied_count`, `diarization_suggestions_rejected_count`, `diarization_review_cost_usd`, `diarization_review_model`, `transcription_suggestions_count`, `transcription_suggestions_applied_count`, `transcription_suggestions_rejected_count`, `transcription_review_cost_usd`, `transcription_review_model`, `audio_retention_status_at_snapshot`
 **And** the `transcription_*` columns are declared but sparse (no MVP writer per Decision 5.5 Phase 3); their existence is the schema-stable contract
 **And** **no subsequent epic needs a migration to add any of these columns** — Amelia's Story 1 blocker is satisfied
 
@@ -1354,7 +1354,7 @@ So that the renderer downstream is grounding-method-agnostic and substituting on
 **When** I inspect its structure
 **Then** it carries: `schemaVersion: Int = 1`, `summary: String` (one-paragraph narrative), `actionItems: [GroundedItem]`, `decisions: [GroundedItem]`, `groundingMethod: GroundingMethod`, `cost: SummarizerCost` per AR-SUM-1
 **And** `GroundedItem` has `text: String` + `grounding: GroundingPointer` (always the normalized shape regardless of which strategy produced it)
-**And** `GroundingPointer` has `transcriptStart: Int` + `transcriptEnd: Int` (UTF-8 byte offsets per Decision 3.4) + `sourceMethod: GroundingMethod` (telemetry only, NOT a control flag for downstream code)
+**And** `GroundingPointer` has `transcriptStart: Int` + `transcriptEnd: Int` (UTF-8 byte offsets into the canonical transcript per Decision 3.4 — auricle's own unit, not an echo of an API convention) + `sourceMethod: GroundingMethod` (telemetry only, NOT a control flag for downstream code)
 **And** `GroundingMethod` enum is `.citations` or `.substring`
 **And** there is **no separate "raw response" field** in any contract type — strategies translate from their own raw API output to the normalized shape inside their own implementation per AR-SUM-1
 
@@ -1374,18 +1374,18 @@ So that the renderer downstream is grounding-method-agnostic and substituting on
 
 ---
 
-### Story 3.2: SummarizationPromptBuilder — Shared Skeleton + Glossary Injection + Prompt-Drift Snapshot Tests
+### Story 3.2: SummarizationPromptBuilder — File-Backed Prompt Set + Glossary Injection + Drift Snapshot Tests
 
 As the single user,
-I want a single `Summarize/SummarizationPromptBuilder.swift` that generates the prompt shared by both Claude strategies (Citations and substring), with build-time snapshot tests that fail if the two strategies' prompts drift apart in the shared portions,
-So that the dual-strategy approach stays genuinely equivalent and not just aspirational.
+I want `Summarize/SummarizationPromptBuilder.swift` to **compose** the prompt from markdown files on disk rather than assembling it from Swift string literals — a shipped default set in-repo plus an optional user override directory — with snapshot tests over the shipped set,
+So that I can change how my notes are summarized by editing a file instead of editing Swift and rebuilding, while the equivalence guarantee between the two strategies survives where it means something.
 
 **Acceptance Criteria:**
 
 **Given** the `Summarize` target
-**When** I call `SummarizationPromptBuilder.build(transcript:, glossary:, attendees:, mode: .citations | .substring)`
+**When** I call `SummarizationPromptBuilder.build(transcript:, glossary:, attendees:, mode: .citations | .substring, promptDir:)`
 **Then** the builder generates: a stable system prompt declaring the rules per Decision 3.5 (every action item assigned to a specific person; every item supported by a verbatim quote; omit items without verbatim grounding; use glossary spellings; output one-paragraph summary then arrays); a glossary block in `[[wikilink]]` form (matches vault rendering, reduces post-processing); attendee context formatting; the transcript itself
-**And** the **shared portions** (system prompt, glossary, attendee context) are byte-identical between the two modes
+**And** the **shared portions** (system prompt, glossary, attendee context) are byte-identical between the two modes — **structurally, because both modes read the same `system.md`**, not because a test compares two code paths
 **And** the **mode-specific portions** differ only in: Citations mode adds *"Use Anthropic Citations to ground each item"*; substring mode adds *"Each item must include a `source_transcript_quote` field reproducing the exact transcript text, character-for-character including punctuation. Do not normalize, expand contractions, or remove disfluencies."*
 
 **Given** the prompt-caching strategy per AR-SUM-5
@@ -1400,12 +1400,26 @@ So that the dual-strategy approach stays genuinely equivalent and not just aspir
 **And** glossary terms are wrapped in `[[wikilink]]` form even in the prompt
 **And** glossary token counts are bounded (~200 tokens typical when scoped per FR56; Story 3.12 enforces scoping)
 
+**Given** the two-tier prompt set
+**When** the builder resolves which files to read
+**Then** the **shipped default set** lives in-repo and is bundled with the build: `Prompts/summarize/system.md`, `citations.md`, `substring.md`
+**And** the **user override set** lives at `~/.auricle/prompts/summarize/` per FR59, resolved from `summarization.prompt_dir` (FR58), and is used file-by-file when present
+**And** `auricle summarize <id> --prompt-dir <path>` overrides both for a single run — this is the prompt-iteration loop, and it needs no rebuild
+**And** the override directory is **never** read by the test suite
+
 **Given** the build-time snapshot tests
 **When** I run `Tests/SummarizeTests/PromptBuilderSnapshotTests.swift`
-**Then** snapshots in `Tests/SummarizeTests/Snapshots/prompts/` capture both modes' outputs against a canned `(transcript, glossary, attendees)` fixture
-**And** the test asserts that the shared portions of the two snapshots are byte-identical
-**And** any drift between the two strategies' prompts in shared portions **fails the build** per AR-SUM-5
+**Then** snapshots in `Tests/SummarizeTests/Snapshots/prompts/` capture both modes' composed output against a canned `(transcript, glossary, attendees)` fixture, **using the shipped default set only**
+**And** the test asserts the composed output matches the snapshot, catching unintended changes to the shipped prompts
 **And** the snapshots are regenerated only when an explicit prompt change is made (not auto-overwritten in CI)
+**And** the test does **not** attempt to assert byte-identity between the two modes' shared portions — that property is now structural (one file, read twice) rather than a thing two code paths could violate
+**And** a golden-file test is never pointed at the user override directory: a test over a file the user edits fails on every edit, which is friction on the loop the test exists to guard
+
+**Given** prompt provenance (Decision 3.2 / Decision 3.7)
+**When** the builder finishes composing
+**Then** it computes a SHA-256 over the resolved prompt files and returns it alongside the prompt
+**And** the hash is written to `telemetry.summarization_prompt_set_hash` by the summarize stage (Story 3.7) and surfaced by `auricle status <id>`
+**And** `auricle doctor` (Epic 9) warns when `summarization.prompt_dir` points at a directory that is not under version control — a hash whose bytes were never kept is worse than no hash, because it looks like an answer
 
 ---
 
@@ -1464,7 +1478,7 @@ So that the substring path serves as both the v1.1+ local-LLM path's contract (F
 **When** I call `validate(quote: String, in: CanonicalTranscript)`
 **Then** the validator performs literal substring search in the canonical NFC-normalized transcript per AR-SUM-4
 **And** if the quote is not found verbatim, the item is **dropped** with the reason logged at `warn` level and `telemetry.quote_validation_drop_count` incremented per NFR-R7
-**And** if the quote is found, `transcriptStart` / `transcriptEnd` are UTF-8 byte offsets into the NFC-normalized representation (per Decision 3.4 — same offset semantics as Citations strategy)
+**And** if the quote is found, `transcriptStart` / `transcriptEnd` are UTF-8 byte offsets into the NFC-normalized representation (per Decision 3.4 — the same character space the Citations strategy's block-index mapping resolves into)
 
 **Given** the strategy returns
 **When** the orchestrator inspects the result
@@ -1489,13 +1503,16 @@ So that Citations is the MVP default for FR29 grounding (per Decision 3.6 smoke-
 **When** I call `summarize(transcript:, glossary:, config:)`
 **Then** the implementation calls `messages.create` on `claude-opus-5` with the transcript provided as a Document with `citations: { enabled: true }` per Decision 3.2
 **And** the prompt is from `SummarizationPromptBuilder.build(..., mode: .citations)` from Story 3.2
-**And** the response includes Anthropic-constructed `CitationCharLocation` objects with `start_char_index` / `end_char_index`
-**And** each `CitationCharLocation` is mapped directly to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }` by `CitationGroundingValidator.validate(citation:in:)`
+**And** the transcript is submitted as a **custom content document** (`source.type == "content"`), one content block per utterance, using the same segmentation `CanonicalTranscript` carries
+**And** the structured JSON is requested **by prompt instruction, not `output_config.format`** — the Messages API returns 400 for citations plus `output_config.format` (*"Citations cannot be enabled when output format is set"*), while the prompt-instruction route returns both in one call
+**And** the response includes Anthropic-constructed `content_block_location` objects with `start_block_index` / `end_block_index` (zero-indexed, exclusive end)
+**And** each block index is mapped to that utterance's `[start, end)` character range in the canonical transcript, producing a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .citations }` via `CitationGroundingValidator.validate(citation:in:)`
 
 **Given** `CitationGroundingValidator`
-**When** I call `validate(citation: CitationCharLocation, in: CanonicalTranscript)`
-**Then** the validator sanity-checks bounds: `start_char_index >= 0`, `end_char_index <= transcript.byteCount`, `start_char_index < end_char_index`
-**And** well-formed Citations responses always pass (Anthropic guarantees the offsets map into the document submitted)
+**When** I call `validate(citation: CitationBlockLocation, in: CanonicalTranscript)`
+**Then** the validator sanity-checks bounds: `start_block_index >= 0`, `end_block_index <= transcript.utteranceCount`, `start_block_index < end_block_index`
+**And** a block index out of range is a malformed response, not a clamp — auricle segmented the document, so an out-of-range index means the response does not describe what was sent
+**And** well-formed Citations responses always pass — a block index is valid by construction when the response describes the document auricle sent; unlike a character offset, there is no encoding convention that could make a well-formed response unmappable
 **And** if Anthropic returns a malformed Citations response (empty array when items are present, out-of-bounds offsets, structurally bad payload), the validator throws `SummarizerError.malformedResponse` (triggers fallback per Decision 3.3)
 **And** if Anthropic returns no Citations data when Citations was requested, throws `SummarizerError.citationsUnavailable` (triggers fallback)
 
@@ -1593,8 +1610,8 @@ So that the stage runs as a subprocess (per AR-PIPE-1 — heavy isolation needed
 ### Story 3.8: Decision 3.6 Smoke-Test Execution + Decision-Rule Lock-In
 
 As the single user,
-I want the smoke-test protocol per Decision 3.6 to execute as the FIRST hour of Story 3.x's implementation work, picking the MVP default validator (Citations or substring) before dogfood begins,
-So that the default-validator choice is made empirically against real captured meetings — not deferred to "dogfood guesswork" and not over-thought before any code exists.
+I want the smoke-test protocol per Decision 3.6 to execute as the FIRST hour of Story 3.x's implementation work, picking the MVP default validator (Citations or substring) before dogfood begins — **with the comparison axis parameterised rather than hard-coded to "strategy"**,
+So that the default-validator choice is made empirically against real captured meetings, and the same rig later answers *"is prompt B better than prompt A on my meetings?"* without being rewritten.
 
 **Acceptance Criteria:**
 
@@ -1626,11 +1643,13 @@ So that the default-validator choice is made empirically against real captured m
 
 ---
 
-### Story 3.9: Eval Harness — Frozen Transcripts + Regression Tests
+### Story 3.9: Pipeline Regression Harness — Frozen Transcripts + Stubbed Responses
 
 As the single user,
 I want `Tests/SummarizeTests/Fixtures/eval/` with frozen transcripts + expected-quote-grounding assertions running on every PR via CI,
-So that summarization quality is measured continuously (not just at one-time smoke-test gate), and Epic 3's load-bearing slip risk (Mary's "highest-risk epic") is caught by automation before Epic 4 layers on real audio.
+So that regressions in the **validator, mapping, and renderer** are caught by automation before Epic 4 layers on real audio.
+
+**Scope note — this harness does not measure prompt quality, and must not be extended to.** Its acceptance criteria specify *stubbed* Anthropic responses: the same fixture returns the same bytes regardless of what the prompt says, so a prompt change cannot move it. That determinism is the point and is what keeps it CI-safe per NFR-M5 and budget hygiene. Prompt comparison belongs to Story 3.8's rig, whose axis is parameterised for exactly that.
 
 **Acceptance Criteria:**
 
@@ -1750,7 +1769,9 @@ So that the glossary is injected as context into the summarization prompt for te
 
 **Given** the `Summarize` target's `GlossaryInjector`
 **When** I call `GlossaryInjector.scope(_ glossary: Glossary, forMeeting: MeetingForFrontmatter)`
-**Then** scoping reduces the glossary to terms relevant to the current meeting's attendees and topics per FR56 (≥1 attendee match → keep; ≥1 mention in transcript → keep; otherwise drop)
+**Then** scoping reduces the glossary to terms relevant to the current meeting's attendees and topics per FR56
+**And** the transcript-mention test is **fuzzy, not exact** — an exact-match rule drops precisely the terms the feature exists to correct, because a term the ASR mangled (`meshcore` → "mesh core") has no exact mention to match; the implementation may use a fuzzy/phonetic match, or keep People and Projects unconditionally and scope only Concepts
+**And** a test fixture asserts this directly: a glossary term whose transcript appearance is misspelled **survives** scoping
 **And** the scoped glossary token count is bounded ~200 tokens typical (vs. unscoped vault-wide ~5000+ tokens) per Decision 3.5
 
 **Given** the `Summarize` stage from Story 3.7
@@ -2378,7 +2399,7 @@ So that **Day-1 trust is the gate to Day-30** (Sally's emotional contract framin
 **Acceptance Criteria:**
 
 **Given** the user launches auricle for the first time on a fresh Mac
-**When** the app detects no prior config (`~/Library/Application Support/com.auricle.app/config.toml` doesn't exist or is empty)
+**When** the app detects no prior config (`~/.auricle/config.toml` doesn't exist or is empty)
 **Then** `OnboardingCoordinator` presents the Welcome view in the main window: *"Let's get auricle set up — 4 quick steps"* per UX-DR41
 **And** the view explains what the 4 steps are (Mic, Screen Recording, Notifications, Configure) without launching any TCC dialogs yet — the user clicks Next when ready
 
@@ -2394,7 +2415,7 @@ So that **Day-1 trust is the gate to Day-30** (Sally's emotional contract framin
 
 **Given** onboarding completes
 **When** all 4 steps finish (or the user explicitly skips optional steps)
-**Then** `OnboardingCoordinator` writes the final config to `~/Library/Application Support/com.auricle.app/config.toml` per FR59
+**Then** `OnboardingCoordinator` writes the final config to `~/.auricle/config.toml` per FR59
 **And** runs `auricle doctor` once silently; the result feeds the in-window banner (Epic 6) only if anything failed
 **And** the main window shows the empty meeting list with the centered text *"Click ⏺ Record to capture your first meeting"* per UX-DR43
 
@@ -3557,7 +3578,7 @@ So that I have full configuration control without leaving the main workflow.
 
 **Given** any field is edited
 **When** the user moves focus away (commit)
-**Then** auto-save fires per UX-DR48 — config writes to `~/Library/Application Support/com.auricle.app/config.toml` immediately
+**Then** auto-save fires per UX-DR48 — config writes to `~/.auricle/config.toml` immediately
 **And** changes take effect on next pipeline invocation per NFR-M6 — no app restart required
 
 **Given** the API key field
