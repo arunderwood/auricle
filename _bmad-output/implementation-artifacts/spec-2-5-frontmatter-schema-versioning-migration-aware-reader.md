@@ -2,7 +2,7 @@
 title: 'Frontmatter Schema Versioning + Migration-Aware Reader'
 type: 'feature'
 created: '2026-09-17'
-status: 'blocked'
+status: 'done'
 baseline_revision: 'de4873fa37f43da1be0143b5f7cb22d50426c317'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -127,3 +127,5 @@ FrontmatterRenderer, built on Yams.compose + Node accessors rather
 than Yams.load to avoid its tag-driven Date coercion of the schema's
 one unquoted scalar. Not yet wired into PersistStage or the CLI.
 ```
+
+**Resolution:** The user unlocked 1Password; `git commit` succeeded as commit `a2ec64d300b1fb5e531c7ff87943b7fb6bef065e` on branch `claude/epic-2-stories-2-4-2-5-efc114`. All 4 staged files landed together. No code changes were needed — the blocker was purely the commit-signing credential, as diagnosed above.
