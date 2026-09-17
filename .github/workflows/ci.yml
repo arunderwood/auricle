@@ -103,6 +103,24 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-
 
+      # Xcode's resolved working copies, which `tuist generate` recreates for
+      # all eleven packages on every run — the shared fetch cache above only
+      # spares it the network, not the checkout, which is the ~45s half.
+      # The path is hash-addressed, but the hash derives from the workspace
+      # path, and in CI that is a fixed /Users/runner/work/auricle/auricle,
+      # so it is stable from run to run here even though it would not be
+      # across developer machines. Only SourcePackages is matched, never the
+      # Build/ directory beside it, so no compiled product is cached.
+      #
+      # No restore-keys: a near-miss would restore working copies resolved
+      # against a different Package.resolved. The shared fetch cache already
+      # covers the partial-match case, and it can do so safely because bare
+      # mirrors carry no resolved state.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/Auricle-*/SourcePackages
+          key: xcode-sourcepackages-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
+
       - run: scripts/check.sh app
 
       # AR-INIT-4: a committed generated project is a regression — Tuist
