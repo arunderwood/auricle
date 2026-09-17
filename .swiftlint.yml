@@ -184,14 +184,25 @@ custom_rules:
       A direct JSONDecoder().decode(...) on a transcript payload skips the
       NFC/LF/`<Speaker_N>:`/byte-offset normalization later stages and
       quote-grounding depend on being applied uniformly.
-    regex: 'JSONDecoder\(\)\.decode\([^)]*[Tt]ranscript'
+    regex: 'JSONDecoder\(\)\.decode\(\s*+(?!\[?CanonicalTranscript\]?\.self\b)[^)]*[Tt]ranscript'
     match_kinds:
       - identifier
       - keyword
     severity: error
-    # No exclusion list: no canonicalization-layer file exists yet in this
-    # tree (Sources/State/CanonicalTranscript* per deferred-work.md:13-15).
-    # A future story adds its file here once that layer exists.
+    # `CanonicalTranscript.self` (or an array of it) is exempted because it
+    # is the correct decode *target* for a transcript payload, not because
+    # decoding alone performs normalization: the type (Story 3.1, Sources/
+    # Core/CanonicalTranscript.swift) is a bare Codable struct today — NFC/
+    # LF enforcement and offset validation are still Story 3.5's scope.
+    # `\s*+` is possessive, not greedy-with-backtracking: a plain `\s*`
+    # lets the engine give back one whitespace character when the lookahead
+    # blocks it at the fully-consumed position, after which `[^)]*` can
+    # walk back in and match the "Transcript" that is itself a substring of
+    # "CanonicalTranscript" — silently defeating the exemption on any
+    # multi-line call. Possessive `\s*+` never gives characters back, so the
+    # lookahead is only ever evaluated at the one true anchor position. This
+    # regex only exempts that literal target; any other decode call with
+    # "Transcript" in its target type still trips the rule.
 
   telemetry_sql_bypass:
     name: "stage_events/telemetry SQL bypass"
