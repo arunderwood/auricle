@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "ami_meeting",
+    "title": "AMI Meeting Corpus ES2002b (scenario design meeting, session b, functional design)",
+    "origin": "https://github.com/Yale-LILY/QMSum/blob/main/data/Product/all/ES2002b.json",
+    "license": "CC BY 4.0",
+    "attribution": "See NOTICE.md in the parent directory."
+  },
+  "speakers": {
+    "Speaker_1": "Project Manager",
+    "Speaker_2": "Marketing",
+    "Speaker_3": "Industrial Designer",
+    "Speaker_4": "User Interface"
+  },
+  "action_items": [
+    {
+      "text": "The Industrial Designer will think about the components concept for the next working session.",
+      "quote": "for uh our Industrial Designer, you're gonna be thinking about the components concept.",
+      "transcript_start": 39005,
+      "transcript_end": 39091
+    },
+    {
+      "text": "The User Interface Designer will think about the user interface for the next working session.",
+      "quote": "User Interface Designer gonna be thinking about our user interface",
+      "transcript_start": 39095,
+      "transcript_end": 39161
+    },
+    {
+      "text": "Marketing will do trend watching for the next working session.",
+      "quote": "and marketing you're gonna be thinking about trend watching.",
+      "transcript_start": 39163,
+      "transcript_end": 39223
+    },
+    {
+      "text": "The project manager (Speaker_1) will put the minutes of this meeting into the project documents folder.",
+      "quote": "so I'll be putting the minutes of this uh this meeting into the project documents folder",
+      "transcript_start": 38744,
+      "transcript_end": 38832
+    }
+  ],
+  "decisions": [
+    {
+      "text": "Target the product at the fifteen to thirty five age bracket.",
+      "quote": "Are we all happy about the idea of um aiming the product at um the fifteen to thirty five bracket?",
+      "transcript_start": 35969,
+      "transcript_end": 36067
+    },
+    {
+      "text": "Keep the function set to the most basic: on/off, channel up/down, volume up/down, and direct channel selection by number.",
+      "quote": "the the most basic stuff possible. Um on off, up and down channels, up and down volume and uh skip to a channel.",
+      "transcript_start": 36281,
+      "transcript_end": 36393
+    },
+    {
+      "text": "Stay with regular batteries rather than a rechargeable/charging-dock design.",
+      "quote": "Okay, so just stick to to regular",
+      "transcript_start": 35563,
+      "transcript_end": 35596
+    },
+    {
+      "text": "Adopt the three-bucket categorisation of controls (audio, video, device) as the working frame.",
+      "quote": "that we'll u use this idea David's proposed, where we think of these three sort of buckets",
+      "transcript_start": 39670,
+      "transcript_end": 39760
+    }
+  ],
+  "targets": {
+    "min_recall": 0.8,
+    "max_false_keeps": 1
+  },
+  "notes": "Fairly clear on the three or four settled points (target age group, basic function set, regular batteries, three control buckets), and the wrap-up gives role-level assignments for the next working session; individual commitments are otherwise thin. Left out: speech recognition (explicitly deferred, 'if we can'), infra-red and TV-only (company requirements or PM suggestion, not group-agreed), mute button (one participant's suggestion, only tacitly accepted), and the hidden-drawer/grouped controls idea (floated, only later folded into the buckets decision). The batteries decision is settled by the project manager's 'just stick to to regular' and a 'Yeah.'; the age-bracket quote is the proposing question, with the agreement in the next utterance."
+}

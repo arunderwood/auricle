@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "ami_meeting",
+    "title": "AMI Meeting Corpus ES2002a (scenario design meeting, session a, kickoff)",
+    "origin": "https://github.com/Yale-LILY/QMSum/blob/main/data/Product/all/ES2002a.json",
+    "license": "CC BY 4.0",
+    "attribution": "See NOTICE.md in the parent directory."
+  },
+  "speakers": {
+    "Speaker_1": "Project Manager",
+    "Speaker_2": "Marketing",
+    "Speaker_3": "Industrial Designer",
+    "Speaker_4": "User Interface"
+  },
+  "action_items": [
+    {
+      "text": "Speaker_3 (industrial designer) will work on the actual working design of the remote before the next meeting.",
+      "quote": "as the industrial designer, you're gonna be working on you know the actual working design of it",
+      "transcript_start": 14515,
+      "transcript_end": 14610
+    },
+    {
+      "text": "Speaker_4 (user interface) will work on the technical functions, i.e. what the remote will actually do, before the next meeting.",
+      "quote": "for user interface, technical functions, I guess that's you know like what we've been talking about, what it'll actually do.",
+      "transcript_start": 14680,
+      "transcript_end": 14804
+    },
+    {
+      "text": "Speaker_2 (marketing) will think about the requirements the remote has to fulfil before the next meeting.",
+      "quote": "marketing executive, you'll be just thinking about what it actually what, you know, what requirements it has to has to fulfil",
+      "transcript_start": 14815,
+      "transcript_end": 14940
+    }
+  ],
+  "decisions": [],
+  "targets": {
+    "min_recall": 0.8,
+    "max_false_keeps": 1
+  },
+  "notes": "Kick-off meeting with essentially no firm decisions; the only clear commitments are the three role-based tasks the project manager assigns in the wrap-up. I left out the floated ideas (combine many devices in one remote, extra functions, find-my-remote beep, touch screen) since none were explicitly settled, the next-meeting time, and the emailed instructions (no one commits to a task)."
+}

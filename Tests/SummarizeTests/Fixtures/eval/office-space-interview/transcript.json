@@ -1,0 +1,130 @@
+{
+  "text": "Speaker_1: Aha! All right. We were just talking about you. You must be Peter Gibbons. Uh huh. Terrific. I'm Bob Slydell and this is my associate, Bob Porter.\nSpeaker_2: Hi, Bob. Bob.\nSpeaker_3: Why don't you grab a seat and join us for a minute?\nSpeaker_1: Y'see, what we're trying to do here, we're just trying to get a feel for how people spend their day. So, if you would, would you just walk us through a typical day for you?\nSpeaker_2: Yeah.\nSpeaker_1: Great.\nSpeaker_2: Well, I generally come in at least fifteen minutes late. I use the side door, that way Lumbergh can't see me. Uh, and after that, I just sorta space out for about an hour.\nSpeaker_3: Space out?\nSpeaker_2: Yeah. I just stare at my desk but it looks like I'm working. I do that for probably another hour after lunch too. I'd probably, say, in a given week, I probably do about fifteen minutes of real, actual work.\nSpeaker_1: Uh, Peter, would you be a good sport and indulge us and tell us a little more?\nSpeaker_2: Let me tell you something about TPS reports...\nSpeaker_2: The thing is, Bob, it's not that I'm lazy. It's just that I just don't care.\nSpeaker_3: Don't, don't care?\nSpeaker_2: It's a problem of motivation, all right? Now, if I work my ass off and Initech ships a few extra units, I don't see another dime. So where's the motivation? And here's another thing, Bob. I have eight different bosses right now!\nSpeaker_1: I beg your pardon?\nSpeaker_2: Eight bosses.\nSpeaker_1: Eight?\nSpeaker_2: Eight, bob. So that means when I make a mistake, I have eight different people coming by to tell me about it. That's my real motivation - is not to be hassled. That and the fear of losing my job, but y'know, Bob, it will only make someone work hard enough not to get fired.\nSpeaker_1: Bear with me for a minute.\nSpeaker_2: Ok.\nSpeaker_1: Believe me, this is hypocritical. But what if you were offered some kind of stock option and equity sharing program?\nSpeaker_2: I don't know. I guess. Listen, I'm gonna go. It's been really nice talking to be of you guys.\nSpeaker_1: Absolutely. It's all on this side of the table, trust me.\nSpeaker_2: Good luck with your layoffs. I hope your firings go really well.\nSpeaker_1: Wow.",
+  "utterances": [
+    {
+      "speaker_label": "Speaker_1",
+      "start": 0,
+      "end": 157
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 158,
+      "end": 182
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 183,
+      "end": 245
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 246,
+      "end": 429
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 430,
+      "end": 446
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 447,
+      "end": 464
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 465,
+      "end": 647
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 648,
+      "end": 669
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 670,
+      "end": 888
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 889,
+      "end": 978
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 979,
+      "end": 1036
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1037,
+      "end": 1124
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 1125,
+      "end": 1154
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1155,
+      "end": 1394
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1395,
+      "end": 1424
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1425,
+      "end": 1449
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1450,
+      "end": 1467
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1468,
+      "end": 1752
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1753,
+      "end": 1790
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1791,
+      "end": 1805
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1806,
+      "end": 1933
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1934,
+      "end": 2038
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2039,
+      "end": 2107
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 2108,
+      "end": 2183
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2184,
+      "end": 2199
+    }
+  ]
+}

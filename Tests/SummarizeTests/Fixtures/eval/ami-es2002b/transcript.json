@@ -1,0 +1,2990 @@
+{
+  "text": "Speaker_1: Is that alright now? Okay. Sorry? Okay, everybody all set to start the meeting? Okay, we've got half an hour for this one um to uh discuss the um functional design.\nSpeaker_2: Could you plug me in?\nSpeaker_2: Okay. Thanks.\nSpeaker_1: All ready to go? Okay.\nSpeaker_2: Okay.\nSpeaker_1: Um so hopefully you've all been working away, and I've put the minutes of the last meeting in the project folder. Um so I guess just to to recap on uh what we did last time. Um kind of uh got to know each other a little bit and uh got familiar with all the equipment and started to discuss um a bit about the project, you know, cost-wise how much how much money we had to s Um just want to tell you that you have three new requirements, which is the The first one is that um uh the company's decided that teletext is outdated uh because of how popular the internet is. Nobody uses teletext very much anymore, so we don't really need to consider that in the functionality of the of the remote control.\nSpeaker_2: 'Kay.\nSpeaker_1: Um they've also suggested that we um we only use the remote control to control the television, not the V_C_R_, D_V_D_ or anything else. I think the worry is that if the project becomes too complex then it'll affect um how long it takes us to get it into into production, the time to market. So um, we're just gonna keep it simple and it'll just control the T_V_.\nSpeaker_2: Okay.\nSpeaker_1: And the other thing was that the company want the corporate colour and slogan to be implemented in the new design. Um I'm not entirely sure what the corporate colour is. It might be yellow, because there seems to be a lot of yellow everywhere.\nSpeaker_2: And the slogan, like the actual written slogan, or just to embody the idea of the slogan?\nSpeaker_1: Well that's the thing, I'm I'm not sure um uh th because on the the company website, uh what does it say Uh something\nSpeaker_2: 'Bout putting the fashion in electronics.\nSpeaker_3: Mm yeah.\nSpeaker_1: Yeah, I mean do they Is that something they want actually written on it, 'cause it's quite long. Um or yeah, just the idea, but I'm not sure. So that's something we can discuss as well. So those are the three things, just not to worry about teletext, uh only control the T_V_, and um and uh incorporate the uh colour and slogan of the company. Um so is everybody okay with any of that, or do you want me to recap at all?\nSpeaker_3: Nope, we're all set.\nSpeaker_1: Right um, time for presentations then. Who would like to go first?\nSpeaker_4: I'll go first.\nSpeaker_1: Okay, cool.\nSpeaker_2: Sure.\nSpeaker_4: Alright um, can I st steal this from the back of your laptop? Uh\nSpeaker_1: Oh yeah, of course, yeah. G go on ahead.\nSpeaker_4: so this is the technical functions design. Um Right to do the um the design I have I've had a look online, I've had a look at the homepage, which has given us um some insp inspiration from previous products.\nSpeaker_1: Mm-hmm.\nSpeaker_4: Um I've had a look at the previous products to see what they offer and um I would like to ask you guys for um your ideas about the design at the end of the meeting. Um unfortunately we're not allowed to talk outside the meeting room, so\nSpeaker_1: Okay.\nSpeaker_2: Right.\nSpeaker_4: Um, having a look at the existing products, I found out that um it tends to come in sort of two extremes, there's either um a very complicated one that's got lots of buttons, lots of colours, very confusing, you don't know what you're doing. Um in that case the the labelling tends to be very bad. Um there's an example I'll show you at the end, um sh show you now. Uh\nSpeaker_1: Alright.\nSpeaker_4: here um the button there and there. This one's prog. Sorry. That one's perg and that one's prog, and it doesn't really tell you what it does. Um, not sure if you had a a look at the other um control in that example. Um it's a very simple one. It's got only the basic functions mm but um it's the same size as the the hard to use one.\nSpeaker_1: Oop.\nSpeaker_4: Uh it looked a bit clunky. They're very big and not very much use for buttons. Um, and it's just very hard to access the advanced functions. There's there's nothing for instance for a slow motion button. Um, my own preferences, I prefer the the clunky one. Um it's very easy to use. Um but unfortunately it does lack the advanced functions which I I quite like having on the controls. Um so I believe the the advanced functions should maybe be hidden in a drawer, or something like tha from the bottom of it. So, now I'd like to ask for your preferences. Um not sure of how long we've got, uh\nSpeaker_1: Um. Well we can chat away for uh for five minutes or so I think at at most.\nSpeaker_2: Mm-hmm.\nSpeaker_1: Just a couple of minutes anyway.\nSpeaker_2: M yeah, like a lot of a lot of what I've um read and prepared for this meeting fits in really closely with what with what Craig's just gone over. So in part I could I could give you some of my personal preferences but I could also th add some to this which is just about sort of um sort of market research.\nSpeaker_1: Mm-hmm.\nSpeaker_2: But anyway,\nSpeaker_1: Shall we sh well we'll stick to kind of your area for now.\nSpeaker_2: um we might come to that later.\nSpeaker_3: Which which is the clunky one, the one on left or on the right?..\nSpeaker_4: Um, the clunky one is the one on the right.\nSpeaker_3: Okay.\nSpeaker_1: Yeah.\nSpeaker_2: Um clunky in what sense, like um h heavier? Larger?\nSpeaker_4: Um I think it's supposed to be the same size, but um it's got much fewer buttons. It's, you know, it's very spread out\nSpeaker_2: I see, so it's more just basic.\nSpeaker_1: Looks kind of Yeah.\nSpeaker_4: and kind of you know\nSpeaker_2: Right, okay.\nSpeaker_4: , I get the idea it'd be sort of about this size. got very few buttons on it and\nSpeaker_2: Yeah.\nSpeaker_2: Yeah. Sure.\nSpeaker_1: Well I think it's a valid point. I mean like the one on the left looks quite um quite complicated, and that P_R_T_ p P_R_O_T_ thing is incredibly confusing. Um so I see I see why yo you know you might prefer the simpler design, but yeah you don't want to lose out on, you know, what it does, so maybe you know\nSpeaker_2: Mm-hmm.\nSpeaker_1: you know you get a lot of remote controls where you kind of flip the thing open,\nSpeaker_1: I think that's a good idea.\nSpeaker_2: Mm-hmm.\nSpeaker_1: I think it's a good idea.\nSpeaker_2: Mm-hmm.\nSpeaker_4: Um, do we have any functions that um we'd want on it?\nSpeaker_2: Mm-hmm.\nSpeaker_4: I mean so far I've got um on and off, um switch the channel up and down, and put the volume up and down.\nSpeaker_1: Mm-hmm. Uh-huh.\nSpeaker_4: Um they're just the the very basics you could use for a T_V_.\nSpeaker_1: Uh-huh, and then actual numbers for channels as well, yeah.\nSpeaker_4: Okay. Um, you say that's a h a required one or a requested one? Would you like\nSpeaker_2: Which was that?\nSpeaker_4: um the channels like the the numbers on thing, um\nSpeaker_2: Up the numbers, or the up down?\nSpeaker_1: God, I wou I would say that's required,\nSpeaker_1: I mean there's no way anybody's gonna buy a remote control these days when if you can't actually individually select channels,\nSpeaker_2: Yeah.\nSpeaker_1: I mean would anybody disagree with that?\nSpeaker_2: Yeah.\nSpeaker_1: Um, what else, uh So don't need to worry about teletext,\nSpeaker_1: don't need to worry about V_C_R_, uh any kind of like display controls at all do you think we need to worry about,\nSpeaker_2: We don't? No?\nSpeaker_1: you know like brightness and contrast?\nSpeaker_2: Yeah. Well I think I think es essentially what we're doing right now is we're categorising. We're saying well we want this to be a product that offers all the sort of more tricky features but we want them to be in another area?\nSpeaker_1: Mm.\nSpeaker_2: Is that right?\nSpeaker_1: Yeah.\nSpeaker_2: Is that what we're we're doing?\nSpeaker_4: Um, yeah.\nSpeaker_2: We're kind of like sorting them an Or are we actually eliminating things we just don't want the product to have?\nSpeaker_4: Um\nSpeaker_1: I think are you are you maybe kind of thinking what we absolutely have to have and what would be nice?\nSpeaker_4: Uh, to start with um sort of a bit both, um we need to find out exactly what we have to have\nSpeaker_1: Mm-hmm.\nSpeaker_4: um and after that we can add things if they're possible.\nSpeaker_1: Okay, right. Well, do you wanna maybe just, at this point decide on what we absolutely must have as a p as a function of this.\nSpeaker_2: Yeah.\nSpeaker_1: Um, so so far, just to recap you've got volume and channel control and\nSpeaker_2: Yep.\nSpeaker_4: There's um on and off, um volume and channel, and skip to certain channels with the numbers.\nSpeaker_1: Right okay. Um\nSpeaker_2: Well, one one way I would look at this um would be that we a approach the different controls in terms of um like control types, so that for the user it's very clear what they want to do where they go.\nSpeaker_1: Mm-hmm yeah.\nSpeaker_2: Uh and also think maybe a little bit about sorta w w what would just wanna be acc easily accessible.\nSpeaker_1: Oka\nSpeaker_2: For example if we had audio controls, those could be something people set up very rarely. Maybe they're un they're they're they're in a little area but covered up um,\nSpeaker_1: Mm-hmm.\nSpeaker_2: things like channel and volume um are used all the time, so we just have them right out on top, um very just very sort of self-explanatory. Um so maybe we need to think about having three or more groupings of controls, you know like one which are just the the habitual ones that should be right within your natural grip. And others that are uh also available\nSpeaker_2: and then others that are concealed.\nSpeaker_1: Okay.\nSpeaker_2: Something like that.\nSpeaker_1: Uh well, just to to wrap up quickly on this this little section Have I just lost Oh no. Um, uh do you think maybe that's the only kind of uh essential requirements, and then maybe just things that would be nice if it could do would be things like audio set up and display set up and things like that, maybe like a mute button, that sort of thing. Any of you anything to add to that at all?\nSpeaker_2: Yeah.\nSpeaker_3: No.\nSpeaker_1: No.\nSpeaker_3: I'll add it later, I guess the presentation.\nSpeaker_1: Okay, right.\nSpeaker_2: Mm-hmm. Yeah.\nSpeaker_1: Um okay,\nSpeaker_1: if we can move on to next presentation then please. Um\nSpeaker_2: Sure.\nSpeaker_1: Do you wanna\nSpeaker_4: Do you want to switch places?\nSpeaker_2: Can this can this pl reach? Can this plug come across?\nSpeaker_3: No. No.\nSpeaker_1: Probably not, actually.\nSpeaker_2: No.\nSpeaker_2: So why don't I just pick up and move then.\nSpeaker_1: Yeah.\nSpeaker_2: Here, I'll just Why don't I just\nSpeaker_4: Just just switch them.\nSpeaker_2: Mm er, can you go up behind me? Kinda This is so This\nSpeaker_1: bit complicated. It'd be nice if everything was wireless, wouldn't it?\nSpeaker_2: I'm all in a knot now.\nSpeaker_2: Okay.\nSpeaker_1: Right.\nSpeaker_2: Um. So I can I can say already, I dunno whether this is for good or for bad but there'll be a lot of kind of uh redundancy in the in the the issues and the the uh the things.\nSpeaker_1: Oh, like overlap between what you said?\nSpeaker_2: Yeah, yeah.\nSpeaker_1: Oh well, for all you know that that'll happen.\nSpeaker_2: Which is ma not necessarily a bad thing, but may what I've already started doing is cr I created a slide in in my presentation here so um so that we kind of think well what's the cumulative effect of what we've taken from your ideas and and mine, because certainly I I have a hard time separating separating things completely.\nSpeaker_1: Mm hard to know what where your role ends, yeah.\nSpeaker_2: Obviously obviously what you've just told me what you've just told me impacts a lot on what um like market research mm that that I've been\nSpeaker_1: Okay.\nSpeaker_2: So how do I how do I get this up?\nSpeaker_3: Um function F_ eight.\nSpeaker_1: Uh pr yeah, press function and F_ eight, yeah.\nSpeaker_2: Okay. Okay. Alright. So F_ eight?\nSpeaker_3: Function, the blue button. Next to the control on the left. Yeah.\nSpeaker_2: Oh, and F_ eight. Okay.\nSpeaker_3: You have to push it together.\nSpeaker_1: Mm.\nSpeaker_2: Mm-hmm.\nSpeaker_3: Yep.\nSpeaker_2: Okay, I think that that's doing it now.\nSpeaker_3: Nope. Try that again.\nSpeaker_2: Uh, again?\nSpeaker_3: Wait.\nSpeaker_4: Think maybe the the wire in the back might be loose.\nSpeaker_2: Okay.\nSpeaker_1: Yeah, you wanna Oh oh here we go.\nSpeaker_2: Um,\nSpeaker_3: Yep, there we go.\nSpeaker_1: There you go.\nSpeaker_2: okay great. Okay. Just um Before I bring this up what I'll just say is um what I've what I've done is tried to collect some information so that I can then relay this to to you guys so that it's now becomes a collective thing. And then kind of lead us in the direction of deciding, 'kay what what are our options, what should we decide and do you know what I mean, so.\nSpeaker_3: Increase that 'cause we can't see the\nSpeaker_1: Um\nSpeaker_2: Okay.\nSpeaker_1: Okay.\nSpeaker_3: That's much better.\nSpeaker_1: Right. Can you um\nSpeaker_3: There you go.\nSpeaker_1: Right, okay.\nSpeaker_2: Okay. Alright. That would be Okay. So um does that make sense? So what I basically got is I just looked into some information and sort of th tried to think about how how we could review it and how we could and what kind of decisions we could take away from it and then maybe by the end of just looking at some of these things we can think about what are our priorities. 'Cause certainly there's lots of different information to go through. So um I'm thinking here about uh primarily about customer needs, that we start with the customer, and w you know, what they want and what are issues with with um existing products. Uh to think about trends and also about try and connect that as you see with the company vision which is about fashion in electronics. Um and then, as I say uh w we'd like to prioritise our design features from this and um\nSpeaker_3: Bouncing on top.\nSpeaker_2: Dunno. Okay. Um.\nSpeaker_1: Yeah.\nSpeaker_2: So this is what I've found here, um a lot of this is new to me, so we'll just read through together. Um, users dislike the look and feel of current remote controls. So they find them ugly. Most people find them ugly. Um the vast majority would spend more money for it to look fancy as well, we'll see later, the vast majority would spend more money for um slightly more intuitive control, such as voice recognition.\nSpeaker_1: Mm-hmm.\nSpeaker_2: Okay I'm gonna we'll look at that in a second. Um most people use only a f a very slim portion of all the controls. So I guess what we're looking at here is people want this h technology, they tend to use the most simple controls and overall they find remote controls to be something they don't doesn't really appeal to them.\nSpeaker_1: Mm-hmm.\nSpeaker_2: So I think what we're doing is we're trying to take like if for me this is sorta like three different different um inspirations, you know, one is that we want uh something that's high-tech but we want it to seem easy. And in spite of the primitive side of it and the very high-tech side, we want it to just be an appealing piece of equipment in people's hands. Um, frustrations. They get lost a lot, s as it came up in our last meeting. Um, takes time to learn how to use them. This is uh why I mention when Craig was uh showing us some ideas that we actually try and group controls, so d it doesn't just look like a big panel, kinda like when you you look at, you know, a new computer keyboard, or something that is quite explanatory. If you want audio, if you want visual, then you have those. Um and I will admit I don't know what R_S_I_ stands for.\nSpeaker_1: Repetitive strain injury.\nSpeaker_3: Is installing a new remote control something that people\nSpeaker_2: Uh, no, that did not come up at all. Um so here here is another um sort of a a review here of the main things. I also found that most people would uh adults at least would pay more for voice recognition. Now apparently we do have access to all the tech cutting edge technology in remote control. So I dunno if that's possible we might consider getting into it. Um. And and again here as we sort of move m sort of thin start thinking about how we wanna sell and market this, I think a recurring theme here is the company wants it to be wants us to make something that's fashionable and sleek and trendy.\nSpeaker_1: Mm-hmm.\nSpeaker_2: Um people uh additionally aren't aren't liking the appearance of their products, so we wanna think about as we take all the sort of the techie features how we can um put that into a unit which is which people like.\nSpeaker_1: Okay.\nSpeaker_2: You know, they like the aesthetics and the ergonomics.\nSpeaker_1: So want something that looks good and is easy to use, big priorities.\nSpeaker_2: Yeah.\nSpeaker_1: Okay.\nSpeaker_2: Yeah, so you know just c looking at what what Craig um Craig's i uh ideas are s sorta tell me that maybe what we wanna do is try and um separate the different things that we wanna include in this. So if we do say well we want there to be all the technology will we try and make that almost be like optional technology. You know, it's like like I find a lot of T_V_s these days, something really like about 'em is if you wanna just turn 'em on and off you can, but they have little panels where you click and there's just like tons of features you go through.\nSpeaker_1: Mm. So it you wanna group all the different kind of types of functions together, you know.\nSpeaker_2: Yeah.\nSpeaker_1: That's I think it's a good idea.\nSpeaker_2: Yeah. That's s that's sort of the um But I I'm my hope here is that I'm putting out this information so that we can then say okay, well how do we collectively move on with it.\nSpeaker_1: Mm-hmm. Okay.\nSpeaker_2: Um I I haven't brought out one specific marketing idea, although my sense is that what we should try and think about is what are the current trends in materials and shapes and styles, and then use that.\nSpeaker_1: Mm-hmm.\nSpeaker_2: But not let that confine us technologically.\nSpeaker_1: Okay. Right.\nSpeaker_2: So Alright? Any um comments on all of that?\nSpeaker_1: Well, um one of the things that we have to decide on by the end of the meeting is who we're gonna be um who's our our target audience, our target market.\nSpeaker_2: That's uh\nSpeaker_1: Um, so if we want something that that looks good and is easy to use, but has y is fairly powerful product, whatever, who do we really want to aim that at?\nSpeaker_2: Yeah. Okay.\nSpeaker_1: I mean\nSpeaker_2: Where's the money, maybe.\nSpeaker_1: Yeah, who wou who would have the money to spend. Well i if if like twenty five Euro is our is our selling price then you can imagine,\nSpeaker_2: Yeah. And who watches T_V_. Mm-hmm.\nSpeaker_1: well I don't I'm not really sure how much that will retail at.\nSpeaker_2: Mm.\nSpeaker_1: But you want it's somebody who's not gonna just use the remote that comes with their telly, I suppose, they're gonna actually go out and buy one.\nSpeaker_2: Mm-hmm.\nSpeaker_1: So, who do you think we're aiming this at?\nSpeaker_2: Yeah.\nSpeaker_3: Um, I think it'll be the mid range to the high end market, in terms of people. 'Cause twenty five Euros for a remote, how much is that lo locally in pounds?\nSpeaker_1: It's about sixteen, seventeen pounds, I think.\nSpeaker_3: Is that too is that a lot of money to buy an extra remote or a replacement remote?\nSpeaker_1: Yeah,\nSpeaker_2: Mm-hmm.\nSpeaker_3: Right.\nSpeaker_1: okay.\nSpeaker_3: Um so maybe not the high end range, but maybe middle, middle up-ish. Kind of.\nSpeaker_1: Okay.\nSpeaker_3: You know how much? I dunno I guess you pay, what, ten ten quid for a remote?\nSpeaker_1: Okay.\nSpeaker_3: Like a simple replacement, right. I mean if you lost your remote and the first thing you just wanna go out and get,\nSpeaker_1: Yeah. Yeah,\nSpeaker_2: Yeah.\nSpeaker_1: yeah.\nSpeaker_3: would you how much would you pay?\nSpeaker_2: This this kinda touches on your comments there, David. These are the age groups which we have information on\nSpeaker_3: Yeah.\nSpeaker_2: and these are this is a table of h what people would pay more for a certain feature.\nSpeaker_1: Okay\nSpeaker_2: Just gives us a rough idea of where the w the will to spend money on T_V_ equipment is.\nSpeaker_1: Okay.\nSpeaker_2: Mostly focused around the twenty five age group.\nSpeaker_1: Yeah, so do you think we're we're aiming at a fairly young market then?\nSpeaker_3: Yep.\nSpeaker_2: Sort of young professional, kind of. Mm-hmm\nSpeaker_1: Yeah, okay.\nSpeaker_4: Um\nSpeaker_1: Um do you think then uh voice recognition is something we should really seriously consider? What what do you think, Craig?\nSpeaker_4: Well, did you not say it was the the adults that were going for the the voice recognition? Sort of the the older group.\nSpeaker_2: Uh, yeah, it's the Yep.\nSpeaker_4: Uh f\nSpeaker_2: It does it does fit with the market that we're sort of identifying,\nSpeaker_1: N yeah.\nSpeaker_2: in terms of\nSpeaker_1: I think we are gonna have to narrow it down, to say let's target these people and give them what they want\nSpeaker_2: Okay.\nSpeaker_1: and 'cause you know, there needs to be some kind of selling point to it.\nSpeaker_2: Yeah. Sure. Sure.\nSpeaker_1: So um anybody anything there to add\nSpeaker_2: Yeah.\nSpeaker_1: Just kind of young professionals, uh th like if we are going to include speech recognition, it's kind of between fifteen and thirty five seems to be like a really high response to that. So we could say that was our target.\nSpeaker_2: Mm-hmm.\nSpeaker_3: I I think twenty five to thirty five is is is fair to add that in as a group as well\nSpeaker_1: Yeah.\nSpeaker_3: because that's more than half your group of people who are willing to at least try and use your technology.\nSpeaker_2: Mm-hmm. Yeah. Yeah, yeah.\nSpeaker_1: Mm-hmm. Okay, so fifteen to thirty five, look fairly young.\nSpeaker_3: Yeah.\nSpeaker_1: You know, they have bit of expendable income to spend on this sort of thing.\nSpeaker_2: Yeah.\nSpeaker_3: I think perhaps that age group is significant as well because those are people who use the computer,\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_3: who are familiar with their with computers in in their everyday work.\nSpeaker_1: Yeah.\nSpeaker_3: I think people who are maybe about I wouldn't say thirty five,\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_3: but people who are about forty-ish and above now would not be so dependent and reliant on a computer or a mobile phone or something like that.\nSpeaker_2: Mm-hmm. Mm-hmm. But yeah.\nSpeaker_1: Yeah.\nSpeaker_2: Yeah, sure.\nSpeaker_3: So these are people who are gadgety, right?\nSpeaker_1: So\nSpeaker_2: Mm-hmm.\nSpeaker_3: People who are u growing up used to, you know in schools and in universities,\nSpeaker_1: Yeah.\nSpeaker_3: when you go on to their working lives, people who would you know regular\nSpeaker_1: Yeah. So they'll not sh not shy away from something quite high-tech.\nSpeaker_3: Yeah. Yeah. Mm.\nSpeaker_1: That that's that's a good point.\nSpeaker_2: Yeah.\nSpeaker_1: Um okay, so um\nSpeaker_1: so shall we make the decision uh to include speech recognition\nSpeaker_2: If we can.\nSpeaker_3: I I think one thing we should try not to avoid is not to say we have to use speech recognition right now,\nSpeaker_1: if we can.\nSpeaker_4: Yeah.\nSpeaker_2: Yeah.\nSpeaker_3: because um, based on what you've go y everybody's saying, right, you want something simple.\nSpeaker_1: Okay. Why is that?\nSpeaker_3: You want basic stuff and you want something that's easy to use. Speech recognition might not be the simplest thing for somebody to use.\nSpeaker_2: Right.\nSpeaker_1: Okay.\nSpeaker_2: Could it be an on off thing?\nSpeaker_3: Um,\nSpeaker_2: Like if you want it on\nSpeaker_3: but what I'm saying is that we're we're trying to lock ourselves into a s particular kind of technology,\nSpeaker_1: Where you can activate it and deactivate it?\nSpeaker_2: Yeah.\nSpeaker_3: rather than focusing on on exactly what are the features that we're gonna say, and then, you know, say speech recognition is good for this, speech recognition is not good for this.\nSpeaker_1: Yeah.\nSpeaker_2: Yeah.\nSpeaker_1: Okay.\nSpeaker_2: Yeah. Sure.\nSpeaker_3: So maybe we should\nSpeaker_2: Sure.\nSpeaker_1: Okay.\nSpeaker_3: I suggest that we think about speech recognition,\nSpeaker_2: Yeah. Sure.\nSpeaker_3: anyway it's a it's something that can be used to fulfil a function, but at end of the day we don't look at the technology, but we look at the function first.\nSpeaker_1: Uh-huh.\nSpeaker_2: Yeah.\nSpeaker_1: Okay.\nSpeaker_2: Sure. Yep.\nSpeaker_1: Uh okay, well do you wanna um give us your presentation\nSpeaker_3: Okay, sure.\nSpeaker_1: and then then we can I don't know\nSpeaker_2: Yep.\nSpeaker_1: um might have been a good idea to all deliver our presentations and then discuss, but this is this is how we're\nSpeaker_2: Yeah, it's good well it's good to get ideas out while they're fresh in mind.\nSpeaker_1: Yeah, exactly, yeah.\nSpeaker_2: Um\nSpeaker_1: Oh it's something that's just occurred to me as well is if we make it um speech reco if we incorporate speech recognition, that's appealing to people um maybe with a physical disability as well.\nSpeaker_2: Not\nSpeaker_1: Um.\nSpeaker_2: Yeah. And not losing. And also it helps in terms of people not losing this,\nSpeaker_1: Yeah.\nSpeaker_2: you know they they're saying oh it's I lose it in the couch.\nSpeaker_1: Yeah.\nSpeaker_2: like we're kind of what we're b sort of getting in into here is mating different uh design features together\nSpeaker_1: Mm-hmm.\nSpeaker_2: that they\nSpeaker_4: I reckon one problem with speech recognition is um I've actually seen one of them used and uh the technology that was in that one wasn't particularly amazing, so you end up yelling at the control for hours.\nSpeaker_1: Really?\nSpeaker_4: Channel up.\nSpeaker_2: Right.\nSpeaker_2: Oh really, you've seen one before.\nSpeaker_1: Do you think maybe we need like further advances in that kind of area until it's worthwhile incorporating it though?\nSpeaker_4: Um I think it'd probably quite expensive to put in.\nSpeaker_3: Sorry, do you mind passing me my notepad.\nSpeaker_1: Mm. Course not.\nSpeaker_3: Thanks. Cool,\nSpeaker_1: There you go.\nSpeaker_3: um. Okay. Um.\nSpeaker_1: Right.\nSpeaker_3: Well this is just the working design um.\nSpeaker_1: Mm-hmm.\nSpeaker_3: Well this is just what how I would go about it. Um I guess I try to define like what we're doing now, try to define what we're trying to get done. Um I think in a practical way, we kind of know what it is.\nSpeaker_2: Right.\nSpeaker_3: We've used it, we're familiar with it, but we're we can't n we haven't narrowed down um exactly what the things we're trying to fulfil, like Besides the basics, I think back in the back of our minds we know what the basics are. Has to change channels, has to change volume, but in like specifics, right, which one of the basics are you trying to target. Um are there certain parts of the basics that are more important or less important than the basics?\nSpeaker_2: Mm-hmm.\nSpeaker_3: Um and I just the idea is just to get everybody to um I usually have a have have a design that's there as a basic, so, you know, things that to start everything going. But I guess everybody does have some idea, so I don't think um there's a need for that. Um okay this finding things is a little bit confusing, so I'll go into the diagram first. It just explains how the process goes through, from a\nSpeaker_1: Mm-hmm.\nSpeaker_3: from the basic technology point of view, the basic steps that you need um in the diagram and in this slide probably works better. Um okay, you need some power source. 'Kay, a battery or something, to keep it going.\nSpeaker_1: Mm-hmm.\nSpeaker_3: Um and that power source is important because it ties you down to um how long the device will last. Um it ties you down perhaps a bit later on in terms of the technologies\nSpeaker_1: Uh-huh.\nSpeaker_3: um how far you can transmit the signal or the complexity of the functions that you want.\nSpeaker_2: Mm-hmm.\nSpeaker_3: Like for example, voice recognition, right. That might be constrained because that you might need to power a microphone, you might need to power other things, so that's one perhaps constraint there. Um Th Okay, the basic thing is there's a user interface where people punch a button or talk into it or smile to it or blink their eyes, whatever.\nSpeaker_1: Hmm.\nSpeaker_3: You know, and that um picks up an input from a user, um uh a logic a series of logic has to decide what the user is telling the device, and the device has to r you know, based on you push button A_, so I will do something with button A_. So maybe button A_ is the power button, okay.\nSpeaker_2: Mm-hmm.\nSpeaker_1: Mm-hmm.\nSpeaker_3: Um and then it needs to be able to send the signal out to the device itself which is the receiver here. Um and I think that's about it in terms of my design um. It's fairly general, um and I guess the purpose of this is also not to restrict you in in the way you're thinking,\nSpeaker_1: Mm-hmm.\nSpeaker_3: like um voice recognition, right, um, if it's something which is important then we just add more power rather than having a thing that we don't have enough power. So it's not really a constraint in that sense,\nSpeaker_1: Okay.\nSpeaker_3: but I mean these are functionally, you know, the base,\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_3: what the technology has to do.\nSpeaker_2: Okay.\nSpeaker_1: Okay.\nSpeaker_3: Um so I guess the rest of it\nSpeaker_2: Mm-hmm.\nSpeaker_3: I think we should maybe you you wanna go back to what the functions are? I think that's more relevant to a discussion?\nSpeaker_1: Uh.\nSpeaker_2: 'Kay.\nSpeaker_1: Well, do you wan do you wanna finish up your your whole presentation then?\nSpeaker_2: Sure. Sure.\nSpeaker_3: Yeah, w I'm done.\nSpeaker_1: Are you are you all done?\nSpeaker_3: More or less. Yeah. Ps Oh, it's just putting the rest of it into words, but it's essentially the same thing.\nSpeaker_2: Yep.\nSpeaker_1: Mm.\nSpeaker_3: Um you have a transmitter, an input device, logic chip,\nSpeaker_1: Okay.\nSpeaker_3: you know, stuff like that.\nSpeaker_1: Okay.\nSpeaker_2: Right.\nSpeaker_3: Um\nSpeaker_1: Right.\nSpeaker_2: And like on the means b\nSpeaker_3: I guess this would be\nSpeaker_2: Since we're on the topic of the technology, uh are there any like what are our options?\nSpeaker_3: Yep.\nSpeaker_2: Alright, what's what i in Is this the only way that we go about it, or are there other thin\nSpeaker_3: Um, these these aren't technology options in that sense. This is just um\nSpeaker_2: Right.\nSpeaker_3: a basic principles and basic components that are needed.\nSpeaker_2: The basic principle of\nSpeaker_1: Okay.\nSpeaker_2: 'Kay.\nSpeaker_3: For example, if you needed um if you needed to add uh a voice recognition, right, then your user interface would be split,\nSpeaker_1: Mm-hmm.\nSpeaker_2: Right.\nSpeaker_3: broken down into more components, right,\nSpeaker_2: Okay.\nSpeaker_1: Mm-hmm.\nSpeaker_3: which you have a microphone, the V_R_ and stuff like that.\nSpeaker_1: Oh. So this just show how we're kind of modularising the whole thing.\nSpeaker_2: Okay.\nSpeaker_3: Uh Yep. Yep. So each component represents one function,\nSpeaker_1: Okay.\nSpeaker_3: but I think the basic functions are the logic, the transmitter, um and the receiver, okay,\nSpeaker_1: Mm-hmm.\nSpeaker_2: Mm-hmm.\nSpeaker_3: and the power are things that you won't have to care about.\nSpeaker_2: Mm-hmm.\nSpeaker_3: Um and those are things that based on what your user interface requires then we'll add more functionality to it.\nSpeaker_1: Yeah. Mm-hmm.\nSpeaker_3: Um there might be one other consideration which would be that the the transmission between the remote control and the T_V_ for example.\nSpeaker_1: Okay.\nSpeaker_3: Okay, um are we gonna restrict ourselves to using the traditional technologies of infra-red thing?\nSpeaker_1: Okay.\nSpeaker_2: Okay.\nSpeaker_1: Okay.\nSpeaker_3: Because that's something you need to actually be physically be pointing to. Right.\nSpeaker_1: Okay.\nSpeaker_2: Right.\nSpeaker_1: Well well a worry that was was expressed in the new requirements was that if we made this too complex it would e it would effect um how long how long it took us to get this to market, so I th suspect it might be a good idea just to restrict our kind of our creative influence on this on the user interface and not worry so much about uh how we transmit it\nSpeaker_3: Yep.\nSpeaker_1: um because I mean it it's tried and tested intra-red, so we could stay with tha\nSpeaker_3: There might be one other problem with the transmission, um in particular right now, since we're talking about voice recognition. Um if somebody's gonna h talk to the device, you ideally want them to hold it to them.\nSpeaker_1: Mm-hmm\nSpeaker_3: I it\nSpeaker_1: Oh, yeah.\nSpeaker_3: you may not require that,\nSpeaker_2: Right.\nSpeaker_3: but you know, um it's it's\nSpeaker_2: Right.\nSpeaker_3: it's something very natural, I guess, you know, to hold it, to signal to the user,\nSpeaker_1: Yeah, mm-hmm.\nSpeaker_3: and push a button maybe to start s talking about it.\nSpeaker_1: Okay.\nSpeaker_3: Then you need to send the signal out, so because if you're using infra-red, the line of sight um say the T_V_'s at that chair, and I'm standing in front of here and the transmitter is here, it blocks it.\nSpeaker_1: Mm. Mm. Yeah.\nSpeaker_3: So in that sense, there's not really a restriction\nSpeaker_1: Okay.\nSpeaker_3: but it's something which you may have to think about later on in the process.\nSpeaker_2: Right.\nSpeaker_3: Not so much further down.\nSpeaker_2: Okay.\nSpeaker_1: Okay.\nSpeaker_2: And um just a clarification before we finish this. Uh does c is our controller is it have the option of being um on a standard uh frequency as all of the other equipment, so that the one controller can control several pieces of equipment?\nSpeaker_3: There's there's not much specific specific information,\nSpeaker_1: W\nSpeaker_3: but I think that um one indication of infra-red mean that you're just targeting traditional devices. Because infra-red is something which everybody has.\nSpeaker_1: Yeah. W Well well we've um\nSpeaker_2: Okay.\nSpeaker_1: In the new requirement spec they said just to focus on the T_V_,\nSpeaker_2: Just to T_V_, okay.\nSpeaker_1: so that's what we should do for now I think. Something I was wondering about was the power.\nSpeaker_2: Okay.\nSpeaker_1: Um, is it worth considering like having like a charging unit as opposed to just regular batteries? I mean is that something we really want to go into, do you think,\nSpeaker_3: There's a there's\nSpeaker_1: or should we just consider running on regular batteries?\nSpeaker_3: Okay, from from a from a component point of view there's added complexity, and you add cost to it,\nSpeaker_1: Uh-huh. Uh-huh.\nSpeaker_3: um and then there's probably the fact that you need another physical component. You need a docking cradle, for example, for you to put it in to charge.\nSpeaker_1: Yeah.\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_3: Or you need to get the user to plug it in.\nSpeaker_1: Okay.\nSpeaker_1: Okay,\nSpeaker_3: Um and most users are very f use already used to the idea of buying batteries and putting it into the controller.\nSpeaker_1: so Yeah.\nSpeaker_3: But unless the controller's gonna consume a lot of batteries, like he's gonna run through like twenty batteries a month,\nSpeaker_1: Yeah.\nSpeaker_3: then I don't think rechargeable is something we should you know, we really need to care about.\nSpeaker_1: Okay, so just stick to to regular\nSpeaker_2: Yeah.\nSpeaker_3: Um.\nSpeaker_1: Okay. Um, right. So basically the um I'm just gonna just recap uh what I said at the start, was that um the the whole point of this meeting was to f absolutely finalise who we're gonna aim this at,\nSpeaker_1: and what exactly the product's gonna do.\nSpeaker_2: Okay.\nSpeaker_1: So um just to recap on\nSpeaker_2: Okay.\nSpeaker_1: Are we all happy about the idea of um aiming the product at um the fifteen to thirty five bracket? Um and also the funct the the actual functions of what it's gonna do.\nSpeaker_2: Yeah, that's good.\nSpeaker_1: Do you wanna recap on that, Craig?\nSpeaker_4: Um.\nSpeaker_4: I think we just say that it was gonna be the the most basic stuff possible. Um on off, up and down channels, up and down volume and uh skip to a channel.\nSpeaker_1: Okay, right.\nSpeaker_4: Ta.\nSpeaker_2: And is it going to include any of the uh the more advanced features, or are we gonna eliminate those?\nSpeaker_4: Um I think we include mute, but apart from that um I think we just we'll go for the simpleness.\nSpeaker_3: Okay, I think\nSpeaker_1: Okay.\nSpeaker_2: Okay. R is it is it is it s is it not an option still that we include some things just as a sort of under like sort of under a door or some\nSpeaker_1: Yeah, it's as optional functions.\nSpeaker_4: Yeah.\nSpeaker_2: 'Cause what what I'm I'd be a bit worried about is if someone was h had previously developed habits of expecting to control surround sound or this and that with their controller and then and then they, you know, w they get ours and w it's doesn't have that.\nSpeaker_1: Okay.\nSpeaker_2: I dunno if that'd be a problem.\nSpeaker_3: Another thing that you were saying about categorising the controls? Um maybe I could suggest we we break them down into three simple categories.\nSpeaker_1: Mm-hmm.\nSpeaker_3: One would be audio controls,\nSpeaker_2: Yeah. Okay.\nSpeaker_1: Mm-hmm.\nSpeaker_3: one would be video controls, and the other one would be a device.\nSpeaker_2: Okay.\nSpeaker_3: Um this may not map very well to advanced functionality especially, but I think that um from a manufacturer's point of view, from a person designing the device,\nSpeaker_2: Yeah.\nSpeaker_3: but I think from a point of view of a person using the device, you know a T_V_ is something they see and something they hear,\nSpeaker_1: Mm-hmm.\nSpeaker_3: um it's something they do other things to like turn it on and turn it off. I mean like so what we could have is like three buckets, right, where we could throw things into,\nSpeaker_1: Yeah.\nSpeaker_2: Right.\nSpeaker_3: like if we want this feature, let's throw it into there, and then from there decide whether it's basic, or it's non-basic.\nSpeaker_2: Yeah.\nSpeaker_3: I mean it might help with the visualisation.\nSpeaker_2: 'Kay, okay. Like that. Okay.\nSpeaker_3: And it would actually help with the component build as well.\nSpeaker_2: Mm-hmm.\nSpeaker_1: Okay, right.\nSpeaker_2: Mm okay, great.\nSpeaker_1: Um, okay well I gotta kind of got five minutes to wrap up now. Um next thing we're doing is having lunch. Whoohoo. Um and then we're gonna have thirty minutes of working on the next stage. Um so I'll be putting the minutes of this uh this meeting into the project documents folder. Um so uh I guess just to just to confirm that we know what we're doing in the next well in the thirty minutes after lunch anyway,\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_1: um for uh our Industrial Designer, you're gonna be thinking about the components concept. Um User Interface Designer gonna be thinking about our user interface, and marketing you're gonna be thinking about trend watching. Um and you'll all get specific instructions as well. So um I dunno, just just to to ask now if you've got anything else you've thought about while we've been talking.\nSpeaker_1: Um, do you wanna start with David. Anything else to say at all?\nSpeaker_3: Mm no, not really.\nSpeaker_1: No, okay. Andrew?\nSpeaker_2: Um yeah, just I just wanted to ask then before we wrap up, shall we agree for sake of um sort of clarity and when we when we r resume that we'll u use this idea David's proposed, where we think of these three sort of buckets and anything anything we discuss about them is sort of, okay, we're talking about this.\nSpeaker_1: Yeah, yeah I think that's definitely a good idea.\nSpeaker_3: Mm.\nSpeaker_1: Uh-huh.\nSpeaker_2: Shall we do that, then?\nSpeaker_1: Yeah.\nSpeaker_2: Okay, great.\nSpeaker_4: Um just about the three buckets, um what would go in the the device functions one?\nSpeaker_3: Um things like on off. Because they don't have anything to do with what you see. I me mean in terms of picture and the entertainment value,\nSpeaker_1: Yeah.\nSpeaker_3: you know, um so um\nSpeaker_1: Okay.\nSpeaker_4: Um\nSpeaker_2: And and channel.\nSpeaker_3: And channel. Because the on off also goes, you know, like on off like power, not on off sound.\nSpeaker_2: Right.\nSpeaker_1: Yeah.\nSpeaker_3: Not on off video. Although you don't turn off the video on your T_V_, but um you might wanna you know turn off the sound,\nSpeaker_1: Okay.\nSpeaker_3: say you wanna pick up the phone, there's a mute button, right, so you you have you have a choice of putting it on to um others or a device.\nSpeaker_1: Okay.\nSpeaker_3: Device is basically anything which we can't categorise, right. We put it out.\nSpeaker_1: Okay, so you're gonna have um audio which is gonna be like you know your bass settings and actual volume hi\nSpeaker_2: Mm-hmm.\nSpeaker_3: Yeah, anything to do with what you hear, right. You you put that into audio.\nSpeaker_1: Okay.\nSpeaker_2: Mm-hmm.\nSpeaker_3: And then video is anything that you can see.\nSpeaker_1: Okay, and then visual\nSpeaker_2: Mm-hmm.\nSpeaker_1: Okay, so brightness, contrast, things like that,\nSpeaker_2: Mm-hmm.\nSpeaker_3: Um. Yep.\nSpeaker_1: and then just actual device things,\nSpeaker_2: Colour, yeah.\nSpeaker_3: Yep.\nSpeaker_1: like what channel you're watching, turning on an off,\nSpeaker_2: Sure. Sure.\nSpeaker_3: Yep.\nSpeaker_1: stuff like that.\nSpeaker_2: Okay.\nSpeaker_1: Okay, um\nSpeaker_2: And then k I suppose quite likely what would happen is in the d device category there might be some which are just like the habitual standard and then others which are maybe a bit more\nSpeaker_3: Like random which we have no other place to put, but we need it somewhere there.\nSpeaker_1: Mm-hmm.\nSpeaker_2: Yeah. Sure, okay. Okay.\nSpeaker_1: Yeah.\nSpeaker_3: Um even even if it doesn't map very clearly what happens is that people at least have some in their mind.\nSpeaker_1: Okay.\nSpeaker_3: It's easy to use, I think that's one thing that um and I guess from the component point of view it's easy to build as well\nSpeaker_1: Okay.\nSpeaker_3: 'cause things are like fixed.\nSpeaker_1: Okay.\nSpeaker_2: Okay.\nSpeaker_1: Um so yeah, I guess just things to think about are you know like the fact it's gotta look good,\nSpeaker_1: because of who we're we're, you know, targeting this at. Um something maybe kind of quirky in design maybe. Make it kind of ergonomic kind of to hold,\nSpeaker_2: Mm-hmm. Mm-hmm.\nSpeaker_1: you know, things like that. Um, so I guess I guess that's it. That's the meeting over.\nSpeaker_2: Great.\nSpeaker_1: Whoohoo.\nSpeaker_2: Then we get to go find out what was picked up for lunch for us.",
+  "utterances": [
+    {
+      "speaker_label": "Speaker_1",
+      "start": 0,
+      "end": 175
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 176,
+      "end": 208
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 209,
+      "end": 233
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 234,
+      "end": 267
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 268,
+      "end": 284
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 285,
+      "end": 996
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 997,
+      "end": 1013
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1014,
+      "end": 1387
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1388,
+      "end": 1404
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1405,
+      "end": 1659
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1660,
+      "end": 1760
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1761,
+      "end": 1889
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 1890,
+      "end": 1942
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 1943,
+      "end": 1962
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 1963,
+      "end": 2394
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 2395,
+      "end": 2426
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2427,
+      "end": 2504
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 2505,
+      "end": 2530
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2531,
+      "end": 2553
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 2554,
+      "end": 2570
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 2571,
+      "end": 2646
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2647,
+      "end": 2698
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 2699,
+      "end": 2917
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 2918,
+      "end": 2936
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 2937,
+      "end": 3184
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 3185,
+      "end": 3201
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 3202,
+      "end": 3219
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 3220,
+      "end": 3599
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 3600,
+      "end": 3619
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 3620,
+      "end": 3964
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 3965,
+      "end": 3980
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 3981,
+      "end": 4584
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 4585,
+      "end": 4671
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 4672,
+      "end": 4690
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 4691,
+      "end": 4734
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 4735,
+      "end": 5052
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 5053,
+      "end": 5071
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5072,
+      "end": 5094
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 5095,
+      "end": 5164
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5165,
+      "end": 5207
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 5208,
+      "end": 5284
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 5285,
+      "end": 5339
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 5340,
+      "end": 5356
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 5357,
+      "end": 5373
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5374,
+      "end": 5436
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 5437,
+      "end": 5566
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5567,
+      "end": 5609
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 5610,
+      "end": 5640
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 5641,
+      "end": 5672
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5673,
+      "end": 5696
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 5697,
+      "end": 5788
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5789,
+      "end": 5805
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 5806,
+      "end": 5828
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 5829,
+      "end": 6149
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6150,
+      "end": 6168
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6169,
+      "end": 6260
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6261,
+      "end": 6299
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6300,
+      "end": 6318
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6319,
+      "end": 6355
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6356,
+      "end": 6374
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 6375,
+      "end": 6439
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6440,
+      "end": 6458
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 6459,
+      "end": 6574
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6575,
+      "end": 6601
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 6602,
+      "end": 6674
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6675,
+      "end": 6745
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 6746,
+      "end": 6835
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6836,
+      "end": 6862
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 6863,
+      "end": 6923
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 6924,
+      "end": 6966
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 6967,
+      "end": 7017
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7018,
+      "end": 7155
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7156,
+      "end": 7172
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7173,
+      "end": 7224
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7225,
+      "end": 7241
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7242,
+      "end": 7309
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7310,
+      "end": 7435
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7436,
+      "end": 7460
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7461,
+      "end": 7510
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7511,
+      "end": 7749
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7750,
+      "end": 7764
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7765,
+      "end": 7790
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 7791,
+      "end": 7807
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7808,
+      "end": 7850
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 7851,
+      "end": 7871
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 7872,
+      "end": 7995
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 7996,
+      "end": 8009
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8010,
+      "end": 8123
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 8124,
+      "end": 8227
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8228,
+      "end": 8246
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 8247,
+      "end": 8314
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8315,
+      "end": 8452
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 8453,
+      "end": 8469
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8470,
+      "end": 8551
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 8552,
+      "end": 8567
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 8568,
+      "end": 8671
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8672,
+      "end": 8697
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 8698,
+      "end": 8909
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 8910,
+      "end": 8933
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 8934,
+      "end": 9045
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 9046,
+      "end": 9060
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 9061,
+      "end": 9238
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 9239,
+      "end": 9257
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 9258,
+      "end": 9627
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 9628,
+      "end": 9674
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 9675,
+      "end": 9691
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 9692,
+      "end": 9723
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 9724,
+      "end": 10124
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10125,
+      "end": 10141
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 10142,
+      "end": 10156
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10157,
+      "end": 10171
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 10172,
+      "end": 10227
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10228,
+      "end": 10251
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10252,
+      "end": 10276
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10277,
+      "end": 10296
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10297,
+      "end": 10362
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10363,
+      "end": 10379
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10380,
+      "end": 10403
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 10404,
+      "end": 10444
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10445,
+      "end": 10510
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 10511,
+      "end": 10529
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10530,
+      "end": 10564
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10565,
+      "end": 10579
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10580,
+      "end": 10633
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10634,
+      "end": 10650
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10651,
+      "end": 10694
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 10695,
+      "end": 10728
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10729,
+      "end": 10793
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10794,
+      "end": 10875
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10876,
+      "end": 10909
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10910,
+      "end": 10926
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 10927,
+      "end": 10944
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 10945,
+      "end": 11130
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 11131,
+      "end": 11181
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 11182,
+      "end": 11204
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 11205,
+      "end": 11262
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 11263,
+      "end": 11600
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 11601,
+      "end": 11660
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 11661,
+      "end": 11810
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 11811,
+      "end": 11827
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 11828,
+      "end": 11872
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 11873,
+      "end": 11905
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 11906,
+      "end": 11963
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 11964,
+      "end": 12008
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12009,
+      "end": 12085
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12086,
+      "end": 12120
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12121,
+      "end": 12161
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 12162,
+      "end": 12176
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12177,
+      "end": 12195
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12196,
+      "end": 12211
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12212,
+      "end": 12262
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12263,
+      "end": 12295
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12296,
+      "end": 12317
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12318,
+      "end": 12334
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 12335,
+      "end": 12398
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12399,
+      "end": 12415
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 12416,
+      "end": 12460
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12461,
+      "end": 12475
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12476,
+      "end": 12504
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 12505,
+      "end": 12529
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12530,
+      "end": 12908
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 12909,
+      "end": 12957
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 12958,
+      "end": 12971
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 12972,
+      "end": 12988
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 12989,
+      "end": 13005
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 13006,
+      "end": 13036
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 13037,
+      "end": 13065
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 13066,
+      "end": 13090
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 13091,
+      "end": 13114
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 13115,
+      "end": 13969
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 13970,
+      "end": 13997
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 13998,
+      "end": 14025
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 14026,
+      "end": 14042
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 14043,
+      "end": 14469
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 14470,
+      "end": 14488
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 14489,
+      "end": 14825
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 14826,
+      "end": 14844
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 14845,
+      "end": 15708
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 15709,
+      "end": 15745
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 15746,
+      "end": 15813
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 15814,
+      "end": 16427
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 16428,
+      "end": 16446
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 16447,
+      "end": 16672
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 16673,
+      "end": 16689
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 16690,
+      "end": 16755
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 16756,
+      "end": 16836
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 16837,
+      "end": 16853
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 16854,
+      "end": 16870
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 16871,
+      "end": 17440
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 17441,
+      "end": 17542
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 17543,
+      "end": 17559
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 17560,
+      "end": 17603
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 17604,
+      "end": 17790
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 17791,
+      "end": 17815
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 17816,
+      "end": 18029
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18030,
+      "end": 18048
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18049,
+      "end": 18104
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18105,
+      "end": 18128
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18129,
+      "end": 18183
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18184,
+      "end": 18348
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18349,
+      "end": 18369
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18370,
+      "end": 18535
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18536,
+      "end": 18558
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18559,
+      "end": 18576
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18577,
+      "end": 18613
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18614,
+      "end": 18758
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18759,
+      "end": 18805
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18806,
+      "end": 18879
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 18880,
+      "end": 18894
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 18895,
+      "end": 19051
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 19052,
+      "end": 19070
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19071,
+      "end": 19124
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 19125,
+      "end": 19141
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19142,
+      "end": 19309
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19310,
+      "end": 19367
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19368,
+      "end": 19461
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19462,
+      "end": 19478
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 19479,
+      "end": 19497
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19498,
+      "end": 19515
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19516,
+      "end": 19532
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19533,
+      "end": 19621
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19622,
+      "end": 19638
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19639,
+      "end": 19726
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19727,
+      "end": 19743
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19744,
+      "end": 19870
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19871,
+      "end": 19893
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 19894,
+      "end": 19910
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 19911,
+      "end": 19927
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 19928,
+      "end": 19972
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 19973,
+      "end": 20092
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 20093,
+      "end": 20109
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20110,
+      "end": 20205
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20206,
+      "end": 20221
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20222,
+      "end": 20320
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20321,
+      "end": 20337
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20338,
+      "end": 20397
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20398,
+      "end": 20480
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 20481,
+      "end": 20496
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20497,
+      "end": 20551
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20552,
+      "end": 20574
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 20575,
+      "end": 20588
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20589,
+      "end": 20722
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 20723,
+      "end": 20853
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20854,
+      "end": 20888
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 20889,
+      "end": 20904
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 20905,
+      "end": 20983
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 20984,
+      "end": 21002
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21003,
+      "end": 21025
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21026,
+      "end": 21143
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21144,
+      "end": 21160
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21161,
+      "end": 21244
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21245,
+      "end": 21273
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21274,
+      "end": 21320
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21321,
+      "end": 21337
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21338,
+      "end": 21571
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21572,
+      "end": 21590
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 21591,
+      "end": 21686
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21687,
+      "end": 21703
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 21704,
+      "end": 21822
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 21823,
+      "end": 21859
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21860,
+      "end": 21930
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 21931,
+      "end": 21947
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 21948,
+      "end": 22035
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22036,
+      "end": 22052
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22053,
+      "end": 22164
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22165,
+      "end": 22191
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22192,
+      "end": 22272
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 22273,
+      "end": 22289
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22290,
+      "end": 22363
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22364,
+      "end": 22390
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22391,
+      "end": 22544
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22545,
+      "end": 22581
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 22582,
+      "end": 22598
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22599,
+      "end": 22621
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22622,
+      "end": 22676
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 22677,
+      "end": 22690
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 22691,
+      "end": 22709
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22710,
+      "end": 22798
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 22799,
+      "end": 22815
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22816,
+      "end": 22899
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 22900,
+      "end": 22979
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 22980,
+      "end": 23006
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23007,
+      "end": 23050
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23051,
+      "end": 23067
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23068,
+      "end": 23093
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23094,
+      "end": 23167
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23168,
+      "end": 23189
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23190,
+      "end": 23306
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23307,
+      "end": 23328
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 23329,
+      "end": 23345
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23346,
+      "end": 23362
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23363,
+      "end": 23465
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23466,
+      "end": 23495
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23496,
+      "end": 23642
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23643,
+      "end": 23660
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23661,
+      "end": 23677
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23678,
+      "end": 23717
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23718,
+      "end": 23732
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23733,
+      "end": 23766
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23767,
+      "end": 23882
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 23883,
+      "end": 23938
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 23939,
+      "end": 23955
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 23956,
+      "end": 24147
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24148,
+      "end": 24164
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24165,
+      "end": 24181
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24182,
+      "end": 24198
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24199,
+      "end": 24221
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 24222,
+      "end": 24251
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24252,
+      "end": 24268
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24269,
+      "end": 24285
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 24286,
+      "end": 24346
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24347,
+      "end": 24369
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 24370,
+      "end": 24538
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24539,
+      "end": 24557
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24558,
+      "end": 24574
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24575,
+      "end": 24591
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24592,
+      "end": 24613
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24614,
+      "end": 24680
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 24681,
+      "end": 24703
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24704,
+      "end": 24748
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24749,
+      "end": 24764
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24765,
+      "end": 24887
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 24888,
+      "end": 24975
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 24976,
+      "end": 25007
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25008,
+      "end": 25021
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25022,
+      "end": 25227
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25228,
+      "end": 25242
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25243,
+      "end": 25257
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25258,
+      "end": 25344
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25345,
+      "end": 25361
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25362,
+      "end": 25433
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25434,
+      "end": 25450
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25451,
+      "end": 25570
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25571,
+      "end": 25589
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25590,
+      "end": 25610
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 25611,
+      "end": 25828
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25829,
+      "end": 25847
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 25848,
+      "end": 25870
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25871,
+      "end": 25888
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 25889,
+      "end": 25934
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 25935,
+      "end": 26062
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 26063,
+      "end": 26125
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26126,
+      "end": 26178
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 26179,
+      "end": 26205
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26206,
+      "end": 26230
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 26231,
+      "end": 26255
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26256,
+      "end": 26280
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 26281,
+      "end": 26298
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26299,
+      "end": 26350
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 26351,
+      "end": 26369
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26370,
+      "end": 26586
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 26587,
+      "end": 26604
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 26605,
+      "end": 27069
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 27070,
+      "end": 27088
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 27089,
+      "end": 27499
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 27500,
+      "end": 27518
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 27519,
+      "end": 27744
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 27745,
+      "end": 27763
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 27764,
+      "end": 27946
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 27947,
+      "end": 27965
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 27966,
+      "end": 28065
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 28066,
+      "end": 28084
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 28085,
+      "end": 28440
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 28441,
+      "end": 28456
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 28457,
+      "end": 28751
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 28752,
+      "end": 28770
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 28771,
+      "end": 28789
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 28790,
+      "end": 29076
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29077,
+      "end": 29095
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29096,
+      "end": 29316
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29317,
+      "end": 29333
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29334,
+      "end": 29399
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 29400,
+      "end": 29426
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29427,
+      "end": 29468
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 29469,
+      "end": 29485
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29486,
+      "end": 29502
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29503,
+      "end": 29542
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 29543,
+      "end": 29561
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29562,
+      "end": 29691
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29692,
+      "end": 29706
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 29707,
+      "end": 29723
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29724,
+      "end": 29809
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 29810,
+      "end": 29832
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29833,
+      "end": 29861
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 29862,
+      "end": 29898
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 29899,
+      "end": 30018
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30019,
+      "end": 30034
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30035,
+      "end": 30049
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30050,
+      "end": 30116
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30117,
+      "end": 30133
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30134,
+      "end": 30171
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30172,
+      "end": 30188
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30189,
+      "end": 30206
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30207,
+      "end": 30220
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30221,
+      "end": 30238
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30239,
+      "end": 30273
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30274,
+      "end": 30306
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30307,
+      "end": 30405
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30406,
+      "end": 30421
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30422,
+      "end": 30524
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30525,
+      "end": 30608
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30609,
+      "end": 30626
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30627,
+      "end": 30694
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30695,
+      "end": 30728
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30729,
+      "end": 30745
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30746,
+      "end": 30762
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30763,
+      "end": 30896
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 30897,
+      "end": 30915
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30916,
+      "end": 30933
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 30934,
+      "end": 30985
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 30986,
+      "end": 31002
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31003,
+      "end": 31021
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31022,
+      "end": 31091
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31092,
+      "end": 31172
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 31173,
+      "end": 31189
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31190,
+      "end": 31256
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31257,
+      "end": 31273
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31274,
+      "end": 31375
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31376,
+      "end": 31394
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 31395,
+      "end": 31413
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31414,
+      "end": 31484
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 31485,
+      "end": 31503
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31504,
+      "end": 31627
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31628,
+      "end": 31652
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31653,
+      "end": 31799
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31800,
+      "end": 31816
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31817,
+      "end": 31926
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31927,
+      "end": 31943
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 31944,
+      "end": 31960
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 31961,
+      "end": 31977
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 31978,
+      "end": 32071
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 32072,
+      "end": 32088
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 32089,
+      "end": 32106
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 32107,
+      "end": 32473
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32474,
+      "end": 32489
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 32490,
+      "end": 32580
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32581,
+      "end": 32807
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 32808,
+      "end": 32825
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32826,
+      "end": 32841
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 32842,
+      "end": 32862
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32863,
+      "end": 32899
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 32900,
+      "end": 32917
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32918,
+      "end": 32955
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 32956,
+      "end": 32973
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 32974,
+      "end": 33067
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33068,
+      "end": 33092
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33093,
+      "end": 33156
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33157,
+      "end": 33173
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33174,
+      "end": 33388
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33389,
+      "end": 33413
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33414,
+      "end": 33475
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33476,
+      "end": 33492
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33493,
+      "end": 33581
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 33582,
+      "end": 33599
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33600,
+      "end": 33636
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 33637,
+      "end": 33653
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33654,
+      "end": 33670
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 33671,
+      "end": 33920
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 33921,
+      "end": 33987
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 33988,
+      "end": 34000
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 34001,
+      "end": 34164
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34165,
+      "end": 34202
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 34203,
+      "end": 34219
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34220,
+      "end": 34295
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 34296,
+      "end": 34326
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34327,
+      "end": 34429
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 34430,
+      "end": 34446
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34447,
+      "end": 34622
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 34623,
+      "end": 34651
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34652,
+      "end": 34719
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 34720,
+      "end": 34829
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 34830,
+      "end": 34856
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 34857,
+      "end": 35019
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35020,
+      "end": 35036
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 35037,
+      "end": 35063
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 35064,
+      "end": 35117
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35118,
+      "end": 35134
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35135,
+      "end": 35151
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 35152,
+      "end": 35276
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35277,
+      "end": 35296
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 35297,
+      "end": 35428
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35429,
+      "end": 35445
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 35446,
+      "end": 35551
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35552,
+      "end": 35596
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 35597,
+      "end": 35613
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 35614,
+      "end": 35628
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35629,
+      "end": 35837
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35838,
+      "end": 35889
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 35890,
+      "end": 35906
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35907,
+      "end": 35940
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 35941,
+      "end": 35957
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 35958,
+      "end": 36137
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 36138,
+      "end": 36167
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 36168,
+      "end": 36213
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 36214,
+      "end": 36228
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 36229,
+      "end": 36393
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 36394,
+      "end": 36417
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 36418,
+      "end": 36432
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 36433,
+      "end": 36545
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 36546,
+      "end": 36652
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 36653,
+      "end": 36677
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 36678,
+      "end": 36694
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 36695,
+      "end": 36845
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 36846,
+      "end": 36890
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 36891,
+      "end": 36907
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 36908,
+      "end": 37176
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 37177,
+      "end": 37193
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 37194,
+      "end": 37236
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37237,
+      "end": 37392
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 37393,
+      "end": 37411
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37412,
+      "end": 37451
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 37452,
+      "end": 37474
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 37475,
+      "end": 37493
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37494,
+      "end": 37570
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 37571,
+      "end": 37587
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37588,
+      "end": 37759
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 37760,
+      "end": 37776
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37777,
+      "end": 37913
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 37914,
+      "end": 37932
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 37933,
+      "end": 38116
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 38117,
+      "end": 38133
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38134,
+      "end": 38151
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 38152,
+      "end": 38285
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38286,
+      "end": 38302
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 38303,
+      "end": 38358
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38359,
+      "end": 38398
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 38399,
+      "end": 38470
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38471,
+      "end": 38489
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 38490,
+      "end": 38513
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38514,
+      "end": 38540
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 38541,
+      "end": 38963
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 38964,
+      "end": 38990
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 38991,
+      "end": 39390
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 39391,
+      "end": 39465
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 39466,
+      "end": 39495
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 39496,
+      "end": 39524
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 39525,
+      "end": 39848
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 39849,
+      "end": 39909
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 39910,
+      "end": 39924
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 39925,
+      "end": 39943
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 39944,
+      "end": 39978
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 39979,
+      "end": 39995
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 39996,
+      "end": 40019
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 40020,
+      "end": 40113
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40114,
+      "end": 40264
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40265,
+      "end": 40281
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40282,
+      "end": 40311
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40312,
+      "end": 40328
+    },
+    {
+      "speaker_label": "Speaker_4",
+      "start": 40329,
+      "end": 40342
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 40343,
+      "end": 40370
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40371,
+      "end": 40476
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 40477,
+      "end": 40494
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40495,
+      "end": 40511
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40512,
+      "end": 40644
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40645,
+      "end": 40661
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40662,
+      "end": 40812
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40813,
+      "end": 40829
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 40830,
+      "end": 40918
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 40919,
+      "end": 41037
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41038,
+      "end": 41056
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41057,
+      "end": 41144
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41145,
+      "end": 41161
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41162,
+      "end": 41180
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41181,
+      "end": 41236
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41237,
+      "end": 41269
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41270,
+      "end": 41288
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41289,
+      "end": 41348
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41349,
+      "end": 41367
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41368,
+      "end": 41387
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41388,
+      "end": 41434
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41435,
+      "end": 41459
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41460,
+      "end": 41475
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41476,
+      "end": 41540
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41541,
+      "end": 41563
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41564,
+      "end": 41579
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41580,
+      "end": 41607
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41608,
+      "end": 41624
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41625,
+      "end": 41644
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41645,
+      "end": 41840
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 41841,
+      "end": 41932
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41933,
+      "end": 41951
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 41952,
+      "end": 41986
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 41987,
+      "end": 42003
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 42004,
+      "end": 42120
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42121,
+      "end": 42137
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 42138,
+      "end": 42271
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42272,
+      "end": 42288
+    },
+    {
+      "speaker_label": "Speaker_3",
+      "start": 42289,
+      "end": 42329
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42330,
+      "end": 42346
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 42347,
+      "end": 42363
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42364,
+      "end": 42470
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42471,
+      "end": 42632
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 42633,
+      "end": 42659
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42660,
+      "end": 42757
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 42758,
+      "end": 42775
+    },
+    {
+      "speaker_label": "Speaker_1",
+      "start": 42776,
+      "end": 42795
+    },
+    {
+      "speaker_label": "Speaker_2",
+      "start": 42796,
+      "end": 42870
+    }
+  ]
+}
