@@ -268,6 +268,10 @@ custom_rules:
       # side by side, so it names them the way a composition root does; its
       # logic lives in Sources/Summarize, which stays strategy-agnostic.
       - ".*/App/auricle-cli/Verbs/SmokeTestSummarizeVerb\\.swift$"
+      # The summarize stage's subprocess entry point wires the primary and
+      # fallback strategies into SummarizerOrchestrator; the stage logic
+      # itself lives in Sources/Summarize, which stays strategy-agnostic.
+      - ".*/App/auricle-cli/Verbs/InternalStageWorker\\.swift$"
       # Doesn't exist yet (Package.swift's own comment on the test-helper
       # composition root) — pre-excluded so it needs no lint-config change
       # the day it's added.

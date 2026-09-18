@@ -82,7 +82,7 @@ let package = Package(
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
         .target(
             name: "Summarize",
-            dependencies: ["Core", "State", "Telemetry", "SummarizerInterface", "CalendarInterface", "VaultGlossary"],
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "SummarizerInterface", "CalendarInterface", "VaultGlossary"],
             path: "Sources/Summarize",
             resources: [.copy("Prompts")],
         ),
@@ -142,7 +142,7 @@ let package = Package(
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
         .testTarget(
             name: "SummarizeTests",
-            dependencies: ["Summarize", "TestSupport", "ClaudeSummarizer"],
+            dependencies: ["Summarize", "TestSupport", "ClaudeSummarizer", "Orchestrator", "State", .product(name: "GRDB", package: "GRDB.swift")],
             path: "Tests/SummarizeTests",
             resources: [.copy("Snapshots")],
         ),

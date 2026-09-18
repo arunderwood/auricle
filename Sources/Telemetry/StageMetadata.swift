@@ -154,7 +154,10 @@ public struct AttributeMeta: Codable, Equatable, Sendable {
 /// architecture.md:1233 — `{"model_id": "claude-opus-5", "effort_budget":
 /// "medium", "input_tokens": ..., "output_tokens": ..., "thinking_tokens":
 /// ..., "cost_usd": ..., "quote_validation_drop_count": ...,
-/// "grounding_method": "..."}`.
+/// "grounding_method": "..."}`. `fallback_triggered` says whether the
+/// fallback strategy produced the summary; `fallback_error_class` is the
+/// stable class of the primary strategy's failure that caused it, and is
+/// absent when no fallback ran.
 public struct SummarizeMeta: Codable, Equatable, Sendable {
     public var modelID: String
     public var effortBudget: String
@@ -164,6 +167,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
     public var costUSD: Double
     public var quoteValidationDropCount: Int
     public var groundingMethod: String
+    public var fallbackTriggered: Bool
+    public var fallbackErrorClass: String?
 
     enum CodingKeys: String, CodingKey {
         case modelID = "model_id"
@@ -174,6 +179,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         case costUSD = "cost_usd"
         case quoteValidationDropCount = "quote_validation_drop_count"
         case groundingMethod = "grounding_method"
+        case fallbackTriggered = "fallback_triggered"
+        case fallbackErrorClass = "fallback_error_class"
     }
 
     public init(
@@ -185,6 +192,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         costUSD: Double,
         quoteValidationDropCount: Int,
         groundingMethod: String,
+        fallbackTriggered: Bool,
+        fallbackErrorClass: String?,
     ) {
         self.modelID = modelID
         self.effortBudget = effortBudget
@@ -194,6 +203,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         self.costUSD = costUSD
         self.quoteValidationDropCount = quoteValidationDropCount
         self.groundingMethod = groundingMethod
+        self.fallbackTriggered = fallbackTriggered
+        self.fallbackErrorClass = fallbackErrorClass
     }
 }
 

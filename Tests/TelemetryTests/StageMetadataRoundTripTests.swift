@@ -64,8 +64,45 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
         costUSD: 0.32,
         quoteValidationDropCount: 2,
         groundingMethod: "citations",
+        fallbackTriggered: false,
+        fallbackErrorClass: nil,
     ))
     #expect(try roundTrip(original) == original)
+}
+
+@Test func summarizeMetaWithFallbackRoundTripsLosslessly() throws {
+    let original = StageMetadata.summarize(SummarizeMeta(
+        modelID: "claude-opus-5",
+        effortBudget: "medium",
+        inputTokens: 4200,
+        outputTokens: 900,
+        thinkingTokens: 1200,
+        costUSD: 0.32,
+        quoteValidationDropCount: 0,
+        groundingMethod: "substring",
+        fallbackTriggered: true,
+        fallbackErrorClass: "summarizer_citations_unavailable",
+    ))
+    #expect(try roundTrip(original) == original)
+}
+
+@Test func summarizeMetaEncodesFallbackFieldsUnderSnakeCaseKeys() throws {
+    let meta = SummarizeMeta(
+        modelID: "claude-opus-5",
+        effortBudget: "medium",
+        inputTokens: 1,
+        outputTokens: 2,
+        thinkingTokens: 3,
+        costUSD: 0.1,
+        quoteValidationDropCount: 0,
+        groundingMethod: "substring",
+        fallbackTriggered: true,
+        fallbackErrorClass: "summarizer_rate_limited",
+    )
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(meta)) as? [String: Any])
+
+    #expect(object["fallback_triggered"] as? Bool == true)
+    #expect(object["fallback_error_class"] as? String == "summarizer_rate_limited")
 }
 
 @Test func persistMetaRoundTripsLosslessly() throws {

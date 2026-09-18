@@ -1,16 +1,16 @@
 /// The `summary.json` cache-artifact contract (cache-artifact JSON dialect,
-/// `Core/Codable+Dialects.swift`): `PersistStage`'s sole input for building
-/// `MeetingForFrontmatter`/`MeetingForFilename`, produced upstream by the
-/// summarize stage (or, in Epic 2's own validation scope, a fixture standing
-/// in for it — see `epic-2-context.md`'s synthetic-input note).
+/// `Core/Codable+Dialects.swift`): written by `SummarizeStage` and read by
+/// `PersistStage`, which builds `MeetingForFrontmatter`/`MeetingForFilename`
+/// from it. It lives in `Core` because neither stage may import the other.
 ///
 /// `title` and `calendarEventTitle` are deliberately separate fields: `title`
-/// is the frontmatter-display title, already carrying any "Meeting at
-/// <HHMM>" fallback the upstream stage applied when calendar enrichment
-/// failed (Decision 2.2's variant tagging); `calendarEventTitle` is `nil` in
-/// that same failure case and feeds only `FilenameResolver`'s slug-source-1
-/// (Decision 2.4) — a `title` fallback string must never leak into the
-/// filename slug chain, which has its own independent fallbacks.
+/// is the frontmatter-display title; when no calendar event enriched the
+/// meeting it is the generic `Meeting at YYYY-MM-DDTHH:mm <zone abbreviation>`
+/// (Decision 2.2's calendar-failed variant, e.g. `Meeting at 2026-04-28T10:30
+/// PDT`), in the capture's local time. `calendarEventTitle` is `nil` in that
+/// same case and feeds only `FilenameResolver`'s slug-source-1 (Decision 2.4)
+/// — a `title` fallback string must never leak into the filename slug chain,
+/// which has its own independent fallbacks.
 public struct SummaryArtifact: Codable, Equatable {
     public let title: String
     public let calendarEventTitle: String?

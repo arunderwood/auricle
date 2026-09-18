@@ -201,15 +201,11 @@ public enum SmokeTestReportRenderer {
     /// out of bounds, inverted, or lands inside a multi-byte scalar renders
     /// a placeholder: a bad pointer must not trap the report.
     static func sourceQuote(for pointer: GroundingPointer, in transcriptBytes: [UInt8]) -> String {
-        let start = pointer.transcriptStart
-        let end = pointer.transcriptEnd
-        guard start >= 0, start <= end, end <= transcriptBytes.count else {
-            return outOfRangePlaceholder
+        switch TranscriptSlicer.slice(pointer, of: transcriptBytes) {
+        case let .success(quote): quote
+        case .failure(.outOfRange): outOfRangePlaceholder
+        case .failure(.notOnScalarBoundary): notOnBoundaryPlaceholder
         }
-        guard let quote = String(bytes: transcriptBytes[start ..< end], encoding: .utf8) else {
-            return notOnBoundaryPlaceholder
-        }
-        return quote
     }
 
     // MARK: - Escaping
