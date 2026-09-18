@@ -161,6 +161,11 @@ custom_rules:
       # summary-decode paths — same rationale as VaultWriterTests.swift
       # above.
       - ".*/Tests/PersistTests/PersistStageTests\\.swift$"
+      # Plants a file at the meeting's cache-directory path to exercise
+      # CacheArtifactWriter's directory-creation failure — same rationale as
+      # VaultWriterTests.swift above: the fixture writes the blocking state
+      # directly, CacheArtifactWriter under test never does.
+      - ".*/Tests/CoreTests/CacheArtifactWriterTests\\.swift$"
 
   log_facade_bypass:
     name: "Log facade bypass"
