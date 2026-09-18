@@ -65,6 +65,7 @@ private func makeSummary(groundingMethod: GroundingMethod) -> SummaryWithGroundi
         decisions: [],
         groundingMethod: groundingMethod,
         cost: SummarizerCost(inputTokens: 0, outputTokens: 0, thinkingTokens: 0, costUSD: 0),
+        quoteValidationDropCount: 0,
     )
 }
 

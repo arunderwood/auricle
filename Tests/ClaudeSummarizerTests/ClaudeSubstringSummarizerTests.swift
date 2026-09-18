@@ -177,6 +177,7 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     #expect(result.decisions == [GroundedItem(text: "Launch moves to the 15th", grounding: expectedDecisionPointer)])
     #expect(result.actionItems[0].grounding.sourceMethod == .substring)
     #expect(result.groundingMethod == .substring)
+    #expect(result.quoteValidationDropCount == 0)
     #expect(result.schemaVersion == 1)
     #expect(result.cost == SummarizerCost(inputTokens: 100, outputTokens: 50, thinkingTokens: 0, costUSD: result.cost.costUSD))
     #expect(result.cost.costUSD > 0)
@@ -206,6 +207,32 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     #expect(result.actionItems.count == 1)
     #expect(result.actionItems[0].text == "Ben drafts the brief")
     #expect(result.decisions.isEmpty)
+    #expect(result.quoteValidationDropCount == 2)
+}
+
+@Test func oneDroppedItemOfThreeReportsAQuoteValidationDropCountOfOne() async throws {
+    let transcript = makeTranscript()
+    let actionQuote = "I'll take a first pass at the brief by Friday."
+    let decisionQuote = "Let's push the launch to the 15th."
+    let invalidQuote = "This sentence never appears anywhere in the transcript."
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    let answer = try modelAnswerJSON(
+        actionItems: [
+            (text: "Ben drafts the brief", quote: actionQuote),
+            (text: "A commitment nobody made", quote: invalidQuote),
+        ],
+        decisions: [(text: "Launch moves to the 15th", quote: decisionQuote)],
+    )
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: answer))
+
+    let result = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: transcript, glossary: Glossary(), config: SummarizerConfig(),
+    )
+
+    #expect(result.actionItems.count == 1)
+    #expect(result.decisions.count == 1)
+    #expect(result.quoteValidationDropCount == 1)
 }
 
 // MARK: - Structurally malformed JSON

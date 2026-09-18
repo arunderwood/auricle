@@ -93,7 +93,8 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
 
         let (actionItems, actionItemDrops) = groundedItems(from: answer.actionItems, section: "actionItem", transcript: transcript)
         let (decisions, decisionDrops) = groundedItems(from: answer.decisions, section: "decision", transcript: transcript)
-        log.info("substring quote validation complete", Self.dropCountLogFields(actionItemDrops + decisionDrops))
+        let dropCount = actionItemDrops + decisionDrops
+        log.info("substring quote validation complete", Self.dropCountLogFields(dropCount))
 
         return SummaryWithGrounding(
             schemaVersion: 1,
@@ -107,6 +108,7 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
                 thinkingTokens: response.thinkingTokens,
                 costUSD: response.costUSD,
             ),
+            quoteValidationDropCount: dropCount,
         )
     }
 

@@ -60,6 +60,10 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
         ["type": "ephemeral"]
     }
 
+    /// Citations is all-or-nothing: any grounding failure throws instead of
+    /// dropping the item, so a successful return has nothing to count.
+    private static let quoteValidationDropCount = 0
+
     private let httpClient: AnthropicHTTPClient
     /// `static`, not an instance property: `groundedSummary` and
     /// `citationBlockLocation` are `static func`s and need this too, and
@@ -129,6 +133,7 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
                 decisions: [],
                 groundingMethod: .citations,
                 cost: cost(from: response),
+                quoteValidationDropCount: quoteValidationDropCount,
             )
         }
 
@@ -160,6 +165,7 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
             decisions: groundedDecisions,
             groundingMethod: .citations,
             cost: cost(from: response),
+            quoteValidationDropCount: quoteValidationDropCount,
         )
     }
 

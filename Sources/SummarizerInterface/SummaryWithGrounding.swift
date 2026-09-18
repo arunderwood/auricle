@@ -9,6 +9,10 @@ public struct SummaryWithGrounding: Codable, Sendable, Equatable {
     public let decisions: [GroundedItem]
     public let groundingMethod: GroundingMethod
     public let cost: SummarizerCost
+    /// Items the strategy discarded because their grounding did not validate.
+    /// A strategy that fails the whole call on any grounding failure (Citations)
+    /// reports 0 here; the signal for that strategy is the thrown error.
+    public let quoteValidationDropCount: Int
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -17,6 +21,7 @@ public struct SummaryWithGrounding: Codable, Sendable, Equatable {
         case decisions
         case groundingMethod = "grounding_method"
         case cost
+        case quoteValidationDropCount = "quote_validation_drop_count"
     }
 
     public init(
@@ -26,6 +31,7 @@ public struct SummaryWithGrounding: Codable, Sendable, Equatable {
         decisions: [GroundedItem],
         groundingMethod: GroundingMethod,
         cost: SummarizerCost,
+        quoteValidationDropCount: Int,
     ) {
         self.schemaVersion = schemaVersion
         self.summary = summary
@@ -33,6 +39,7 @@ public struct SummaryWithGrounding: Codable, Sendable, Equatable {
         self.decisions = decisions
         self.groundingMethod = groundingMethod
         self.cost = cost
+        self.quoteValidationDropCount = quoteValidationDropCount
     }
 }
 
