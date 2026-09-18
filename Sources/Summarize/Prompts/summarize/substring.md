@@ -1,0 +1,1 @@
+Each item must include a `source_transcript_quote` field reproducing the exact transcript text, character-for-character including punctuation. Do not normalize, expand contractions, or remove disfluencies.

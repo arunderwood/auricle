@@ -149,6 +149,13 @@ custom_rules:
       # above — the fixture writes the raw state directly, VaultWriter
       # under test never does.
       - ".*/Tests/PersistTests/VaultWriterTests\\.swift$"
+      # Writes throwaway `promptDir` override files (valid and
+      # invalid-UTF-8) to set up fixture state for
+      # SummarizationPromptBuilder's file-resolution tests. The builder
+      # only ever reads a `promptDir`, never writes one, so this sits
+      # outside AtomicWriter's domain the same way VaultWriterTests.swift's
+      # fixture setup does.
+      - ".*/Tests/SummarizeTests/PromptBuilderSnapshotTests\\.swift$"
       # Plants a pre-existing "original" vault note and a summary.json
       # fixture directly on disk to exercise PersistStage's re-publish and
       # summary-decode paths — same rationale as VaultWriterTests.swift
@@ -184,14 +191,25 @@ custom_rules:
       A direct JSONDecoder().decode(...) on a transcript payload skips the
       NFC/LF/`<Speaker_N>:`/byte-offset normalization later stages and
       quote-grounding depend on being applied uniformly.
-    regex: 'JSONDecoder\(\)\.decode\([^)]*[Tt]ranscript'
+    regex: 'JSONDecoder\(\)\.decode\(\s*+(?!\[?CanonicalTranscript\]?\.self\b)[^)]*[Tt]ranscript'
     match_kinds:
       - identifier
       - keyword
     severity: error
-    # No exclusion list: no canonicalization-layer file exists yet in this
-    # tree (Sources/State/CanonicalTranscript* per deferred-work.md:13-15).
-    # A future story adds its file here once that layer exists.
+    # `CanonicalTranscript.self` (or an array of it) is exempted because it
+    # is the correct decode *target* for a transcript payload, not because
+    # decoding alone performs normalization: the type (Story 3.1, Sources/
+    # Core/CanonicalTranscript.swift) is a bare Codable struct today — NFC/
+    # LF enforcement and offset validation are still Story 3.5's scope.
+    # `\s*+` is possessive, not greedy-with-backtracking: a plain `\s*`
+    # lets the engine give back one whitespace character when the lookahead
+    # blocks it at the fully-consumed position, after which `[^)]*` can
+    # walk back in and match the "Transcript" that is itself a substring of
+    # "CanonicalTranscript" — silently defeating the exemption on any
+    # multi-line call. Possessive `\s*+` never gives characters back, so the
+    # lookahead is only ever evaluated at the one true anchor position. This
+    # regex only exempts that literal target; any other decode call with
+    # "Transcript" in its target type still trips the rule.
 
   telemetry_sql_bypass:
     name: "stage_events/telemetry SQL bypass"
@@ -254,6 +272,21 @@ custom_rules:
       - ".*/Sources/WhisperKitTranscriber/.*\\.swift$"
       - ".*/Sources/WhisperKitDiarizer/.*\\.swift$"
       - ".*/Sources/GoogleCalendarSource/.*\\.swift$"
+      # A concrete strategy's own test target constructing it to test it is
+      # the same non-bypass as the strategy's own source file doing so above:
+      # the caller here is the type's own unit test suite, not a `caller`
+      # reaching past `SummarizerStrategy` into the concrete type. Scoped per
+      # test target, not blanket — a different concrete strategy's test
+      # target needs its own directory added here before it can construct
+      # its own type directly; this entry does not cover it.
+      - ".*/Tests/ClaudeSummarizerTests/.*\\.swift$"
+      # CrossModeFixtureTests.swift constructs both ClaudeCitationsSummarizer
+      # and ClaudeSubstringSummarizer directly to prove the two grounding
+      # strategies agree on offset semantics — the cross-strategy contract
+      # test is its own caller, not a composition root, but per-test-target
+      # scoping still applies: this entry covers only this test target's own
+      # directory, the same as the ClaudeSummarizerTests entry above.
+      - ".*/Tests/SummarizeTests/.*\\.swift$"
 
   accessibility_label_missing:
     name: "Missing accessibilityLabel"

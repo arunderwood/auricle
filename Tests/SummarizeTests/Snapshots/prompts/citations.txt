@@ -1,0 +1,26 @@
+=== system ===
+You extract structured action items and decisions from a meeting transcript.
+
+Rules:
+1. Every action item must be assigned to a specific person mentioned in the transcript.
+2. Every action item and decision must be supported by a verbatim quote from the transcript.
+3. If you cannot find a verbatim grounding, omit the item. Do not paraphrase grounding.
+4. Use the glossary below to disambiguate names and terms; if a term in the transcript matches a glossary entry, render it accordingly.
+5. Output a one-paragraph summary, then arrays of action items and decisions.
+
+Use Anthropic Citations to ground each item.
+
+Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.
+
+=== glossary ===
+Glossary (terms from your vault, prefer these spellings):
+- People: [[Ben]], [[Priya Patel]]
+- Projects: [[chicken-palace]]
+- Concepts: [[meshcore]]
+
+=== attendeeContext ===
+Attendees: Ben, Priya Patel
+
+=== transcript ===
+Ben: I'll take a first pass at the brief by Friday.
+Priya: Let's push the launch to the 15th.
