@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "movie_scene",
+    "license": "Supplied by the maintainer, who confirmed it may be committed. See NOTICE.md.",
+    "attribution": "See NOTICE.md in the parent directory.",
+    "title": "Margin Call (2011), boardroom scene",
+    "origin": "supplied by the maintainer"
+  },
+  "speakers": {
+    "Speaker_1": "Tuld",
+    "Speaker_2": "Cohen",
+    "Speaker_3": "Sullivan",
+    "Speaker_4": "Rogers",
+    "Speaker_5": "Shah"
+  },
+  "action_items": [
+    {
+      "text": "Call the traders in for their 6:30am meeting and be honest with them about the sell-off.",
+      "quote": "you call the traders in for their normal 6:30am meeting and you be honest with them",
+      "transcript_start": 5181,
+      "transcript_end": 5264
+    },
+    {
+      "text": "Have forty percent of the positions sold by 10:15.",
+      "quote": "Forty percent done by 10:15.",
+      "transcript_start": 5468,
+      "transcript_end": 5496
+    },
+    {
+      "text": "Have all trades gone by 11:00.",
+      "quote": "By 11:00 all your trades have to be gone",
+      "transcript_start": 5497,
+      "transcript_end": 5537
+    }
+  ],
+  "decisions": [
+    {
+      "text": "Sell the firm's positions today to willing buyers at the current market price, to survive.",
+      "quote": "We are selling to willing buyers at the current fair market price -- so that we may survive.",
+      "transcript_start": 6248,
+      "transcript_end": 6340
+    }
+  ],
+  "targets": {
+    "min_recall": 0.75,
+    "max_false_keeps": 1
+  },
+  "notes": "The action items are the plan one participant lays out and the closing decision adopts; no owner is assigned to any of them. Whether a prescribed plan counts as an action item is a judgment call."
+}

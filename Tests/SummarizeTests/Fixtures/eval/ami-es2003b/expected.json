@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "ami_meeting",
+    "title": "AMI Meeting Corpus ES2003b (scenario design meeting, session b, functional design)",
+    "origin": "https://github.com/Yale-LILY/QMSum/blob/main/data/Product/all/ES2003b.json",
+    "license": "CC BY 4.0",
+    "attribution": "See NOTICE.md in the parent directory."
+  },
+  "speakers": {
+    "Speaker_1": "Marketing",
+    "Speaker_2": "Project Manager",
+    "Speaker_3": "User Interface",
+    "Speaker_4": "Industrial Designer"
+  },
+  "action_items": [
+    {
+      "text": "Industrial Designer (Speaker_4) will look into a speaker, an LED and a transmitter for locating the lost remote.",
+      "quote": "So I should just look at um the speaker, the speaker and an L_E_D_.",
+      "transcript_start": 30968,
+      "transcript_end": 31035
+    },
+    {
+      "text": "Marketing Expert (Speaker_1) is asked to find out what people think of the minimalist joystick-plus-display approach.",
+      "quote": "see what people think about the idea of this minimalist approach that we've taken, where of a joystick to control the very basic functions",
+      "transcript_start": 30201,
+      "transcript_end": 30339
+    }
+  ],
+  "decisions": [
+    {
+      "text": "The LCD will be black and white rather than colour, to keep unit cost down.",
+      "quote": "most of the mobile phone displays you see these days are colour but we should probably try to stick to black and white.",
+      "transcript_start": 17389,
+      "transcript_end": 17508
+    },
+    {
+      "text": "The remote will include a locate-me feature: a transmitter attached to the TV makes the remote beep (with a speaker, possibly an LED).",
+      "quote": "So that would require a um transmitter maybe attached to the T_V_, just so that it says find me",
+      "transcript_start": 28268,
+      "transcript_end": 28363
+    }
+  ],
+  "targets": {
+    "min_recall": 0.8,
+    "max_false_keeps": 1
+  },
+  "notes": "Few crisp commitments: this is a functional-design meeting that mostly floats ideas, and the wrap-up assigns only two tasks (Industrial Designer on locate hardware, Marketing Expert on user opinion of the minimalist approach). Deliberately left out: dropping voice recognition and the macro facility (the PM only voiced doubts), TV-only scope (a pre-existing requirement), joystick direction mappings, and the slogan/logo placement (soft, unassigned). The 'minimal remote' design direction was dropped as only a rough idea; the black-and-white LCD and locate-me decisions are hedged ('probably', 'maybe') but each is agreed by another participant or assigned as follow-up work."
+}

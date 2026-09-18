@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "ami_meeting",
+    "title": "AMI Meeting Corpus ES2003a (scenario design meeting, session a, kickoff)",
+    "origin": "https://github.com/Yale-LILY/QMSum/blob/main/data/Product/all/ES2003a.json",
+    "license": "CC BY 4.0",
+    "attribution": "See NOTICE.md in the parent directory."
+  },
+  "speakers": {
+    "Speaker_1": "Project Manager",
+    "Speaker_2": "Marketing",
+    "Speaker_3": "Industrial Designer",
+    "Speaker_4": "User Interface"
+  },
+  "action_items": [
+    {
+      "text": "Speaker_1 (project manager) will write up what was covered in the meeting and send it to everyone.",
+      "quote": "I'll write up what we've um kind of quickly done, and I'll get that out to everybody.",
+      "transcript_start": 11648,
+      "transcript_end": 11733
+    }
+  ],
+  "decisions": [],
+  "targets": {
+    "min_recall": 0.8,
+    "max_false_keeps": 1
+  },
+  "notes": "This is an opening meeting (introductions, animal drawings, brainstorming) with no explicit group decisions and only one clear commitment, the project manager's promise to write up and circulate the meeting summary. Left out: the tentative agreement that a touch screen is too expensive (hedged, not settled), the macro/integrated-control and ergonomic-shape ideas (floated and liked, not agreed), and the closing note to leave the microphones and take the laptops (logistics, not a project task)."
+}

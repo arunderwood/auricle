@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "movie_scene",
+    "license": "Supplied by the maintainer, who confirmed it may be committed. See NOTICE.md.",
+    "attribution": "See NOTICE.md in the parent directory.",
+    "title": "Office Space (1999), interview scene with the two consultants",
+    "origin": "supplied by the maintainer"
+  },
+  "speakers": {
+    "Speaker_1": "Bob Slydell",
+    "Speaker_2": "Peter",
+    "Speaker_3": "Bob Porter"
+  },
+  "action_items": [],
+  "decisions": [],
+  "targets": {
+    "min_recall": 1.0,
+    "max_false_keeps": 0
+  },
+  "notes": "An interview with no commitments and no decisions. The expected output is empty, so anything a summarizer keeps here is ungrounded or invented."
+}
