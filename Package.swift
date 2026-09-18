@@ -121,7 +121,7 @@ let package = Package(
         .target(name: "TestSupport", dependencies: ["Core"], path: "Sources/TestSupport"),
 
         // === Test targets (one per source target) ===
-        .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport"], path: "Tests/CoreTests"),
+        .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport", "ClaudeSummarizer"], path: "Tests/CoreTests"),
         .testTarget(name: "StateTests", dependencies: ["State", "TestSupport"], path: "Tests/StateTests"),
         .testTarget(name: "TelemetryTests", dependencies: ["Telemetry", "TestSupport"], path: "Tests/TelemetryTests"),
         .testTarget(name: "OrchestratorTests", dependencies: ["Orchestrator", "TestSupport"], path: "Tests/OrchestratorTests"),
@@ -142,7 +142,7 @@ let package = Package(
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
         .testTarget(
             name: "SummarizeTests",
-            dependencies: ["Summarize", "TestSupport"],
+            dependencies: ["Summarize", "TestSupport", "ClaudeSummarizer"],
             path: "Tests/SummarizeTests",
             resources: [.copy("Snapshots")],
         ),

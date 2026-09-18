@@ -280,6 +280,13 @@ custom_rules:
       # target needs its own directory added here before it can construct
       # its own type directly; this entry does not cover it.
       - ".*/Tests/ClaudeSummarizerTests/.*\\.swift$"
+      # CrossModeFixtureTests.swift constructs both ClaudeCitationsSummarizer
+      # and ClaudeSubstringSummarizer directly to prove the two grounding
+      # strategies agree on offset semantics — the cross-strategy contract
+      # test is its own caller, not a composition root, but per-test-target
+      # scoping still applies: this entry covers only this test target's own
+      # directory, the same as the ClaudeSummarizerTests entry above.
+      - ".*/Tests/SummarizeTests/.*\\.swift$"
 
   accessibility_label_missing:
     name: "Missing accessibilityLabel"

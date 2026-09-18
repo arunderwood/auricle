@@ -10,6 +10,8 @@ Rules:
 
 Use Anthropic Citations to ground each item.
 
+Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.
+
 === glossary ===
 Glossary (terms from your vault, prefer these spellings):
 - People: [[Ben]], [[Priya Patel]]

@@ -110,7 +110,11 @@ private func loadGolden(_ fileName: String) throws -> String {
 // MARK: - Mode drift
 
 @Test func sharedBlocksAreByteIdenticalAcrossModesAndOnlyTheAddendumDiffers() throws {
-    let citationsAddendum = "Use Anthropic Citations to ground each item."
+    let citationsAddendum = """
+    Use Anthropic Citations to ground each item.
+
+    Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.
+    """
     let substringAddendum = """
     Each item must include a `source_transcript_quote` field reproducing the exact transcript text, \
     character-for-character including punctuation. Do not normalize, expand contractions, or remove disfluencies.
@@ -170,7 +174,10 @@ private func loadGolden(_ fileName: String) throws -> String {
     )
 
     #expect(prompt.system.text.hasPrefix(overriddenSystem))
-    #expect(prompt.system.text.hasSuffix("Use Anthropic Citations to ground each item."))
+    #expect(prompt.system.text.contains("Use Anthropic Citations to ground each item."))
+    #expect(prompt.system.text.hasSuffix(
+        "Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.",
+    ))
 }
 
 @Test func missingBundledResourceThrows() throws {
