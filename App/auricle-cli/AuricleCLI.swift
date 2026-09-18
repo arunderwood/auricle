@@ -18,6 +18,7 @@ struct AuricleCLI: AsyncParsableCommand {
             DoctorVerb.self,
             BareInvocation.self,
             InternalStageWorker.self,
+            SmokeTestSummarizeVerb.self,
         ],
         defaultSubcommand: BareInvocation.self,
     )

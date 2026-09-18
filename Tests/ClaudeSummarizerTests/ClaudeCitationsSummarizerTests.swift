@@ -187,6 +187,7 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
         GroundedItem(text: "Launch moves to the 15th", grounding: GroundingPointer(transcriptStart: 52, transcriptEnd: 93, sourceMethod: .citations)),
     ])
     #expect(result.groundingMethod == .citations)
+    #expect(result.quoteValidationDropCount == 0)
     #expect(result.schemaVersion == 1)
     #expect(result.cost == SummarizerCost(inputTokens: 100, outputTokens: 50, thinkingTokens: 0, costUSD: result.cost.costUSD))
     #expect(result.cost.costUSD > 0)
@@ -312,6 +313,7 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
     #expect(result.actionItems == [])
     #expect(result.decisions == [])
     #expect(result.groundingMethod == .citations)
+    #expect(result.quoteValidationDropCount == 0)
 }
 
 // MARK: - Multiple citations on one block

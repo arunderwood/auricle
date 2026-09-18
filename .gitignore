@@ -233,3 +233,8 @@ Derived/
 
 # macOS
 .DS_Store
+
+# Story 3.8 smoke-test rig: real meeting transcripts and the reports derived
+# from them (detail.md quotes them). Never committed.
+Tests/fixtures/smoke-test-transcripts/
+Tests/fixtures/smoke-test-output/

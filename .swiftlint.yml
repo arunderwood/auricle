@@ -264,6 +264,10 @@ custom_rules:
     excluded:
       - ".*/App/Auricle/AuricleApp\\.swift$"
       - ".*/App/auricle-cli/AuricleCLI\\.swift$"
+      # The Decision 3.6 smoke-test verb runs both concrete summarizers
+      # side by side, so it names them the way a composition root does; its
+      # logic lives in Sources/Summarize, which stays strategy-agnostic.
+      - ".*/App/auricle-cli/Verbs/SmokeTestSummarizeVerb\\.swift$"
       # Doesn't exist yet (Package.swift's own comment on the test-helper
       # composition root) — pre-excluded so it needs no lint-config change
       # the day it's added.

@@ -20,6 +20,7 @@ import Testing
         ],
         groundingMethod: .citations,
         cost: SummarizerCost(inputTokens: 100, outputTokens: 50, thinkingTokens: 10, costUSD: 0.05),
+        quoteValidationDropCount: 3,
     )
 
     let data = try JSONEncoder().encode(value)
@@ -35,6 +36,7 @@ import Testing
     #expect(json.contains("\"output_tokens\""))
     #expect(json.contains("\"thinking_tokens\""))
     #expect(json.contains("\"cost_usd\""))
+    #expect(json.contains("\"quote_validation_drop_count\""))
 
     #expect(!json.contains("\"schemaVersion\""))
     #expect(!json.contains("\"actionItems\""))
@@ -46,7 +48,9 @@ import Testing
     #expect(!json.contains("\"outputTokens\""))
     #expect(!json.contains("\"thinkingTokens\""))
     #expect(!json.contains("\"costUSD\""))
+    #expect(!json.contains("\"quoteValidationDropCount\""))
 
     let decoded = try JSONDecoder().decode(SummaryWithGrounding.self, from: data)
     #expect(decoded == value)
+    #expect(decoded.quoteValidationDropCount == 3)
 }
