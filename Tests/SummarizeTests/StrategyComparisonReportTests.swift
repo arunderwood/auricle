@@ -24,7 +24,7 @@ private func pointer(_ start: Int, _ end: Int) -> GroundingPointer {
     GroundingPointer(transcriptStart: start, transcriptEnd: end, sourceMethod: .substring)
 }
 
-private func makeRows() -> [SmokeTestRow] {
+private func makeRows() -> [StrategyComparisonRow] {
     let draft = byteRange(of: "I'll draft the café brief.")
     let both = byteRange(of: "ship it 🚀 by Friday.\nBen: I'll")
     let summary = SummaryWithGrounding(
@@ -38,9 +38,9 @@ private func makeRows() -> [SmokeTestRow] {
     )
     let transcript = CanonicalTranscript(text: transcriptText, utterances: [])
     return [
-        SmokeTestRow(name: "standup", transcript: transcript, arms: [
-            SmokeTestArmResult(label: "citations", outcome: .failure(reason: "SummarizerError.citationsUnavailable")),
-            SmokeTestArmResult(label: "substring", outcome: .summary(summary)),
+        StrategyComparisonRow(name: "standup", transcript: transcript, arms: [
+            StrategyComparisonArmResult(label: "citations", outcome: .failure(reason: "SummarizerError.citationsUnavailable")),
+            StrategyComparisonArmResult(label: "substring", outcome: .summary(summary)),
         ]),
     ]
 }
@@ -48,16 +48,16 @@ private func makeRows() -> [SmokeTestRow] {
 private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
 private func metricsReport() -> String {
-    SmokeTestReportRenderer.metricsReport(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5")
+    StrategyComparisonReportRenderer.metricsReport(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5")
 }
 
-private func detailReport(rows: [SmokeTestRow] = makeRows()) -> String {
-    SmokeTestReportRenderer.detailReport(rows: rows, generatedAt: now, modelIdentifier: "claude-opus-5")
+private func detailReport(rows: [StrategyComparisonRow] = makeRows()) -> String {
+    StrategyComparisonReportRenderer.detailReport(rows: rows, generatedAt: now, modelIdentifier: "claude-opus-5")
 }
 
 // MARK: - Tests
 
-struct SmokeTestReportTests {
+struct StrategyComparisonReportTests {
     @Test func metricsReportHasNoItemTextOrSourceQuote() {
         let report = metricsReport()
 
@@ -68,7 +68,7 @@ struct SmokeTestReportTests {
         let blockquoteLines = report.components(separatedBy: "\n").filter {
             $0.trimmingCharacters(in: .whitespaces).hasPrefix(">")
         }
-        #expect(blockquoteLines == SmokeTestReportRenderer.flipRuleLines.map { "> \($0)" })
+        #expect(blockquoteLines == StrategyComparisonReportRenderer.flipRuleLines.map { "> \($0)" })
     }
 
     @Test func metricsReportRecordsComputedMetricsPerArmInOrder() {
@@ -92,14 +92,14 @@ struct SmokeTestReportTests {
             #expect(report.contains("## Default and rationale"))
             #expect(report.contains("Default: \n"))
             #expect(report.contains("Rationale: \n"))
-            for line in SmokeTestReportRenderer.flipRuleLines {
+            for line in StrategyComparisonReportRenderer.flipRuleLines {
                 #expect(report.contains("> \(line)"))
             }
         }
     }
 
     @Test func flipRuleStatesBothHalvesOfStory38() {
-        let rule = SmokeTestReportRenderer.flipRuleLines.joined(separator: "\n")
+        let rule = StrategyComparisonReportRenderer.flipRuleLines.joined(separator: "\n")
 
         #expect(rule.contains("Citations is locked as MVP default IF Citations matches or beats substring on every transcript"))
         #expect(rule.contains("the default flips to substring IF substring catches anything Citations missed (any false-drop, any recall miss)"))
@@ -118,11 +118,11 @@ struct SmokeTestReportTests {
     @Test func detailReportRendersAPlaceholderForAnUnusableRangeInsteadOfTrapping() {
         let emoji = byteRange(of: "🚀")
         let pointers: [(GroundingPointer, String)] = [
-            (pointer(0, 10000), SmokeTestReportRenderer.outOfRangePlaceholder),
-            (pointer(-1, 4), SmokeTestReportRenderer.outOfRangePlaceholder),
-            (pointer(9, 4), SmokeTestReportRenderer.outOfRangePlaceholder),
-            (pointer(emoji.start + 1, emoji.end), SmokeTestReportRenderer.notOnBoundaryPlaceholder),
-            (pointer(emoji.start, emoji.end - 1), SmokeTestReportRenderer.notOnBoundaryPlaceholder),
+            (pointer(0, 10000), StrategyComparisonReportRenderer.outOfRangePlaceholder),
+            (pointer(-1, 4), StrategyComparisonReportRenderer.outOfRangePlaceholder),
+            (pointer(9, 4), StrategyComparisonReportRenderer.outOfRangePlaceholder),
+            (pointer(emoji.start + 1, emoji.end), StrategyComparisonReportRenderer.notOnBoundaryPlaceholder),
+            (pointer(emoji.start, emoji.end - 1), StrategyComparisonReportRenderer.notOnBoundaryPlaceholder),
         ]
         let transcript = CanonicalTranscript(text: transcriptText, utterances: [])
 
@@ -136,8 +136,8 @@ struct SmokeTestReportTests {
                 cost: SummarizerCost(inputTokens: 0, outputTokens: 0, thinkingTokens: 0, costUSD: 0),
                 quoteValidationDropCount: 0,
             )
-            let row = SmokeTestRow(name: "t", transcript: transcript, arms: [
-                SmokeTestArmResult(label: "arm", outcome: .summary(summary)),
+            let row = StrategyComparisonRow(name: "t", transcript: transcript, arms: [
+                StrategyComparisonArmResult(label: "arm", outcome: .summary(summary)),
             ])
 
             #expect(detailReport(rows: [row]).contains("   > \(placeholder)"))
@@ -146,21 +146,21 @@ struct SmokeTestReportTests {
 
     @Test func tableCellsEscapePipesAndLineBreaks() {
         let transcript = CanonicalTranscript(text: "", utterances: [])
-        let row = SmokeTestRow(name: "a|b\nc", transcript: transcript, arms: [
-            SmokeTestArmResult(label: "x|y", outcome: .failure(reason: "r")),
+        let row = StrategyComparisonRow(name: "a|b\nc", transcript: transcript, arms: [
+            StrategyComparisonArmResult(label: "x|y", outcome: .failure(reason: "r")),
         ])
 
-        let report = SmokeTestReportRenderer.metricsReport(rows: [row], generatedAt: now, modelIdentifier: "m")
+        let report = StrategyComparisonReportRenderer.metricsReport(rows: [row], generatedAt: now, modelIdentifier: "m")
 
         #expect(report.contains("| a\\|b c | x\\|y | failed: r |"))
     }
 
     @Test func writerCreatesTheOutputDirectoryAndBothReports() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("smoke-test-writer-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("strategy-comparison-writer-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let output = root.appendingPathComponent("nested/out")
 
-        let paths = try SmokeTestReportWriter.write(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5", to: output)
+        let paths = try StrategyComparisonReportWriter.write(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5", to: output)
 
         #expect(paths.metrics.lastPathComponent == "results.md")
         #expect(paths.detail.lastPathComponent == "detail.md")

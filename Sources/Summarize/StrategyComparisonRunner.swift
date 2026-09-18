@@ -2,12 +2,12 @@ import Core
 import SummarizerInterface
 
 /// Runs every arm over every fixture and records what each returned. Depends
-/// only on `SummarizerStrategy` (via `SmokeTestArm`), so it never names a
+/// only on `SummarizerStrategy` (via `StrategyComparisonArm`), so it never names a
 /// concrete strategy; the composition root decides which arms exist.
-public struct SmokeTestRunner: Sendable {
-    private let arms: [SmokeTestArm]
+public struct StrategyComparisonRunner: Sendable {
+    private let arms: [StrategyComparisonArm]
 
-    public init(arms: [SmokeTestArm]) {
+    public init(arms: [StrategyComparisonArm]) {
         self.arms = arms
     }
 
@@ -33,15 +33,15 @@ public struct SmokeTestRunner: Sendable {
     /// `progress` receives (transcripts completed, transcripts total) after
     /// each transcript.
     public func run(
-        fixtures: [SmokeTestFixture],
+        fixtures: [StrategyComparisonFixture],
         glossary: Glossary,
         config: SummarizerConfig,
         progress: (@Sendable (_ completed: Int, _ total: Int) -> Void)? = nil,
-    ) async -> [SmokeTestRow] {
-        var rows: [SmokeTestRow] = []
+    ) async -> [StrategyComparisonRow] {
+        var rows: [StrategyComparisonRow] = []
         for fixture in fixtures {
             let results = await runArms(on: fixture.transcript, glossary: glossary, config: config)
-            rows.append(SmokeTestRow(name: fixture.name, transcript: fixture.transcript, arms: results))
+            rows.append(StrategyComparisonRow(name: fixture.name, transcript: fixture.transcript, arms: results))
             progress?(rows.count, fixtures.count)
         }
         return rows
@@ -51,15 +51,15 @@ public struct SmokeTestRunner: Sendable {
         on transcript: CanonicalTranscript,
         glossary: Glossary,
         config: SummarizerConfig,
-    ) async -> [SmokeTestArmResult] {
-        await withTaskGroup(of: (index: Int, result: SmokeTestArmResult).self) { group in
+    ) async -> [StrategyComparisonArmResult] {
+        await withTaskGroup(of: (index: Int, result: StrategyComparisonArmResult).self) { group in
             for (index, arm) in arms.enumerated() {
                 group.addTask {
                     let result = await Self.runArm(arm, on: transcript, glossary: glossary, config: config)
                     return (index, result)
                 }
             }
-            var indexed: [(index: Int, result: SmokeTestArmResult)] = []
+            var indexed: [(index: Int, result: StrategyComparisonArmResult)] = []
             for await entry in group {
                 indexed.append(entry)
             }
@@ -68,16 +68,16 @@ public struct SmokeTestRunner: Sendable {
     }
 
     private static func runArm(
-        _ arm: SmokeTestArm,
+        _ arm: StrategyComparisonArm,
         on transcript: CanonicalTranscript,
         glossary: Glossary,
         config: SummarizerConfig,
-    ) async -> SmokeTestArmResult {
+    ) async -> StrategyComparisonArmResult {
         do {
             let summary = try await arm.strategy.summarize(transcript: transcript, glossary: glossary, config: config)
-            return SmokeTestArmResult(label: arm.label, outcome: .summary(summary))
+            return StrategyComparisonArmResult(label: arm.label, outcome: .summary(summary))
         } catch {
-            return SmokeTestArmResult(label: arm.label, outcome: .failure(reason: failureReason(for: error)))
+            return StrategyComparisonArmResult(label: arm.label, outcome: .failure(reason: failureReason(for: error)))
         }
     }
 

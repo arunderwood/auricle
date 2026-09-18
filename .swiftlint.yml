@@ -264,10 +264,10 @@ custom_rules:
     excluded:
       - ".*/App/Auricle/AuricleApp\\.swift$"
       - ".*/App/auricle-cli/AuricleCLI\\.swift$"
-      # The Decision 3.6 smoke-test verb runs both concrete summarizers
+      # The Decision 3.6 strategy-comparison verb runs both concrete summarizers
       # side by side, so it names them the way a composition root does; its
       # logic lives in Sources/Summarize, which stays strategy-agnostic.
-      - ".*/App/auricle-cli/Verbs/SmokeTestSummarizeVerb\\.swift$"
+      - ".*/App/auricle-cli/Verbs/StrategyComparisonVerb\\.swift$"
       # The summarize stage's subprocess entry point wires the primary and
       # fallback strategies into SummarizerOrchestrator; the stage logic
       # itself lives in Sources/Summarize, which stays strategy-agnostic.

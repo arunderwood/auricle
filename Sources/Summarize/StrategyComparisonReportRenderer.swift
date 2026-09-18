@@ -2,7 +2,7 @@ import Core
 import Foundation
 import SummarizerInterface
 
-/// Renders smoke-test rows as Markdown in two modes. `metricsReport` holds
+/// Renders comparison rows as Markdown in two modes. `metricsReport` holds
 /// only counts, costs and failure reasons — no item text and no source
 /// quote — but it prints fixture file names as given, so fixtures must be
 /// named neutrally before it is committed. `detailReport` adds each kept item
@@ -14,7 +14,7 @@ import SummarizerInterface
 /// The renderer does not compute a recommended default: recall and
 /// false-drop are human judgments, so a computed verdict would be false
 /// precision.
-public enum SmokeTestReportRenderer {
+public enum StrategyComparisonReportRenderer {
     /// The default-flip rule, verbatim from Story 3.8's acceptance criteria
     /// (epics.md), in the two halves the story states it in.
     static let flipRuleLines = [
@@ -27,9 +27,9 @@ public enum SmokeTestReportRenderer {
     static let outOfRangePlaceholder = "[source range is outside the transcript]"
     static let notOnBoundaryPlaceholder = "[source range does not fall on a character boundary]"
 
-    public static func metricsReport(rows: [SmokeTestRow], generatedAt: Date, modelIdentifier: String) -> String {
+    public static func metricsReport(rows: [StrategyComparisonRow], generatedAt: Date, modelIdentifier: String) -> String {
         render(
-            title: "Decision 3.6 smoke-test results",
+            title: "Decision 3.6 strategy comparison results",
             note: "Metrics only: no item text and no source quotes. Fixture file names appear as given, so name fixtures neutrally before committing.",
             rows: rows,
             generatedAt: generatedAt,
@@ -38,9 +38,9 @@ public enum SmokeTestReportRenderer {
         )
     }
 
-    public static func detailReport(rows: [SmokeTestRow], generatedAt: Date, modelIdentifier: String) -> String {
+    public static func detailReport(rows: [StrategyComparisonRow], generatedAt: Date, modelIdentifier: String) -> String {
         render(
-            title: "Decision 3.6 smoke-test detail",
+            title: "Decision 3.6 strategy comparison detail",
             note: "Contains real meeting content (kept items and source quotes). Never commit this file.",
             rows: rows,
             generatedAt: generatedAt,
@@ -54,7 +54,7 @@ public enum SmokeTestReportRenderer {
     private static func render(
         title: String,
         note: String,
-        rows: [SmokeTestRow],
+        rows: [StrategyComparisonRow],
         generatedAt: Date,
         modelIdentifier: String,
         includeItems: Bool,
@@ -78,7 +78,7 @@ public enum SmokeTestReportRenderer {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    private static func computedMetricsSection(rows: [SmokeTestRow]) -> [String] {
+    private static func computedMetricsSection(rows: [StrategyComparisonRow]) -> [String] {
         var lines = [
             "## Computed metrics",
             "",
@@ -95,7 +95,7 @@ public enum SmokeTestReportRenderer {
         return lines
     }
 
-    private static func metricsRow(transcriptName: String, arm: SmokeTestArmResult) -> String {
+    private static func metricsRow(transcriptName: String, arm: StrategyComparisonArmResult) -> String {
         let leading = "| \(cell(transcriptName)) | \(cell(arm.label))"
         switch arm.outcome {
         case let .summary(summary):
@@ -118,7 +118,7 @@ public enum SmokeTestReportRenderer {
         }
     }
 
-    private static func itemsSection(rows: [SmokeTestRow]) -> [String] {
+    private static func itemsSection(rows: [StrategyComparisonRow]) -> [String] {
         var lines = ["## Kept items", ""]
         for row in rows {
             lines += ["### \(inline(row.name))", ""]
@@ -154,7 +154,7 @@ public enum SmokeTestReportRenderer {
         return lines
     }
 
-    private static func humanScoredSection(rows: [SmokeTestRow]) -> [String] {
+    private static func humanScoredSection(rows: [StrategyComparisonRow]) -> [String] {
         var lines = [
             "## Human-scored metrics",
             "",

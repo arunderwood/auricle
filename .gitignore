@@ -234,7 +234,7 @@ Derived/
 # macOS
 .DS_Store
 
-# Story 3.8 smoke-test rig: real meeting transcripts and the reports derived
+# Story 3.8 strategy-comparison rig: real meeting transcripts and the reports derived
 # from them (detail.md quotes them). Never committed.
-Tests/fixtures/smoke-test-transcripts/
-Tests/fixtures/smoke-test-output/
+Tests/fixtures/strategy-comparison-transcripts/
+Tests/fixtures/strategy-comparison-output/

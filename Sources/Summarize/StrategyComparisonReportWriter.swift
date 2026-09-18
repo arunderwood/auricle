@@ -1,9 +1,9 @@
 import Core
 import Foundation
 
-/// Writes the two smoke-test reports into an output directory, each through
+/// Writes the two comparison reports into an output directory, each through
 /// `AtomicWriter` so an interrupted run never leaves a half-written report.
-public enum SmokeTestReportWriter {
+public enum StrategyComparisonReportWriter {
     public static let metricsFileName = "results.md"
     public static let detailFileName = "detail.md"
 
@@ -11,7 +11,7 @@ public enum SmokeTestReportWriter {
     /// call, so a run that refuses to start leaves no trace on disk.
     @discardableResult
     public static func write(
-        rows: [SmokeTestRow],
+        rows: [StrategyComparisonRow],
         generatedAt: Date,
         modelIdentifier: String,
         to outputDirectory: URL,
@@ -20,8 +20,8 @@ public enum SmokeTestReportWriter {
 
         let metricsURL = outputDirectory.appendingPathComponent(metricsFileName)
         let detailURL = outputDirectory.appendingPathComponent(detailFileName)
-        let metrics = SmokeTestReportRenderer.metricsReport(rows: rows, generatedAt: generatedAt, modelIdentifier: modelIdentifier)
-        let detail = SmokeTestReportRenderer.detailReport(rows: rows, generatedAt: generatedAt, modelIdentifier: modelIdentifier)
+        let metrics = StrategyComparisonReportRenderer.metricsReport(rows: rows, generatedAt: generatedAt, modelIdentifier: modelIdentifier)
+        let detail = StrategyComparisonReportRenderer.detailReport(rows: rows, generatedAt: generatedAt, modelIdentifier: modelIdentifier)
         try AtomicWriter.write(Data(metrics.utf8), to: metricsURL)
         try AtomicWriter.write(Data(detail.utf8), to: detailURL)
         return (metricsURL, detailURL)

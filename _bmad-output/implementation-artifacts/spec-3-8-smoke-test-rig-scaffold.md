@@ -198,3 +198,5 @@ The rig deliberately does not compute a recommended default: recall and false-dr
 - Fixture file names appear in `results.md`; the maintainer must name fixtures neutrally before committing it.
 
 **Finalization outcome:** pending commit by this orchestrating run.
+
+**Renamed after finalization:** "smoke test" read as throwaway proof-of-concept code, but this is permanent, hand-run tooling, so the code now says what it does. `SmokeTest*` types and files became `StrategyComparison*`; the hidden verb `__smoke-test-summarize` became `__compare-strategies`; `Tests/scripts/run-smoke-test.sh` became `Tests/scripts/run-strategy-comparison.sh`; `AURICLE_SMOKE_TEST_TRANSCRIPTS` became `AURICLE_COMPARISON_TRANSCRIPTS`; the ignored directories became `Tests/fixtures/strategy-comparison-transcripts/` and `Tests/fixtures/strategy-comparison-output/`. The results document keeps its name, `Tests/fixtures/smoke-test-results.md`, because Story 3.8 fixes that path. The sections above, the Story 3.7 spec, and the first entry in `deferred-work.md` still use the old names and are left as written.

@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Decision 3.6 smoke test: builds auricle-cli and runs the Citations and
-# substring summarizers over real transcripts. This SPENDS ANTHROPIC API
-# CREDIT (one call per transcript per arm) and is run by hand, never in CI.
+# Decision 3.6 strategy comparison (Story 3.8 calls it the smoke test): builds
+# auricle-cli and runs the Citations and substring summarizers over real
+# transcripts. This SPENDS ANTHROPIC API CREDIT (one call per transcript per
+# arm) and is run by hand, never in CI.
 #
-#   AURICLE_SMOKE_TEST_TRANSCRIPTS   directory of CanonicalTranscript .json
-#                                    files (default: Tests/fixtures/smoke-test-transcripts)
+#   AURICLE_COMPARISON_TRANSCRIPTS   directory of CanonicalTranscript .json
+#                                    files (default:
+#                                    Tests/fixtures/strategy-comparison-transcripts)
 #
 # Each run writes results.md and detail.md into its own UTC-timestamped
-# directory under Tests/fixtures/smoke-test-output/, so a re-run never
+# directory under Tests/fixtures/strategy-comparison-output/, so a re-run never
 # overwrites human-scored cells filled into an earlier run. Both that
 # directory and the default transcripts directory are gitignored.
 #
 # results.md holds no item text and no quotes, but fixture file names appear
 # in it as given: name fixtures neutrally before copying it into
-# Tests/fixtures/smoke-test-results.md. detail.md is real meeting content and
-# is never committed.
+# Tests/fixtures/smoke-test-results.md, the path Story 3.8 fixes. detail.md is
+# real meeting content and is never committed.
 #
 # An empty transcripts directory makes the verb refuse before any API call,
 # so this script exits non-zero having spent nothing.
@@ -24,10 +26,10 @@ invocation_dir=$PWD
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_root"
 
-transcripts=${AURICLE_SMOKE_TEST_TRANSCRIPTS:-Tests/fixtures/smoke-test-transcripts}
+transcripts=${AURICLE_COMPARISON_TRANSCRIPTS:-Tests/fixtures/strategy-comparison-transcripts}
 # Not created here: the verb creates it after it has found transcripts, so an
 # empty transcripts directory leaves nothing behind.
-output=Tests/fixtures/smoke-test-output/$(date -u +%Y%m%dT%H%M%SZ)
+output=Tests/fixtures/strategy-comparison-output/$(date -u +%Y%m%dT%H%M%SZ)
 
 # A quoted "~" reaches this script unexpanded.
 case $transcripts in
@@ -40,7 +42,7 @@ esac
 case $transcripts in
     /*) ;;
     *)
-        if [ -n "${AURICLE_SMOKE_TEST_TRANSCRIPTS:-}" ]; then
+        if [ -n "${AURICLE_COMPARISON_TRANSCRIPTS:-}" ]; then
             transcripts=$invocation_dir/$transcripts
         else
             transcripts=$repo_root/$transcripts
@@ -63,9 +65,9 @@ built_products_dir=$(
         | awk '$1 == "BUILT_PRODUCTS_DIR" && $2 == "=" { print $3; exit }'
 )
 if [ -z "$built_products_dir" ] || [ ! -x "$built_products_dir/auricle-cli" ]; then
-    echo "run-smoke-test: could not locate the built auricle-cli (looked in '${built_products_dir:-<unset>}')" >&2
+    echo "run-strategy-comparison: could not locate the built auricle-cli (looked in '${built_products_dir:-<unset>}')" >&2
     exit 1
 fi
 
-echo "==> auricle-cli __smoke-test-summarize" >&2
-exec "$built_products_dir/auricle-cli" __smoke-test-summarize --transcripts "$transcripts" --output "$output"
+echo "==> auricle-cli __compare-strategies" >&2
+exec "$built_products_dir/auricle-cli" __compare-strategies --transcripts "$transcripts" --output "$output"

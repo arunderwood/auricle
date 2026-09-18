@@ -5,7 +5,7 @@ import Foundation
 import Summarize
 import SummarizerInterface
 
-/// Decision 3.6's smoke-test rig, run by hand via Tests/scripts/run-smoke-test.sh.
+/// Decision 3.6's strategy-comparison rig (Story 3.8 calls it the smoke test), run by hand via Tests/scripts/run-strategy-comparison.sh.
 /// Not a user-facing verb: `shouldDisplay: false` keeps it out of `auricle help`
 /// and shell completion. It spends real Anthropic API credit — one call per
 /// transcript per arm — so it refuses to start before any call is made when
@@ -13,9 +13,9 @@ import SummarizerInterface
 /// lives in `Summarize` (covered by `swift test`); this file only parses
 /// arguments, wires the arms, and calls it. It is one of the composition roots
 /// `.swiftlint.yml` allows to name a concrete strategy.
-struct SmokeTestSummarizeVerb: AsyncParsableCommand {
+struct StrategyComparisonVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "__smoke-test-summarize",
+        commandName: "__compare-strategies",
         abstract: "Run the Citations and substring summarizers over real transcripts and write comparison reports.",
         shouldDisplay: false,
     )
@@ -30,11 +30,11 @@ struct SmokeTestSummarizeVerb: AsyncParsableCommand {
         let transcriptsDirectory = Self.directoryURL(transcripts)
         let outputDirectory = Self.directoryURL(output)
 
-        let fixtures: [SmokeTestFixture]
+        let fixtures: [StrategyComparisonFixture]
         do {
-            fixtures = try SmokeTestFixtureLoader.load(from: transcriptsDirectory)
-        } catch let error as SmokeTestFixtureLoader.LoadError {
-            writeStderr("__smoke-test-summarize: \(error.localizedDescription)")
+            fixtures = try StrategyComparisonFixtureLoader.load(from: transcriptsDirectory)
+        } catch let error as StrategyComparisonFixtureLoader.LoadError {
+            writeStderr("__compare-strategies: \(error.localizedDescription)")
             throw ExitCode(1)
         }
 
@@ -43,32 +43,32 @@ struct SmokeTestSummarizeVerb: AsyncParsableCommand {
         do {
             try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         } catch {
-            writeStderr("__smoke-test-summarize: cannot create the output directory \(outputDirectory.path).")
+            writeStderr("__compare-strategies: cannot create the output directory \(outputDirectory.path).")
             throw ExitCode(1)
         }
 
-        let runner = SmokeTestRunner(arms: [
-            SmokeTestArm(label: "citations", strategy: ClaudeCitationsSummarizer()),
-            SmokeTestArm(label: "substring", strategy: ClaudeSubstringSummarizer()),
+        let runner = StrategyComparisonRunner(arms: [
+            StrategyComparisonArm(label: "citations", strategy: ClaudeCitationsSummarizer()),
+            StrategyComparisonArm(label: "substring", strategy: ClaudeSubstringSummarizer()),
         ])
         let config = SummarizerConfig()
         let plannedCalls = runner.plannedCallCount(fixtureCount: fixtures.count)
         writeStderr(
-            "__smoke-test-summarize: \(plannedCalls) live Anthropic API call(s) planned "
+            "__compare-strategies: \(plannedCalls) live Anthropic API call(s) planned "
                 + "(\(fixtures.count) transcript(s) x \(runner.armCount) arm(s), model \(config.modelIdentifier)).",
         )
 
         let rows = await runner.run(fixtures: fixtures, glossary: Glossary(), config: config) { completed, total in
-            writeStderr("__smoke-test-summarize: transcript \(completed) of \(total) done.")
+            writeStderr("__compare-strategies: transcript \(completed) of \(total) done.")
         }
 
         let failedArmCount = rows.flatMap(\.arms).count { $0.failureReason != nil }
         if failedArmCount > 0 {
-            writeStderr("__smoke-test-summarize: \(failedArmCount) of \(plannedCalls) arm run(s) failed; the reports record each failure.")
+            writeStderr("__compare-strategies: \(failedArmCount) of \(plannedCalls) arm run(s) failed; the reports record each failure.")
         }
 
         do {
-            let paths = try SmokeTestReportWriter.write(
+            let paths = try StrategyComparisonReportWriter.write(
                 rows: rows,
                 generatedAt: Date(),
                 modelIdentifier: config.modelIdentifier,
@@ -77,7 +77,7 @@ struct SmokeTestSummarizeVerb: AsyncParsableCommand {
             print("metrics (no item text or quotes; fixture file names appear as given, so name fixtures neutrally before committing): \(paths.metrics.path)")
             print("detail (real meeting content, never commit): \(paths.detail.path)")
         } catch {
-            writeStderr("__smoke-test-summarize: could not write the reports: \(error)")
+            writeStderr("__compare-strategies: could not write the reports: \(error)")
             throw ExitCode(1)
         }
 

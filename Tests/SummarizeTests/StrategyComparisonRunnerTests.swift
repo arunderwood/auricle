@@ -113,17 +113,17 @@ private struct LeakyError: Error, LocalizedError, CustomStringConvertible {
     }
 }
 
-private func makeFixture(_ name: String) -> SmokeTestFixture {
-    SmokeTestFixture(name: name, transcript: CanonicalTranscript(text: "Ada: hello", utterances: []))
+private func makeFixture(_ name: String) -> StrategyComparisonFixture {
+    StrategyComparisonFixture(name: name, transcript: CanonicalTranscript(text: "Ada: hello", utterances: []))
 }
 
-private func run(_ arms: [SmokeTestArm], fixtures: [SmokeTestFixture]) async -> [SmokeTestRow] {
-    await SmokeTestRunner(arms: arms).run(fixtures: fixtures, glossary: Glossary(), config: SummarizerConfig())
+private func run(_ arms: [StrategyComparisonArm], fixtures: [StrategyComparisonFixture]) async -> [StrategyComparisonRow] {
+    await StrategyComparisonRunner(arms: arms).run(fixtures: fixtures, glossary: Glossary(), config: SummarizerConfig())
 }
 
 // MARK: - I/O matrix
 
-struct SmokeTestRunnerTests {
+struct StrategyComparisonRunnerTests {
     @Test func bothArmsSucceedRecordsEachArmInGivenOrderPerTranscript() async {
         // The first arm is the slower one, so arm order in the result can only
         // come from the order given, not from completion order.
@@ -132,7 +132,7 @@ struct SmokeTestRunnerTests {
             delay: .milliseconds(60),
         )
         let fast = FixedStrategy(outcome: .success(makeSummary(method: .substring, actionItemCount: 1, dropCount: 1, costUSD: 0.25)))
-        let arms = [SmokeTestArm(label: "citations", strategy: slow), SmokeTestArm(label: "substring", strategy: fast)]
+        let arms = [StrategyComparisonArm(label: "citations", strategy: slow), StrategyComparisonArm(label: "substring", strategy: fast)]
 
         let rows = await run(arms, fixtures: [makeFixture("one"), makeFixture("two")])
 
@@ -157,7 +157,7 @@ struct SmokeTestRunnerTests {
     @Test func armThrowingSummarizerErrorIsRecordedByCaseAndOtherArmIsUnaffected() async {
         let failing = FixedStrategy(outcome: .failure(SummarizerError.citationsUnavailable))
         let working = FixedStrategy(outcome: .success(makeSummary(method: .substring)))
-        let arms = [SmokeTestArm(label: "citations", strategy: failing), SmokeTestArm(label: "substring", strategy: working)]
+        let arms = [StrategyComparisonArm(label: "citations", strategy: failing), StrategyComparisonArm(label: "substring", strategy: working)]
 
         let rows = await run(arms, fixtures: [makeFixture("one"), makeFixture("two")])
 
@@ -170,7 +170,7 @@ struct SmokeTestRunnerTests {
 
     @Test func armThrowingOtherErrorIsRecordedByTypeNameNeverMessage() async {
         let failing = FixedStrategy(outcome: .failure(LeakyError()))
-        let arms = [SmokeTestArm(label: "leaky", strategy: failing)]
+        let arms = [StrategyComparisonArm(label: "leaky", strategy: failing)]
 
         let rows = await run(arms, fixtures: [makeFixture("one")])
 
@@ -185,8 +185,8 @@ struct SmokeTestRunnerTests {
     @Test func armsOfOneTranscriptRunConcurrently() async {
         let rendezvous = Rendezvous()
         let arms = [
-            SmokeTestArm(label: "a", strategy: RendezvousStrategy(rendezvous: rendezvous, summary: makeSummary(method: .citations))),
-            SmokeTestArm(label: "b", strategy: RendezvousStrategy(rendezvous: rendezvous, summary: makeSummary(method: .substring))),
+            StrategyComparisonArm(label: "a", strategy: RendezvousStrategy(rendezvous: rendezvous, summary: makeSummary(method: .citations))),
+            StrategyComparisonArm(label: "b", strategy: RendezvousStrategy(rendezvous: rendezvous, summary: makeSummary(method: .substring))),
         ]
 
         let rows = await run(arms, fixtures: [makeFixture("one")])
@@ -202,8 +202,8 @@ struct SmokeTestRunnerTests {
     @Test func transcriptsRunOneAfterAnotherSoOnlyTheArmsOfOneTranscriptOverlap() async {
         let tracker = InFlightTracker()
         let arms = [
-            SmokeTestArm(label: "a", strategy: TrackedStrategy(tracker: tracker, summary: makeSummary(method: .citations))),
-            SmokeTestArm(label: "b", strategy: TrackedStrategy(tracker: tracker, summary: makeSummary(method: .substring))),
+            StrategyComparisonArm(label: "a", strategy: TrackedStrategy(tracker: tracker, summary: makeSummary(method: .citations))),
+            StrategyComparisonArm(label: "b", strategy: TrackedStrategy(tracker: tracker, summary: makeSummary(method: .substring))),
         ]
 
         let rows = await run(arms, fixtures: [makeFixture("one"), makeFixture("two"), makeFixture("three")])
@@ -215,9 +215,9 @@ struct SmokeTestRunnerTests {
     }
 
     @Test func plannedCallCountIsFixturesTimesArms() {
-        let runner = SmokeTestRunner(arms: [
-            SmokeTestArm(label: "a", strategy: FixedStrategy(outcome: .success(makeSummary(method: .citations)))),
-            SmokeTestArm(label: "b", strategy: FixedStrategy(outcome: .success(makeSummary(method: .substring)))),
+        let runner = StrategyComparisonRunner(arms: [
+            StrategyComparisonArm(label: "a", strategy: FixedStrategy(outcome: .success(makeSummary(method: .citations)))),
+            StrategyComparisonArm(label: "b", strategy: FixedStrategy(outcome: .success(makeSummary(method: .substring)))),
         ])
 
         #expect(runner.plannedCallCount(fixtureCount: 5) == 10)

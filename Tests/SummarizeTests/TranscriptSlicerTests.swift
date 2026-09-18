@@ -34,8 +34,8 @@ private func pointer(_ start: Int, _ end: Int) -> GroundingPointer {
     #expect(TranscriptSlicer.slice(pointer(7, 10), of: bytes) == .failure(.notOnScalarBoundary))
 }
 
-@Test func theSmokeTestRendererAndTheSlicerAgree() {
-    #expect(SmokeTestReportRenderer.sourceQuote(for: pointer(6, 10), in: bytes) == "🚀")
-    #expect(SmokeTestReportRenderer.sourceQuote(for: pointer(0, 99), in: bytes) == SmokeTestReportRenderer.outOfRangePlaceholder)
-    #expect(SmokeTestReportRenderer.sourceQuote(for: pointer(0, 4), in: bytes) == SmokeTestReportRenderer.notOnBoundaryPlaceholder)
+@Test func theStrategyComparisonRendererAndTheSlicerAgree() {
+    #expect(StrategyComparisonReportRenderer.sourceQuote(for: pointer(6, 10), in: bytes) == "🚀")
+    #expect(StrategyComparisonReportRenderer.sourceQuote(for: pointer(0, 99), in: bytes) == StrategyComparisonReportRenderer.outOfRangePlaceholder)
+    #expect(StrategyComparisonReportRenderer.sourceQuote(for: pointer(0, 4), in: bytes) == StrategyComparisonReportRenderer.notOnBoundaryPlaceholder)
 }

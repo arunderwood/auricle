@@ -74,8 +74,8 @@ struct InternalStageWorker: AsyncParsableCommand {
         }
 
         // Provisional: Citations as primary with substring as fallback is
-        // Decision 3.6's stated MVP default, pending the Story 3.8 smoke-test
-        // result that locks or flips it.
+        // Decision 3.6's stated MVP default, pending the Story 3.8 strategy comparison
+        // that locks or flips it.
         let orchestrator = SummarizerOrchestrator(
             primary: ClaudeCitationsSummarizer(),
             fallback: ClaudeSubstringSummarizer(),

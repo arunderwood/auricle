@@ -4,7 +4,7 @@ import SummarizerInterface
 /// naming the error case or type only — an arm's error message can embed
 /// transcript text or provider response content, and the reports this feeds
 /// include a file that is committed.
-public struct SmokeTestArmResult: Sendable, Equatable {
+public struct StrategyComparisonArmResult: Sendable, Equatable {
     public enum Outcome: Sendable, Equatable {
         case summary(SummaryWithGrounding)
         case failure(reason: String)

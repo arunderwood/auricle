@@ -4,7 +4,7 @@ import Foundation
 /// Reads `CanonicalTranscript` JSON fixtures from a directory. Every thrown
 /// error carries at most a file name or directory path, never file contents:
 /// the fixtures are real meeting transcripts.
-public enum SmokeTestFixtureLoader {
+public enum StrategyComparisonFixtureLoader {
     public enum LoadError: Error, Equatable, LocalizedError {
         case directoryUnreadable(path: String)
         case noTranscriptsFound(directory: String)
@@ -27,7 +27,7 @@ public enum SmokeTestFixtureLoader {
     /// order, named by file stem. Other files, hidden files and
     /// subdirectories are ignored. Throws `noTranscriptsFound` on an empty
     /// result so a caller can refuse before making any strategy call.
-    public static func load(from directory: URL) throws -> [SmokeTestFixture] {
+    public static func load(from directory: URL) throws -> [StrategyComparisonFixture] {
         let entries: [URL]
         do {
             entries = try FileManager.default.contentsOfDirectory(
@@ -53,7 +53,7 @@ public enum SmokeTestFixtureLoader {
             } catch {
                 throw LoadError.malformedFixture(fileName: file.lastPathComponent)
             }
-            return SmokeTestFixture(name: file.deletingPathExtension().lastPathComponent, transcript: transcript)
+            return StrategyComparisonFixture(name: file.deletingPathExtension().lastPathComponent, transcript: transcript)
         }
     }
 

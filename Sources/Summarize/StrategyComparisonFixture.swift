@@ -1,8 +1,8 @@
 import Core
 
-/// One transcript the smoke test runs every arm against. `name` is the
+/// One transcript the comparison runs every arm against. `name` is the
 /// fixture file's stem, which is the only identifier the reports print for it.
-public struct SmokeTestFixture: Sendable, Equatable {
+public struct StrategyComparisonFixture: Sendable, Equatable {
     public let name: String
     public let transcript: CanonicalTranscript
 
