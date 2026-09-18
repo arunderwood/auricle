@@ -272,6 +272,14 @@ custom_rules:
       - ".*/Sources/WhisperKitTranscriber/.*\\.swift$"
       - ".*/Sources/WhisperKitDiarizer/.*\\.swift$"
       - ".*/Sources/GoogleCalendarSource/.*\\.swift$"
+      # A concrete strategy's own test target constructing it to test it is
+      # the same non-bypass as the strategy's own source file doing so above:
+      # the caller here is the type's own unit test suite, not a `caller`
+      # reaching past `SummarizerStrategy` into the concrete type. Scoped per
+      # test target, not blanket — a different concrete strategy's test
+      # target needs its own directory added here before it can construct
+      # its own type directly; this entry does not cover it.
+      - ".*/Tests/ClaudeSummarizerTests/.*\\.swift$"
 
   accessibility_label_missing:
     name: "Missing accessibilityLabel"
