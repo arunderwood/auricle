@@ -157,7 +157,9 @@ public struct AttributeMeta: Codable, Equatable, Sendable {
 /// "grounding_method": "..."}`. `fallback_triggered` says whether the
 /// fallback strategy produced the summary; `fallback_error_class` is the
 /// stable class of the primary strategy's failure that caused it, and is
-/// absent when no fallback ran.
+/// absent when no fallback ran. `cost_ceiling_usd` is the NFR-C1 ceiling the
+/// call was measured against and `cost_ceiling_exceeded` whether `cost_usd`
+/// was above it; both are absent on rows written before the check existed.
 public struct SummarizeMeta: Codable, Equatable, Sendable {
     public var modelID: String
     public var effortBudget: String
@@ -169,6 +171,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
     public var groundingMethod: String
     public var fallbackTriggered: Bool
     public var fallbackErrorClass: String?
+    public var costCeilingUSD: Double?
+    public var costCeilingExceeded: Bool?
 
     enum CodingKeys: String, CodingKey {
         case modelID = "model_id"
@@ -181,6 +185,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         case groundingMethod = "grounding_method"
         case fallbackTriggered = "fallback_triggered"
         case fallbackErrorClass = "fallback_error_class"
+        case costCeilingUSD = "cost_ceiling_usd"
+        case costCeilingExceeded = "cost_ceiling_exceeded"
     }
 
     public init(
@@ -194,6 +200,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         groundingMethod: String,
         fallbackTriggered: Bool,
         fallbackErrorClass: String?,
+        costCeilingUSD: Double? = nil,
+        costCeilingExceeded: Bool? = nil,
     ) {
         self.modelID = modelID
         self.effortBudget = effortBudget
@@ -205,6 +213,8 @@ public struct SummarizeMeta: Codable, Equatable, Sendable {
         self.groundingMethod = groundingMethod
         self.fallbackTriggered = fallbackTriggered
         self.fallbackErrorClass = fallbackErrorClass
+        self.costCeilingUSD = costCeilingUSD
+        self.costCeilingExceeded = costCeilingExceeded
     }
 }
 

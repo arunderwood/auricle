@@ -19,6 +19,8 @@ extension SummarizeStage {
         stateStore: StateStore,
         telemetryRecorder: TelemetryRecorder,
     ) async {
+        CostCeiling.warnIfExceeded(costUSD: outcome.summary.cost.costUSD, ceilingUSD: config.costCeilingUSD)
+
         if let match {
             await bestEffort("refresh_meeting_row") {
                 try await refreshMeetingRow(for: meetingID, with: match, in: stateStore)

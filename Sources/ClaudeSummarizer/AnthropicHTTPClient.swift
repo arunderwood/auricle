@@ -104,7 +104,7 @@ private enum AnthropicModelRate {
     static let fallbackModel = "claude-opus-5"
 
     private static let usdPerMillionTokens: [String: (input: Double, output: Double)] = [
-        "claude-opus-5": (input: 15.0, output: 75.0),
+        "claude-opus-5": (input: 5.0, output: 25.0),
         "claude-haiku-4-5": (input: 1.0, output: 5.0),
     ]
 

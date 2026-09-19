@@ -105,6 +105,41 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     #expect(object["fallback_error_class"] as? String == "summarizer_rate_limited")
 }
 
+@Test func summarizeMetaEncodesTheCostCeilingUnderSnakeCaseKeys() throws {
+    let meta = SummarizeMeta(
+        modelID: "claude-opus-5",
+        effortBudget: "medium",
+        inputTokens: 1,
+        outputTokens: 2,
+        thinkingTokens: 3,
+        costUSD: 0.5682,
+        quoteValidationDropCount: 0,
+        groundingMethod: "substring",
+        fallbackTriggered: false,
+        fallbackErrorClass: nil,
+        costCeilingUSD: 0.5,
+        costCeilingExceeded: true,
+    )
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(meta)) as? [String: Any])
+
+    #expect(object["cost_ceiling_usd"] as? Double == 0.5)
+    #expect(object["cost_ceiling_exceeded"] as? Bool == true)
+    #expect(try JSONDecoder().decode(SummarizeMeta.self, from: JSONEncoder().encode(meta)) == meta)
+}
+
+@Test func summarizeMetaWrittenBeforeTheCostCeilingExistedStillDecodes() throws {
+    let legacy = """
+    {"model_id": "claude-opus-5", "effort_budget": "medium", "input_tokens": 1, "output_tokens": 2, \
+    "thinking_tokens": 3, "cost_usd": 0.1, "quote_validation_drop_count": 0, \
+    "grounding_method": "substring", "fallback_triggered": false}
+    """
+
+    let meta = try JSONDecoder().decode(SummarizeMeta.self, from: Data(legacy.utf8))
+
+    #expect(meta.costCeilingUSD == nil)
+    #expect(meta.costCeilingExceeded == nil)
+}
+
 @Test func persistMetaRoundTripsLosslessly() throws {
     let original = StageMetadata.persist(PersistMeta(
         vaultNotePath: "/Users/testuser/ObsidianVault/Meetings/2026-01-01 Tuesday Sync.md",

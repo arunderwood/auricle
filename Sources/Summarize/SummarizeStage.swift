@@ -296,6 +296,8 @@ public enum SummarizeStage {
             groundingMethod: outcome.summary.groundingMethod.rawValue,
             fallbackTriggered: outcome.fallbackTriggered,
             fallbackErrorClass: outcome.primaryError?.stageErrorClass,
+            costCeilingUSD: config.costCeilingUSD,
+            costCeilingExceeded: CostCeiling.isExceeded(costUSD: cost.costUSD, ceilingUSD: config.costCeilingUSD),
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

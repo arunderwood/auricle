@@ -93,7 +93,7 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
             promptDir: nil,
         )
 
-        let requestBody = try Self.buildRequestBody(prompt: prompt, transcript: transcript, modelIdentifier: config.modelIdentifier)
+        let requestBody = try Self.buildRequestBody(prompt: prompt, transcript: transcript, config: config)
         let response = try await httpClient.send(AnthropicRequest(body: requestBody))
 
         let blocks: [[String: Any]]
@@ -247,7 +247,7 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
     private static func buildRequestBody(
         prompt: SummarizationPrompt,
         transcript: CanonicalTranscript,
-        modelIdentifier: String,
+        config: SummarizerConfig,
     ) throws -> Data {
         var contentBlocks: [[String: Any]] = []
         var lastCacheableBlockIndex: Int?
@@ -279,8 +279,9 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
         ])
 
         let body: [String: Any] = [
-            "model": modelIdentifier,
+            "model": config.modelIdentifier,
             "max_tokens": maxTokens,
+            "output_config": AnthropicOutputConfig.body(effort: config.effortLevel),
             "system": [
                 ["type": "text", "text": prompt.system.text, "cache_control": cacheControl],
             ],
