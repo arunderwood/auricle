@@ -26,7 +26,7 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
     let scriptURL = FileManager.default.temporaryDirectory.appendingPathComponent("stub-auricle-cli-\(UUID().uuidString)")
     try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { scriptURL })
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { scriptURL }, resolveVaultPath: { nil })
     return (dispatcher, { try? FileManager.default.removeItem(at: scriptURL) })
 }
 

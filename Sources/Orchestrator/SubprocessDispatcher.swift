@@ -8,17 +8,43 @@ import Foundation
 /// Story 1.7 — production resolves it via `Bundle.main`, tests substitute a
 /// stub executable so `dispatch` can actually spawn and exit without a real
 /// worker behind it.
+///
+/// `resolveVaultPath` is injectable for the same reason: the worker is a
+/// separate process with no view of the dispatcher's configuration, so the
+/// vault has to travel on its argument vector, and tests must not read the
+/// real `~/.auricle/config.toml` to build one.
 public struct SubprocessDispatcher: Sendable {
     public enum DispatchError: Error, Sendable, Equatable {
         case executableNotFound
     }
 
-    private let resolveExecutablePath: @Sendable () -> URL?
+    private static let log = Log(category: "orchestrator")
 
-    public init(resolveExecutablePath: @escaping @Sendable () -> URL? = {
-        Bundle.main.url(forAuxiliaryExecutable: "auricle-cli")
-    }) {
+    private let resolveExecutablePath: @Sendable () -> URL?
+    private let resolveVaultPath: @Sendable () -> String?
+
+    public init(
+        resolveExecutablePath: @escaping @Sendable () -> URL? = {
+            Bundle.main.url(forAuxiliaryExecutable: "auricle-cli")
+        },
+        resolveVaultPath: @escaping @Sendable () -> String? = SubprocessDispatcher.configuredVaultPath,
+    ) {
         self.resolveExecutablePath = resolveExecutablePath
+        self.resolveVaultPath = resolveVaultPath
+    }
+
+    /// An unreadable config file costs the worker its glossary, not the
+    /// dispatch: a vocabulary is an aid to the summary, never a reason to
+    /// withhold it. The warning names the failure's type only, because the
+    /// path in a config file is the user's own.
+    @Sendable
+    public static func configuredVaultPath() -> String? {
+        do {
+            return try Config.load().vaultPath?.path
+        } catch {
+            log.warn("config unreadable; dispatching without a vault path", ["errorType": .publicSafe(String(describing: type(of: error)))])
+            return nil
+        }
     }
 
     /// Builds the `Process` `dispatch` would run, without running it — the
@@ -35,12 +61,16 @@ public struct SubprocessDispatcher: Sendable {
 
         let process = Process()
         process.executableURL = executableURL
-        process.arguments = [
+        var arguments = [
             "__internal-stage",
             stage.rawValue,
             meetingID.rawValue,
             "--worker-protocol-version", String(workerProtocolVersion),
         ]
+        if let vaultPath = resolveVaultPath() {
+            arguments += ["--vault-path", vaultPath]
+        }
+        process.arguments = arguments
         return process
     }
 

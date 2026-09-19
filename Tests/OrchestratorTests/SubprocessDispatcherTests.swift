@@ -11,7 +11,7 @@ private func meetingIDString(_ tag: String) -> String {
 
 @Test func makeProcessSetsExecutablePathAndInternalStageArgumentVector() throws {
     let stubURL = URL(fileURLWithPath: "/tmp/stub-auricle-cli-does-not-need-to-exist")
-    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stubURL })
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stubURL }, resolveVaultPath: { nil })
     let id = try #require(MeetingID(ulid: meetingIDString("DSP1")))
 
     let process = try dispatcher.makeProcess(stage: .reviewDiarization, meetingID: id, workerProtocolVersion: 1)
@@ -22,8 +22,32 @@ private func meetingIDString(_ tag: String) -> String {
     ])
 }
 
+@Test func makeProcessAppendsVaultPathWhenTheResolverSuppliesOne() throws {
+    let stubURL = URL(fileURLWithPath: "/tmp/stub-auricle-cli-does-not-need-to-exist")
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stubURL }, resolveVaultPath: { "/vaults/notes with space" })
+    let id = try #require(MeetingID(ulid: meetingIDString("DSP4")))
+
+    let process = try dispatcher.makeProcess(stage: .summarize, meetingID: id, workerProtocolVersion: 1)
+
+    #expect(process.arguments == [
+        "__internal-stage", "summarize", id.rawValue,
+        "--worker-protocol-version", "1",
+        "--vault-path", "/vaults/notes with space",
+    ])
+}
+
+@Test func makeProcessOmitsVaultPathWhenTheResolverSuppliesNone() throws {
+    let stubURL = URL(fileURLWithPath: "/tmp/stub-auricle-cli-does-not-need-to-exist")
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stubURL }, resolveVaultPath: { nil })
+    let id = try #require(MeetingID(ulid: meetingIDString("DSP5")))
+
+    let process = try dispatcher.makeProcess(stage: .summarize, meetingID: id, workerProtocolVersion: 1)
+
+    #expect(process.arguments?.contains("--vault-path") == false)
+}
+
 @Test func makeProcessThrowsWhenExecutablePathResolverReturnsNil() throws {
-    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { nil })
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { nil }, resolveVaultPath: { nil })
     let id = try #require(MeetingID(ulid: meetingIDString("DSP2")))
 
     #expect(throws: SubprocessDispatcher.DispatchError.executableNotFound) {
@@ -41,7 +65,7 @@ private func meetingIDString(_ tag: String) -> String {
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
     defer { try? FileManager.default.removeItem(at: scriptURL) }
 
-    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { scriptURL })
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { scriptURL }, resolveVaultPath: { nil })
     let id = try #require(MeetingID(ulid: meetingIDString("DSP3")))
 
     let process = try dispatcher.dispatch(stage: .summarize, meetingID: id)
