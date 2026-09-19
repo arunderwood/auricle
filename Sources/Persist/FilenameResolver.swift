@@ -33,10 +33,8 @@ public enum FilenameResolver {
         if let attendeeSlug = attendeeSlug(for: meeting) {
             return attendeeSlug
         }
-        // "meeting-at-" alone is 11 non-empty characters, so this candidate
-        // can never normalize to empty regardless of what captureTime24h
-        // contains — idPrefixSlug(for:) below is a defensive terminal
-        // fallback (Decision 2.4) that's unreachable through this function.
+        // The chain ends here because this slug is never empty: the literal
+        // "meeting-at-" prefix is 11 characters whatever captureTime24h holds.
         return "meeting-at-\(meeting.captureTime24h)"
     }
 
@@ -59,27 +57,16 @@ public enum FilenameResolver {
         return "with-" + normalizedNames.joined(separator: "-and-")
     }
 
-    /// Source 4: terminal fallback if every higher-priority source somehow
-    /// yields empty. Decision 2.4 calls this "defensive only; should be
-    /// unreachable in practice" — `slug(for:)` never reaches it, since its
-    /// own source-3 candidate can't be empty. Kept for completeness (a real
-    /// fallback if the priority chain is ever extended) rather than
-    /// exercised by a test that would need to force a state the code
-    /// proves unreachable.
-    private static func idPrefixSlug(for meeting: MeetingForFilename) -> String {
-        "meeting-\(meeting.meetingID.rawValue.prefix(8).lowercased())"
-    }
-
     // MARK: - Normalization pipeline
 
     /// Decision 2.4's 8-step slug normalization: NFKD-decompose, strip
     /// non-ASCII, lowercase, collapse non-`[a-z0-9]` runs to a single
     /// hyphen, trim and collapse hyphens, then cap at `cap` characters at a
     /// hyphen boundary. Applied to a whole candidate string (source 1) or
-    /// to a single attendee name before joining (source 2) — never to an
-    /// already-assembled multi-name slug, which is how an earlier iteration
-    /// of this function let the hyphen-boundary truncation rule collapse a
-    /// long single-name slug down to the bare word "with".
+    /// to a single attendee name before joining (source 2). Each name is
+    /// normalized and capped before joining because truncating the
+    /// assembled slug can land on the hyphen after `with-` and leave the
+    /// bare word `with`.
     private static func normalize(_ input: String, cap: Int) -> String {
         let decomposed = input.decomposedStringWithCompatibilityMapping
         let asciiOnly = String(String.UnicodeScalarView(decomposed.unicodeScalars.filter(\.isASCII)))
