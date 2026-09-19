@@ -75,6 +75,27 @@ session, three of them requested as separate manual continuations past the origi
   `App/`, whether logic should be extracted into `Sources/` for testability rather than
   discovering the gap in review each time.
 
+## Repairing `sprint-status.yaml`
+
+**Why it drifts.** `bmad-build-auto` has no sprint-status step. It writes only the spec's
+frontmatter `status`. Interactive `bmad-build` syncs `in-progress` and `review`, and
+`bmad-code-review` is what moves a story to `done`. The spec is the truth; the tracker
+falls behind.
+
+**What it breaks.** `bmad-retrospective` reads the tracker, counts every finished story
+as pending, and forces a rejected verdict. `bmad-help` recommends stories already built.
+
+**When to repair.** Before `bmad-retrospective`, and before trusting `bmad-help` or the
+sprint status view after a batch of stories. Not per story: an `on_complete` sync would
+add a commit per story and touch `last_updated` on every branch.
+
+**How.** Ask for `bmad-sprint-planning` "fix sprint status". It proposes a status per
+story from the specs. Check that each `done` spec is a whole story, not a partial one,
+then confirm. It rewrites the file with `sprint_plan.py generate --fresh --set`: long
+story keys shorten to the script's 66-character slug cap, and `action_items` carry over.
+Verify with `sprint_plan.py validate` (`valid: true`) and `bmad-retrospective`'s
+`detect-epic --epic N` (empty `pending_stories`).
+
 ## Recommendations baked into future loop prompts
 
 1. Name the actual stopping condition explicitly (a specific epic, a specific number of
