@@ -45,6 +45,7 @@ public actor GoogleCalendarSource: CalendarSource {
     private let session: URLSession
     private let calendarAPI: URL
     private let lookupTimeout: Duration
+    private let requestTimeout: TimeInterval
     private let now: @Sendable () -> Date
     private let refreshTokenService: String
     private let log = Log(category: "google-calendar")
@@ -92,6 +93,7 @@ public actor GoogleCalendarSource: CalendarSource {
         self.flow = flow
         session = flow.session
         calendarAPI = flow.endpoints.calendarAPI
+        requestTimeout = flow.requestTimeout
         self.lookupTimeout = lookupTimeout
         self.now = now
         self.refreshTokenService = refreshTokenService
@@ -181,7 +183,7 @@ public actor GoogleCalendarSource: CalendarSource {
         var token = try await validAccessToken()
 
         for attempt in 1 ... 2 {
-            let response = try await GoogleTransport.perform(authorizedRequest(url: url, token: token), using: session)
+            let response = try await GoogleTransport.perform(authorizedRequest(url: url, token: token), using: session, timeout: requestTimeout)
             log.info("google calendar request answered", ["statusCode": .publicSafe(response.status)])
 
             if response.status == 401 {

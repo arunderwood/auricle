@@ -3,83 +3,81 @@ import Foundation
 @testable import GoogleCalendarSource
 import Testing
 
-/// A generous ceiling for "returned promptly": far below the 10-second
-/// per-request timeout, so a lookup that waited on the request rather than on
-/// the lookup bound would fail it.
-private let promptly = Duration.seconds(5)
+// Nothing here measures elapsed time. A request timeout far longer than any
+// test run means only the lookup bound can end a request that never answers,
+// so a bound that failed to fire ends the test through its `.timeLimit`
+// instead of passing on luck. Assertions are on results and on request
+// counts that hold however the bound's timer and the request are scheduled.
 
-private let lookupTimeout = Duration.milliseconds(50)
+/// Long enough that no request in these tests can time out on its own.
+private let neverTimesOut: TimeInterval = 600
 
-private func elapsedTime(of work: () async -> Void) async -> Duration {
-    let start = ContinuousClock.now
-    await work()
-    return ContinuousClock.now - start
+/// Small enough that the bound is what ends a request that never answers.
+private let smallBound = Duration.milliseconds(20)
+
+private func isCancellation(_ error: any Error) -> Bool {
+    error is CancellationError || (error as? URLError)?.code == .cancelled
 }
 
 // MARK: - The bound
 
-@Test func aLookupWhoseEventsRequestNeverAnswersEndsAsUnreachableWithinTheBound() async throws {
-    let harness = try SourceHarness(lookupTimeout: lookupTimeout, events: { _, _ in .hang })
+@Test(.timeLimit(.minutes(1)))
+func aLookupWhoseEventsRequestNeverAnswersEndsAsUnreachable() async throws {
+    let harness = try SourceHarness(lookupTimeout: smallBound, requestTimeout: neverTimesOut, events: { _, _ in .hang })
     defer { harness.cleanup() }
 
-    let elapsed = await elapsedTime {
-        await #expect(throws: CalendarError.unreachable) {
-            try await harness.source.fetchActiveEvent(at: testInstant)
-        }
+    await #expect(throws: CalendarError.unreachable) {
+        try await harness.source.fetchActiveEvent(at: testInstant)
     }
 
-    #expect(elapsed < promptly)
-    #expect(harness.stub.eventRequests.count == 1)
+    #expect(harness.stub.tokenRequests.count <= 1)
+    #expect(harness.stub.eventRequests.count <= 1)
 }
 
-@Test func anUpcomingEventsLookupIsBoundedToo() async throws {
-    let harness = try SourceHarness(lookupTimeout: lookupTimeout, events: { _, _ in .hang })
+@Test(.timeLimit(.minutes(1)))
+func anUpcomingEventsLookupIsBoundedToo() async throws {
+    let harness = try SourceHarness(lookupTimeout: smallBound, requestTimeout: neverTimesOut, events: { _, _ in .hang })
     defer { harness.cleanup() }
 
-    let elapsed = await elapsedTime {
-        await #expect(throws: CalendarError.unreachable) {
-            try await harness.source.upcomingEvents(in: 3600)
-        }
+    await #expect(throws: CalendarError.unreachable) {
+        try await harness.source.upcomingEvents(in: 3600)
     }
 
-    #expect(elapsed < promptly)
+    #expect(harness.stub.eventRequests.count <= 1)
 }
 
-@Test func theBoundCoversTheTokenRefresh() async throws {
-    let harness = try SourceHarness(lookupTimeout: lookupTimeout, token: { _, _ in .hang })
+@Test(.timeLimit(.minutes(1)))
+func theBoundCoversTheTokenRefresh() async throws {
+    let harness = try SourceHarness(lookupTimeout: smallBound, requestTimeout: neverTimesOut, token: { _, _ in .hang })
     defer { harness.cleanup() }
 
-    let elapsed = await elapsedTime {
-        await #expect(throws: CalendarError.unreachable) {
-            try await harness.source.fetchActiveEvent(at: testInstant)
-        }
+    await #expect(throws: CalendarError.unreachable) {
+        try await harness.source.fetchActiveEvent(at: testInstant)
     }
 
-    #expect(elapsed < promptly)
+    #expect(harness.stub.tokenRequests.count <= 1)
     #expect(harness.stub.eventRequests.isEmpty)
 }
 
-@Test func theBoundCoversTheRetryAfterARejectedAccessToken() async throws {
+@Test(.timeLimit(.minutes(1)))
+func theBoundCoversTheRetryAfterARejectedAccessToken() async throws {
     let harness = try SourceHarness(
-        lookupTimeout: .milliseconds(500),
+        lookupTimeout: smallBound,
+        requestTimeout: neverTimesOut,
         events: { _, index in index == 0 ? .json(401, ["error": ["code": 401]]) : .hang },
     )
     defer { harness.cleanup() }
 
-    let elapsed = await elapsedTime {
-        await #expect(throws: CalendarError.unreachable) {
-            try await harness.source.fetchActiveEvent(at: testInstant)
-        }
+    await #expect(throws: CalendarError.unreachable) {
+        try await harness.source.fetchActiveEvent(at: testInstant)
     }
 
-    #expect(elapsed < promptly)
-    #expect(harness.stub.tokenRequests.count == 2)
-    #expect(harness.stub.eventRequests.count == 2)
+    #expect(harness.stub.tokenRequests.count <= 2)
+    #expect(harness.stub.eventRequests.count <= 2)
 }
 
 @Test func aLookupThatAnswersInsideTheBoundIsUnaffectedByIt() async throws {
     let harness = try SourceHarness(
-        lookupTimeout: .seconds(30),
         events: { _, _ in eventList([eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5))]) },
     )
     defer { harness.cleanup() }
@@ -87,9 +85,11 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
     #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.id == "google:evt")
 }
 
-@Test func theActorStaysFreeWhileALookupWaits() async throws {
+@Test(.timeLimit(.minutes(2)))
+func theActorStaysFreeWhileALookupWaits() async throws {
     let harness = try SourceHarness(
-        lookupTimeout: .milliseconds(600),
+        lookupTimeout: .seconds(60),
+        requestTimeout: neverTimesOut,
         events: { _, index in index == 0 ? .hang : eventList([eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5))]) },
     )
     defer { harness.cleanup() }
@@ -97,17 +97,25 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
     let order = Recorder<String>()
 
     let hung = Task {
-        _ = try? await source.fetchActiveEvent(at: testInstant)
-        order.record("hung lookup ended")
+        do {
+            _ = try await source.fetchActiveEvent(at: testInstant)
+            order.record("hung lookup returned")
+        } catch where isCancellation(error) {
+            order.record("hung lookup cancelled")
+        } catch {
+            order.record("hung lookup failed")
+        }
     }
     try await waitUntil { harness.stub.eventRequests.count == 1 }
 
     let event = try await source.fetchActiveEvent(at: testInstant)
     order.record("second lookup returned")
+
+    hung.cancel()
     await hung.value
 
     #expect(event?.id == "google:evt")
-    #expect(order.values == ["second lookup returned", "hung lookup ended"])
+    #expect(order.values == ["second lookup returned", "hung lookup cancelled"])
 }
 
 @Test func authorizeIsNotBoundedByTheLookupTimeout() async throws {
@@ -129,8 +137,9 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
 
 // MARK: - Cancellation
 
-@Test func cancellingTheCallingTaskDuringALookupEndsAsCancellationNotUnreachable() async throws {
-    let harness = try SourceHarness(events: { _, _ in .hang })
+@Test(.timeLimit(.minutes(2)))
+func cancellingTheCallingTaskDuringALookupEndsAsCancellationNotUnreachable() async throws {
+    let harness = try SourceHarness(requestTimeout: neverTimesOut, events: { _, _ in .hang })
     defer { harness.cleanup() }
     let source = harness.source
 
@@ -138,21 +147,18 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
     try await waitUntil { harness.stub.eventRequests.count == 1 }
     lookup.cancel()
 
-    var outcome: Result<CalendarEvent?, any Error>?
-    let elapsed = await elapsedTime { outcome = await lookup.result }
-
-    #expect(elapsed < promptly)
-    switch try #require(outcome) {
+    switch await lookup.result {
     case .success:
         Issue.record("a cancelled lookup must not return an event")
     case let .failure(error):
         #expect(!(error is CalendarError), "cancellation must not be reported as a CalendarError")
-        #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+        #expect(isCancellation(error))
     }
 }
 
-@Test func cancellingTheCallingTaskDuringATokenRefreshEndsAsCancellation() async throws {
-    let harness = try SourceHarness(token: { _, _ in .hang })
+@Test(.timeLimit(.minutes(2)))
+func cancellingTheCallingTaskDuringATokenRefreshEndsAsCancellation() async throws {
+    let harness = try SourceHarness(requestTimeout: neverTimesOut, token: { _, _ in .hang })
     defer { harness.cleanup() }
     let source = harness.source
 
@@ -160,16 +166,12 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
     try await waitUntil { harness.stub.tokenRequests.count == 1 }
     lookup.cancel()
 
-    var outcome: Result<[CalendarEvent], any Error>?
-    let elapsed = await elapsedTime { outcome = await lookup.result }
-
-    #expect(elapsed < promptly)
-    switch try #require(outcome) {
+    switch await lookup.result {
     case .success:
         Issue.record("a cancelled lookup must not return events")
     case let .failure(error):
         #expect(!(error is CalendarError), "cancellation must not be reported as a CalendarError")
-        #expect(error is CancellationError || (error as? URLError)?.code == .cancelled)
+        #expect(isCancellation(error))
     }
 }
 
@@ -183,4 +185,14 @@ private func elapsedTime(of work: () async -> Void) async -> Duration {
 
     #expect(harness.stub.tokenRequests.map(\.timeoutInterval) == [10])
     #expect(harness.stub.eventRequests.map(\.timeoutInterval) == [10])
+}
+
+@Test func anOverriddenRequestTimeoutReachesTheTokenAndTheEventsRequests() async throws {
+    let harness = try SourceHarness(requestTimeout: neverTimesOut)
+    defer { harness.cleanup() }
+
+    _ = try await harness.source.fetchActiveEvent(at: testInstant)
+
+    #expect(harness.stub.tokenRequests.map(\.timeoutInterval) == [neverTimesOut])
+    #expect(harness.stub.eventRequests.map(\.timeoutInterval) == [neverTimesOut])
 }

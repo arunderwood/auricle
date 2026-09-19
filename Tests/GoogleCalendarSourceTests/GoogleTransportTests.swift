@@ -18,6 +18,15 @@ private func eventsRequest(for stub: GoogleStub, timeoutInterval: TimeInterval =
     #expect(stub.eventRequests.map(\.timeoutInterval) == [10])
 }
 
+@Test func transportUsesTheTimeoutItIsGiven() async throws {
+    let stub = GoogleStub()
+    defer { stub.release() }
+
+    _ = try await GoogleTransport.perform(eventsRequest(for: stub), using: stub.session, timeout: 600)
+
+    #expect(stub.eventRequests.map(\.timeoutInterval) == [600])
+}
+
 @Test func transportReturnsTheStatusAndBodyWithoutInterpretingThem() async throws {
     let stub = GoogleStub(events: { _, _ in .text(503, "unavailable") })
     defer { stub.release() }

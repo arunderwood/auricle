@@ -116,18 +116,20 @@ private func redirectPort(of authorizationURL: URL?) throws -> Int {
     return try #require(components.port)
 }
 
-private func isListenerClosed(port: Int) async -> Bool {
+/// Returns once nothing accepts connections on `port`. The listener closes
+/// asynchronously after `authorize()` returns, so this polls; a listener that
+/// never closes ends the calling test through its `.timeLimit`.
+private func waitForListenerToClose(port: Int) async {
     let session = URLSession(configuration: .ephemeral)
     defer { session.invalidateAndCancel() }
-    for _ in 0 ..< 20 {
+    while true {
         do {
             _ = try await session.data(from: URL(string: "http://127.0.0.1:\(port)/?code=late&state=late")!)
         } catch {
-            return true
+            return
         }
-        try? await Task.sleep(for: .milliseconds(50))
+        try? await Task.sleep(for: .milliseconds(20))
     }
-    return false
 }
 
 // MARK: - PKCE
@@ -370,7 +372,8 @@ private func isListenerClosed(port: Int) async -> Bool {
     #expect(harness.stub.tokenRequests.isEmpty)
 }
 
-@Test func authorizeTimesOutAndClosesTheListenerWhenNoRedirectArrives() async throws {
+@Test(.timeLimit(.minutes(1)))
+func authorizeTimesOutAndClosesTheListenerWhenNoRedirectArrives() async throws {
     let recorder = URLRecorder()
     let harness = try SourceHarness(
         storedRefreshToken: nil,
@@ -387,10 +390,11 @@ private func isListenerClosed(port: Int) async -> Bool {
     #expect(harness.storedRefreshToken == nil)
     #expect(harness.stub.tokenRequests.isEmpty)
     let port = try redirectPort(of: recorder.first)
-    #expect(await isListenerClosed(port: port))
+    await waitForListenerToClose(port: port)
 }
 
-@Test func authorizeClosesTheListenerAfterASuccessfulRedirect() async throws {
+@Test(.timeLimit(.minutes(1)))
+func authorizeClosesTheListenerAfterASuccessfulRedirect() async throws {
     let recorder = URLRecorder()
     let harness = try SourceHarness(
         storedRefreshToken: nil,
@@ -405,7 +409,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     try await harness.source.authorize()
 
     let port = try redirectPort(of: recorder.first)
-    #expect(await isListenerClosed(port: port))
+    await waitForListenerToClose(port: port)
 }
 
 @Test func authorizeFailsWhenTheBrowserCannotBeOpened() async throws {

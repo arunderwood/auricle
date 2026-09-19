@@ -47,9 +47,13 @@ enum GoogleTransport {
     /// One attempt, no retry. Cancellation is never turned into a
     /// `GoogleCalendarFailure`: it propagates so the caller's task ends as
     /// cancelled.
-    static func perform(_ request: URLRequest, using session: URLSession) async throws -> (status: Int, body: Data) {
+    static func perform(
+        _ request: URLRequest,
+        using session: URLSession,
+        timeout: TimeInterval = requestTimeout,
+    ) async throws -> (status: Int, body: Data) {
         var request = request
-        request.timeoutInterval = requestTimeout
+        request.timeoutInterval = timeout
         let data: Data
         let response: URLResponse
         do {

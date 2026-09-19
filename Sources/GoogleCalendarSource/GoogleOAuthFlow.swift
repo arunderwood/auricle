@@ -67,6 +67,9 @@ struct GoogleOAuthFlow: Sendable {
     let session: URLSession
     let openBrowser: BrowserOpener
     let redirectTimeout: Duration
+    /// Tests raise it so that only the lookup bound, never a request timing
+    /// out, can end a request that never answers.
+    var requestTimeout: TimeInterval = GoogleTransport.requestTimeout
 
     private let log = Log(category: "google-calendar")
 
@@ -239,7 +242,7 @@ struct GoogleOAuthFlow: Sendable {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let response = try await GoogleTransport.perform(request, using: session)
+        let response = try await GoogleTransport.perform(request, using: session, timeout: requestTimeout)
         log.info("google token request answered", ["statusCode": .publicSafe(response.status)])
         return response
     }

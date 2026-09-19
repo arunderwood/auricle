@@ -1,7 +1,6 @@
 import CalendarInterface
 import Foundation
 @testable import GoogleCalendarSource
-import Testing
 
 // MARK: - Recorded traffic
 
@@ -236,11 +235,11 @@ final class TestClock: @unchecked Sendable {
 
 // MARK: - Harness
 
-/// Polls `condition` until it holds, failing the test if it never does.
-func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool) async throws {
-    let deadline = ContinuousClock.now + timeout
+/// Polls `condition` until it holds. It has no deadline of its own: a test
+/// that waits on it carries a `.timeLimit`, so a condition that never holds
+/// fails as an overrun instead of depending on how long a busy machine takes.
+func waitUntil(_ condition: () -> Bool) async throws {
     while !condition() {
-        try #require(ContinuousClock.now < deadline, "condition did not become true in time")
         try await Task.sleep(for: .milliseconds(5))
     }
 }
@@ -302,8 +301,9 @@ struct SourceHarness {
     init(
         client: GoogleOAuthClient = GoogleOAuthClient(clientID: "test-client.apps.googleusercontent.com"),
         storedRefreshToken: String? = "stored-refresh-token",
-        redirectTimeout: Duration = .milliseconds(500),
-        lookupTimeout: Duration = .seconds(15),
+        redirectTimeout: Duration = .seconds(60),
+        lookupTimeout: Duration = .seconds(60),
+        requestTimeout: TimeInterval = GoogleTransport.requestTimeout,
         openBrowser: @escaping @Sendable (URL) async throws -> Void = { _ in },
         token: @escaping GoogleStub.Responder = GoogleStub.defaultToken,
         events: @escaping GoogleStub.Responder = GoogleStub.emptyEvents,
@@ -323,6 +323,7 @@ struct SourceHarness {
             session: stub.session,
             openBrowser: openBrowser,
             redirectTimeout: redirectTimeout,
+            requestTimeout: requestTimeout,
         )
         self.flow = flow
         source = GoogleCalendarSource(
