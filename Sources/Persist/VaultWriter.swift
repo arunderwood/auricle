@@ -33,6 +33,11 @@ public enum VaultWriter {
     /// Inherits `AtomicWriter.write`'s "not safe to call concurrently for
     /// the same path" constraint — `VaultWriter` adds no serialization of
     /// its own on top.
+    ///
+    /// A candidate that already holds exactly `markdown` is this meeting's own
+    /// earlier write (one whose caller never recorded the path), so it is
+    /// returned as it stands and nothing is written. An existing file is only
+    /// ever read here, never opened for writing.
     public static func write(
         _ markdown: String,
         meeting: MeetingForFilename,
@@ -41,9 +46,22 @@ public enum VaultWriter {
     ) throws -> URL {
         try validateVaultPath(vaultPath)
         let subdirURL = try resolveMeetingsSubdir(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
-        let targetURL = try collisionFreeTarget(meeting: meeting, in: subdirURL)
-        try AtomicWriter.write(Data(markdown.utf8), to: targetURL)
-        return targetURL
+        switch try collisionFreeTarget(markdown: markdown, meeting: meeting, in: subdirURL) {
+        case let .existingCopy(url):
+            return url
+        case let .unused(url):
+            try AtomicWriter.write(Data(markdown.utf8), to: url)
+            return url
+        }
+    }
+
+    /// Whether the file at `url` exists and holds exactly `markdown`'s UTF-8
+    /// bytes. Read-only; an unreadable file is reported as not matching.
+    public static func fileHasContents(_ markdown: String, at url: URL) -> Bool {
+        guard let existing = try? Data(contentsOf: url) else {
+            return false
+        }
+        return existing == Data(markdown.utf8)
     }
 
     /// Writes `markdown` to an already-resolved, already-validated exact
@@ -123,18 +141,34 @@ public enum VaultWriter {
 
     // MARK: - Collision-free filename resolution
 
+    private enum CollisionFreeTarget {
+        /// No file exists at this path.
+        case unused(URL)
+        /// A file at this path already holds the markdown being written.
+        case existingCopy(URL)
+    }
+
     /// Deterministic (never random) ordinal counter per Decision 2.4: tries
     /// the bare filename first, then `-2`, `-3`, ... until an unused path is
     /// found, capped at `maxCollisionOrdinal` so a `FilenameResolver` defect
     /// or genuine data-corruption scenario fails fast rather than looping
-    /// indefinitely.
-    private static func collisionFreeTarget(meeting: MeetingForFilename, in subdirURL: URL) throws -> URL {
+    /// indefinitely. A file with other bytes is a foreign collision and
+    /// advances the ordinal; a file with `markdown`'s exact bytes ends the
+    /// search.
+    private static func collisionFreeTarget(
+        markdown: String,
+        meeting: MeetingForFilename,
+        in subdirURL: URL,
+    ) throws -> CollisionFreeTarget {
         var ordinal: Int?
         while true {
             let filename = FilenameResolver.resolve(meeting: meeting, ordinal: ordinal)
             let candidateURL = subdirURL.appendingPathComponent(filename)
             guard FileManager.default.fileExists(atPath: candidateURL.path) else {
-                return candidateURL
+                return .unused(candidateURL)
+            }
+            if fileHasContents(markdown, at: candidateURL) {
+                return .existingCopy(candidateURL)
             }
             let nextOrdinal = (ordinal ?? 1) + 1
             guard nextOrdinal <= maxCollisionOrdinal else {

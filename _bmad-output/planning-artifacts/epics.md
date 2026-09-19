@@ -1276,9 +1276,10 @@ So that the stage produces exactly one new vault note per execution, never edits
 **And** a `stage_events` row is written with `stage='persist'`, `event='completed'`, `metadata_json` containing `{"vault_note_path": "...", "frontmatter_schema_version": 1}` per Decision 4.5
 
 **Given** a meeting passing `auricle run <id> --reattribute` (or any other re-publish path)
-**When** `PersistStage.run(meetingId:, isRepublish: true)` executes
-**Then** the stage first confirms the original vault note still exists at `meetings.vault_note_path`; if it doesn't (user deleted it), the stage falls back to a fresh-publish path (no rerun suffix, standard filename per Decision 2.4)
-**And** if the original exists, the stage constructs a re-run filename per AR-DATA-7: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md` using user's local timezone date
+**When** `PersistStage.run(meetingId:...)` executes
+**Then** the stage is not told whether this is a re-publish; it derives that from the stored note: a run is a re-publish exactly when `meetings.vault_note_path` is set and the file still exists at that path
+**And** if the stored note does not exist (never published, or the user deleted it), the stage falls back to a fresh-publish path (no rerun suffix, standard filename per Decision 2.4)
+**And** if the stored note exists and differs from what this run renders, the stage constructs a re-run filename per AR-DATA-7: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md` using user's local timezone date
 **And** for multiple re-runs on the same calendar day, the counter is appended: `--rerun-<YYYY-MM-DD>-2.md`, `--rerun-<YYYY-MM-DD>-3.md`
 **And** the re-run note's frontmatter includes `auricle.supersedes: "<original-filename>.md"` (just the filename, no path)
 **And** `meetings.vault_note_path` is updated to point at the re-run note (latest publish becomes canonical for `auricle status` lookups)
@@ -1288,9 +1289,11 @@ So that the stage produces exactly one new vault note per execution, never edits
 **Then** every historical publish path is reconstructible from the `stage_events` rows where `stage='persist'` and `event='completed'` for that meeting (forensic audit trail; not first-class queryable per AR-DATA-7)
 
 **Given** the persist stage runs idempotently per NFR-R5
-**When** I re-run a successfully-published persist stage
-**Then** the second run overwrites the cache artifact and Txn B commits cleanly without errors
-**And** the vault file is re-written atomically (temp + rename); the user-facing inode may change but the contents are byte-identical for a deterministic input
+**When** I re-run the persist stage on content unchanged since its last publish, including a re-run after a crash or a failed `meetings.vault_note_path` update that left the note on disk
+**Then** the vault is left unchanged: no file is written, no ordinal-suffixed or re-run duplicate appears, and `meetings.vault_note_path` still names the same note
+**And** Txn B commits cleanly without errors
+**And** output identical to a file already in the vault is reused, never duplicated: a stored note whose bytes equal this run's rendering is kept as it stands (a stored re-run is compared against a rendering that carries its own `auricle.supersedes`); a stored note that differs (new summary, re-attribution, or a hand edit in Obsidian) gets a `--rerun-` sibling, and a re-run candidate that already holds the same bytes is reused instead of taking the next counter; a fresh publish whose target filename already holds the same bytes returns that path instead of the next ordinal
+**And** the stage never opens an existing vault file for writing; the rendering is deterministic, so identical inputs give identical bytes
 
 ---
 

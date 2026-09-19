@@ -35,7 +35,6 @@ func summarizeThenPersistPublishesANoteWithEveryExpectedQuoteAsABlockquote(name:
 
     let persisted = try await PersistStage.run(
         meetingID: fixture.meetingID,
-        isRepublish: false,
         cacheDirectory: CacheArtifactWriter.cacheDirectory(for: fixture.meetingID),
         vaultPath: vault,
         meetingsSubdir: "Meetings",
