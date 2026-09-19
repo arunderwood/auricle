@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-18-2026 21:06
+last_updated: 09-18-2026 22:36
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -162,56 +162,56 @@ action_items:
     action: "Build Core/Config and pass --vault-path from SubprocessDispatcher so
       dispatched summarize runs get the vault glossary (SR-2)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-2-fix-the-calendar-matcher-lead-in-toleran"
     epic: 3
     action: "Fix the calendar matcher (lead-in tolerance, responseStatus/eventType/transparency
       fields), then wire GoogleCalendarSource into InternalStageWorker (SR-3, DR-4)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-3-make-evaldefaultwiring-test-the-shipped"
     epic: 3
     action: "Make EvalDefaultWiring test the shipped substring-only composition, or
       move the wiring into Sources/ (VG-1)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-4-decide-the-speaker_n-prefix-convention-i"
     epic: 3
     action: "Decide the Speaker_N prefix convention in Story 4.1 and stop transcript
       segments printing the label twice (DR-1)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-5-map-effortlevel-to-the-api-or-remove-the"
     epic: 3
     action: "Map effortLevel to the API or remove the field and its telemetry writes
       (DR-2)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-6-decide-whether-nfr-c1-is-per-meeting-or"
     epic: 3
     action: "Decide whether NFR-C1 is per meeting or aggregate, then enforce it in
       the summarize stage (NF-1)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-7-classify-failures-optional-item-quote-co"
     epic: 3
     action: "Classify failures: optional item quote counted as a drop, stop_reason
       max_tokens class, KeychainError.notFound class (DR-3)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-8-reconcile-prd-architecture-and-epics-to"
     epic: 3
     action: "Reconcile prd, architecture and epics to substring-primary-no-fallback
       and the as-built dependency graph via bmad-correct-course (SR-1, AD-1)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-9-repair-sprint-status-yaml-append-the-fiv"
     epic: 3
@@ -219,11 +219,11 @@ action_items:
       to deferred-work.md, rename the Story 3.8 spec and results file (PL-2, PL-3,
       PD-1)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
   - id: "epic-3-retro-item-10-write-comparison-reports-at-mode-0600-dr"
     epic: 3
     action: "Write comparison reports at mode 0600 (DR-7)"
     owner: "the maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
