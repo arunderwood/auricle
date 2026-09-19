@@ -4,9 +4,12 @@
 # transcripts. This SPENDS ANTHROPIC API CREDIT (one call per transcript per
 # arm) and is run by hand, never in CI.
 #
-#   AURICLE_COMPARISON_TRANSCRIPTS   directory of CanonicalTranscript .json
-#                                    files (default:
-#                                    Tests/fixtures/strategy-comparison-transcripts)
+#   AURICLE_COMPARISON_TRANSCRIPTS   directory of CanonicalTranscript fixtures, as
+#                                    <name>.json files or <name>/transcript.json
+#                                    subdirectories (default:
+#                                    Tests/fixtures/strategy-comparison-transcripts).
+#                                    The committed eval fixtures are one such
+#                                    directory: Tests/SummarizeTests/Fixtures/eval
 #
 # Each run writes results.md and detail.md into its own UTC-timestamped
 # directory under Tests/fixtures/strategy-comparison-output/, so a re-run never

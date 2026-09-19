@@ -20,7 +20,7 @@ struct StrategyComparisonVerb: AsyncParsableCommand {
         shouldDisplay: false,
     )
 
-    @Option(help: "Directory of CanonicalTranscript .json fixtures.")
+    @Option(help: "Directory of CanonicalTranscript fixtures: <name>.json files or <name>/transcript.json subdirectories.")
     var transcripts: String
 
     @Option(help: "Directory to write results.md (metrics only) and detail.md (real meeting content) into.")

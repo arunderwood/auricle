@@ -22,6 +22,12 @@ private func transcriptJSON(text: String) throws -> Data {
     ))
 }
 
+private func writeDirectoryFixture(named name: String, text: String, in directory: URL) throws {
+    try FileManager.default.createDirectory(at: directory.appendingPathComponent(name), withIntermediateDirectories: true)
+    try writeFile(transcriptJSON(text: text), named: "\(name)/transcript.json", in: directory)
+    try writeFile(Data("{}".utf8), named: "\(name)/expected.json", in: directory)
+}
+
 // MARK: - Tests
 
 struct StrategyComparisonFixtureLoaderTests {
@@ -83,6 +89,73 @@ struct StrategyComparisonFixtureLoaderTests {
             #expect(!error.localizedDescription.contains("SECRET"))
         } catch {
             Issue.record("unexpected error type: \(type(of: error))")
+        }
+    }
+
+    @Test func loadsNameSubdirectoriesAlongsideFlatFilesInNameOrderIgnoringWhatElseTheyHold() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeFile(transcriptJSON(text: "flat"), named: "b-flat.json", in: directory)
+        try writeDirectoryFixture(named: "a-dir", text: "from a directory", in: directory)
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("no-transcript"), withIntermediateDirectories: true)
+        try writeFile(Data("notes".utf8), named: "no-transcript/notes.txt", in: directory)
+        try writeFile(Data("readme".utf8), named: "README.md", in: directory)
+
+        let fixtures = try StrategyComparisonFixtureLoader.load(from: directory)
+
+        #expect(fixtures.map(\.name) == ["a-dir", "b-flat"])
+        #expect(fixtures.map(\.transcript.text) == ["from a directory", "flat"])
+    }
+
+    @Test func aSubdirectoryWithoutATranscriptIsNotAFixture() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let empty = directory.appendingPathComponent("empty-fixture")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: empty.appendingPathComponent("transcript.json"), withIntermediateDirectories: true)
+
+        #expect(throws: StrategyComparisonFixtureLoader.LoadError.noTranscriptsFound(directory: directory.path)) {
+            try StrategyComparisonFixtureLoader.load(from: directory)
+        }
+    }
+
+    @Test func aFlatFileAndASubdirectoryWithTheSameNameAreRejected() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try writeFile(transcriptJSON(text: "flat"), named: "standup.json", in: directory)
+        try writeDirectoryFixture(named: "standup", text: "directory", in: directory)
+
+        #expect(throws: StrategyComparisonFixtureLoader.LoadError.duplicateFixtureName(name: "standup")) {
+            try StrategyComparisonFixtureLoader.load(from: directory)
+        }
+    }
+
+    @Test func aMalformedDirectoryTranscriptIsNamedByItsRelativePathNeverItsContents() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("bad"), withIntermediateDirectories: true)
+        try writeFile(Data("SECRET-CONTENT this is not json".utf8), named: "bad/transcript.json", in: directory)
+
+        do {
+            _ = try StrategyComparisonFixtureLoader.load(from: directory)
+            Issue.record("expected malformedFixture")
+        } catch let error as StrategyComparisonFixtureLoader.LoadError {
+            #expect(error == .malformedFixture(fileName: "bad/transcript.json"))
+            #expect(!error.localizedDescription.contains("SECRET"))
+        } catch {
+            Issue.record("unexpected error type: \(type(of: error))")
+        }
+    }
+
+    @Test func theCommittedEvalFixturesLoadThroughTheDirectoryLayout() throws {
+        let evalDirectory = try #require(EvalFixtures.directory)
+
+        let fixtures = try StrategyComparisonFixtureLoader.load(from: evalDirectory)
+
+        #expect(fixtures.count >= 5)
+        #expect(fixtures.map(\.name) == EvalFixtures.names)
+        for fixture in fixtures {
+            #expect(try fixture.transcript == EvalFixtures.load(fixture.name).transcript)
         }
     }
 
