@@ -317,8 +317,8 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     let bodyData = try #require(SubstringStubURLProtocol.bodyData(from: sentRequest))
     let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
 
-    // `attendees: []` always for this strategy, so the shared builder's
-    // `attendeeContext` block is always empty in this call shape — the same
+    // A default `SummarizerConfig` carries no attendee names, so the shared
+    // builder's `attendeeContext` block is empty in this call shape — the same
     // real call this strategy itself makes, not a re-derived string.
     let expectedPrompt = try SummarizationPromptBuilder.build(
         transcript: transcript, glossary: glossary, attendees: [], mode: .substring, promptDir: nil,
@@ -339,7 +339,7 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
 
     let contentBlocks = try #require(messages[0]["content"] as? [[String: Any]])
     // glossary (cache_control — the last non-empty block before the
-    // transcript, since attendeeContext is always empty here), transcript
+    // transcript, since attendeeContext is empty here), transcript
     // (never cache_control).
     #expect(contentBlocks.count == 2)
     #expect(contentBlocks[0]["text"] as? String == expectedPrompt.glossary.text)
@@ -349,7 +349,7 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
 }
 
 /// The configuration four of this file's five behavioral tests actually
-/// send (`Glossary()`, `attendees: []`): with both optional blocks empty,
+/// send (`Glossary()`, no attendee names): with both optional blocks empty,
 /// `content` must reduce to the transcript alone, uncached.
 @Test func requestBodyHasOnlyTheTranscriptBlockWhenGlossaryAndAttendeeContextAreEmpty() async throws {
     let transcript = makeTranscript()
@@ -419,4 +419,34 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     let fields = ClaudeSubstringSummarizer.dropCountLogFields(5)
     #expect(fields.count == 1)
     #expect(Set(fields.keys) == ["quoteValidationDropCount"])
+}
+
+/// The attendee names on the config are the only attendee data the request
+/// carries: the same builder output as `attendees: config.attendeeNames`, as
+/// its own cacheable block, and nothing else about anyone.
+@Test func substringRequestCarriesTheConfigAttendeeNamesAsTheAttendeeContextBlock() async throws {
+    let transcript = makeTranscript()
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: modelAnswerJSON()))
+    let names = ["Ada Lovelace", "Ben Ng"]
+
+    _ = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: transcript, glossary: Glossary(), config: SummarizerConfig(attendeeNames: names),
+    )
+
+    let sentRequest = try #require(SubstringStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(SubstringStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    let messages = try #require(json["messages"] as? [[String: Any]])
+    let contentBlocks = try #require(messages[0]["content"] as? [[String: Any]])
+
+    let expectedPrompt = try SummarizationPromptBuilder.build(
+        transcript: transcript, glossary: Glossary(), attendees: names, mode: .substring, promptDir: nil,
+    )
+    #expect(expectedPrompt.attendeeContext.text == "Attendees: Ada Lovelace, Ben Ng")
+    #expect(contentBlocks.count == 2)
+    #expect(contentBlocks[0]["text"] as? String == expectedPrompt.attendeeContext.text)
+    #expect((contentBlocks[0]["cache_control"] as? [String: String]) == ["type": "ephemeral"])
+    #expect(contentBlocks[1]["text"] as? String == transcript.text)
 }

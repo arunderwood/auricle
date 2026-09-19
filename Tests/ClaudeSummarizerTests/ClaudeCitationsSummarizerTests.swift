@@ -444,7 +444,7 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
 
     let contentBlocks = try #require(messages[0]["content"] as? [[String: Any]])
     // glossary (cache_control — the last non-empty block before the
-    // document, since attendeeContext is always empty for this strategy),
+    // document, since a default config carries no attendee names),
     // document (never cache_control).
     #expect(contentBlocks.count == 2)
     #expect(contentBlocks[0]["text"] as? String == expectedPrompt.glossary.text)
@@ -468,8 +468,8 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
 }
 
 /// The configuration most of this suite doesn't hit: `glossary` empty and
-/// (by this strategy's own construction, since `attendees: []` is fixed)
-/// `attendeeContext` also empty, so the document block is the *only* content
+/// (a default config carries no attendee names) `attendeeContext` also empty,
+/// so the document block is the *only* content
 /// block sent, with no `cache_control` anywhere.
 @Test func emptyGlossarySendsOnlyTheDocumentContentBlockWithNoCacheControl() async throws {
     let transcript = makeTranscript()
@@ -491,4 +491,36 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
     #expect(contentBlocks.count == 1)
     #expect(contentBlocks[0]["type"] as? String == "document")
     #expect(contentBlocks[0]["cache_control"] == nil)
+}
+
+/// The attendee names on the config are the only attendee data the request
+/// carries: the same builder output as `attendees: config.attendeeNames`, as
+/// its own cacheable block ahead of the uncached document.
+@Test func citationsRequestCarriesTheConfigAttendeeNamesAsTheAttendeeContextBlock() async throws {
+    let transcript = makeTranscript()
+    let endpoint = uniqueEndpoint()
+    defer { CitationsStubURLProtocol.unregister(url: endpoint) }
+    let body = try makeCitationsEnvelope(answerJSON: modelAnswerJSON(), citations: [])
+    CitationsStubURLProtocol.register(url: endpoint, status: 200, body: body)
+    let names = ["Ada Lovelace", "Ben Ng"]
+
+    _ = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: transcript, glossary: Glossary(), config: SummarizerConfig(attendeeNames: names),
+    )
+
+    let sentRequest = try #require(CitationsStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(CitationsStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    let messages = try #require(json["messages"] as? [[String: Any]])
+    let contentBlocks = try #require(messages[0]["content"] as? [[String: Any]])
+
+    let expectedPrompt = try SummarizationPromptBuilder.build(
+        transcript: transcript, glossary: Glossary(), attendees: names, mode: .citations, promptDir: nil,
+    )
+    #expect(expectedPrompt.attendeeContext.text == "Attendees: Ada Lovelace, Ben Ng")
+    #expect(contentBlocks.count == 2)
+    #expect(contentBlocks[0]["text"] as? String == expectedPrompt.attendeeContext.text)
+    #expect((contentBlocks[0]["cache_control"] as? [String: String]) == ["type": "ephemeral"])
+    #expect(contentBlocks[1]["type"] as? String == "document")
+    #expect(contentBlocks[1]["cache_control"] == nil)
 }

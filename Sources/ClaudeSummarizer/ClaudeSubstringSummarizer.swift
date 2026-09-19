@@ -73,13 +73,13 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
         glossary: Glossary,
         config: SummarizerConfig,
     ) async throws -> SummaryWithGrounding {
-        // `attendees: []` always: no attendee channel exists on this fixed
-        // protocol signature or on `SummarizerConfig` today — the stage entry
-        // point (Story 3.7) threads real attendee data in, not a strategy.
+        // Attendees arrive as names on `config`: the protocol signature has no
+        // `Meeting`, and the stage that resolved them has already dropped
+        // every email.
         let prompt = try SummarizationPromptBuilder.build(
             transcript: transcript,
             glossary: glossary,
-            attendees: [],
+            attendees: config.attendeeNames,
             mode: .substring,
             promptDir: promptDir,
         )
