@@ -1,6 +1,7 @@
 import CalendarInterface
 import Foundation
 @testable import GoogleCalendarSource
+import Testing
 
 // MARK: - Recorded traffic
 
@@ -9,6 +10,7 @@ struct RecordedRequest: Sendable {
     let method: String
     let headers: [String: String]
     let body: Data
+    let timeoutInterval: TimeInterval
 
     /// The `application/x-www-form-urlencoded` body as name/value pairs.
     var form: [String: String] {
@@ -30,6 +32,9 @@ struct RecordedRequest: Sendable {
 enum StubReply: Sendable {
     case http(status: Int, body: Data)
     case failure(URLError)
+    /// Never answers, like a server that accepted the connection and went
+    /// silent. The request ends only when its task is cancelled.
+    case hang
 
     static func json(_ status: Int, _ object: Any) -> StubReply {
         let body = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
@@ -162,6 +167,7 @@ final class GoogleStubURLProtocol: URLProtocol, @unchecked Sendable {
             method: request.httpMethod ?? "GET",
             headers: request.allHTTPHeaderFields ?? [:],
             body: Self.body(of: request),
+            timeoutInterval: request.timeoutInterval,
         )
 
         switch stub.reply(to: recorded) {
@@ -175,6 +181,8 @@ final class GoogleStubURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocolDidFinishLoading(self)
         case let .failure(error):
             client?.urlProtocol(self, didFailWithError: error)
+        case .hang:
+            break
         }
     }
 
@@ -228,6 +236,15 @@ final class TestClock: @unchecked Sendable {
 
 // MARK: - Harness
 
+/// Polls `condition` until it holds, failing the test if it never does.
+func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        try #require(ContinuousClock.now < deadline, "condition did not become true in time")
+        try await Task.sleep(for: .milliseconds(5))
+    }
+}
+
 let testInstant = Date(timeIntervalSince1970: 1_800_000_000)
 
 func iso8601(_ date: Date) -> String {
@@ -247,7 +264,7 @@ func eventJSON(
     start: Date?,
     end: Date?,
     status: String = "confirmed",
-    attendees: [[String: String]]? = nil,
+    attendees: [[String: Any]]? = nil,
     allDayDate: String? = nil,
 ) -> [String: Any] {
     var event: [String: Any] = ["id": id, "status": status]
@@ -273,17 +290,20 @@ func eventList(_ events: [[String: Any]]) -> StubReply {
 
 /// A `GoogleCalendarSource` wired to a stub and a throwaway Keychain service.
 /// `storedRefreshToken` plants a refresh token there up front; pass `nil` to
-/// leave the service empty.
+/// leave the service empty. `flow` is the same flow the source uses, for tests
+/// that exercise it without the source around it.
 struct SourceHarness {
     let stub: GoogleStub
     let service: String
     let clock: TestClock
+    let flow: GoogleOAuthFlow
     let source: GoogleCalendarSource
 
     init(
         client: GoogleOAuthClient = GoogleOAuthClient(clientID: "test-client.apps.googleusercontent.com"),
         storedRefreshToken: String? = "stored-refresh-token",
         redirectTimeout: Duration = .milliseconds(500),
+        lookupTimeout: Duration = .seconds(15),
         openBrowser: @escaping @Sendable (URL) async throws -> Void = { _ in },
         token: @escaping GoogleStub.Responder = GoogleStub.defaultToken,
         events: @escaping GoogleStub.Responder = GoogleStub.emptyEvents,
@@ -297,12 +317,17 @@ struct SourceHarness {
         self.stub = stub
         self.service = service
         self.clock = clock
-        source = GoogleCalendarSource(
+        let flow = GoogleOAuthFlow(
             client: client,
+            endpoints: stub.endpoints,
+            session: stub.session,
             openBrowser: openBrowser,
             redirectTimeout: redirectTimeout,
-            session: stub.session,
-            endpoints: stub.endpoints,
+        )
+        self.flow = flow
+        source = GoogleCalendarSource(
+            flow: flow,
+            lookupTimeout: lookupTimeout,
             now: { clock.now },
             refreshTokenService: service,
         )

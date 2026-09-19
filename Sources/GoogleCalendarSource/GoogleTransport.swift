@@ -1,4 +1,3 @@
-import CalendarInterface
 import Foundation
 
 /// The three Google URLs the source talks to. Injectable so tests can point
@@ -29,8 +28,13 @@ public struct GoogleEndpoints: Sendable {
 
 /// Shared HTTP plumbing for the OAuth and Calendar calls: an ephemeral,
 /// TLS 1.2+ session and one place where a transport failure becomes a typed
-/// `CalendarError`.
+/// `GoogleCalendarFailure`.
 enum GoogleTransport {
+    /// Every request leaves with this timeout rather than `URLRequest`'s
+    /// 60-second default, so a single stalled request cannot outlive the
+    /// lookup bound that contains it.
+    static let requestTimeout: TimeInterval = 10
+
     /// `.ephemeral` so nothing (cookies, cached responses, credentials) is
     /// left on disk, consistent with keeping tokens out of persistent storage
     /// other than Keychain (NFR-S1).
@@ -41,8 +45,11 @@ enum GoogleTransport {
     }
 
     /// One attempt, no retry. Cancellation is never turned into a
-    /// `CalendarError`: it propagates so the caller's task ends as cancelled.
+    /// `GoogleCalendarFailure`: it propagates so the caller's task ends as
+    /// cancelled.
     static func perform(_ request: URLRequest, using session: URLSession) async throws -> (status: Int, body: Data) {
+        var request = request
+        request.timeoutInterval = requestTimeout
         let data: Data
         let response: URLResponse
         do {
@@ -52,10 +59,10 @@ enum GoogleTransport {
         } catch let urlError as URLError where urlError.code == .cancelled {
             throw urlError
         } catch {
-            throw CalendarError.unreachable
+            throw GoogleCalendarFailure.unreachable
         }
         guard let http = response as? HTTPURLResponse else {
-            throw CalendarError.malformedResponse
+            throw GoogleCalendarFailure.malformedResponse
         }
         return (http.statusCode, data)
     }

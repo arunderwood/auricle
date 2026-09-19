@@ -116,6 +116,10 @@ deferred:
 
 ## Spec Change Log
 
+### 2026-09-18 — Adopted the CalendarInterface contract that Story 3.11 merged first
+
+Story 3.11 landed the `CalendarInterface` types (`CalendarSource`, `CalendarEvent`, `CalendarAttendee`, `CalendarError`) on `main` before this story merged, and its summarize stage already consumed them, so this story implemented that contract instead of the one it had declared. The public error surface became `CalendarError`'s two cases, `authorizationExpired` and `unreachable`, with no payload. The finer failures this story had distinguished (`notAuthorized`, `authorizationFailed`, `rateLimited`, `malformedResponse`) moved into an internal `GoogleCalendarFailure`, which the source maps to `CalendarError` at `authorize`, `fetchActiveEvent` and `upcomingEvents`, logging only the failure's case name first. Credential failures map to `authorizationExpired`; everything else maps to `unreachable`. `fetchActiveEvent` and `upcomingEvents` became bounded by an injectable `lookupTimeout` (15 seconds by default) covering the token refresh, the request and the one 401 retry, because the merged `CalendarSource` contract requires an implementation to bound its own lookups and throw `unreachable` on expiry; each outgoing request also carries a 10-second timeout. `CalendarEventID` and `CalendarEvent.attendeeDisplayNames` were removed: event ids are plain `google:<id>` strings, attendees carry an `isSelf` flag decoded from Google's `self` field, and the stage, not the source, keeps emails and email-shaped display names out of prompts. The interface names in `## Auto Run Result` describe the state before this merge, and the failure names in the I/O matrix now name the internal `GoogleCalendarFailure` cases rather than public ones.
+
 ## Review Triage Log
 
 ### 2026-09-18 — Review pass

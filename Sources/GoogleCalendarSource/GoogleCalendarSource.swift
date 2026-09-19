@@ -10,6 +10,12 @@ import Foundation
 /// rejected access token (401) gets one refresh and one re-send of the
 /// request; nothing else is retried. The calendar is off the pipeline's hot
 /// path, and a failure already has a designed outcome (Story 3.11).
+///
+/// Internally a failure is a `GoogleCalendarFailure`; the public methods
+/// report it as the `CalendarError` it maps to. `fetchActiveEvent` and
+/// `upcomingEvents` each finish within `lookupTimeout` or throw
+/// `CalendarError.unreachable`: the summarize stage sets no deadline of its
+/// own, so a lookup that never returned would hang the meeting.
 public actor GoogleCalendarSource: CalendarSource {
     private struct CachedAccessToken {
         let value: String
@@ -24,7 +30,7 @@ public actor GoogleCalendarSource: CalendarSource {
 
     /// Limited to what `CalendarEvent` carries, plus `status`, which the
     /// matcher needs to skip cancelled events.
-    private static let fieldsMask = "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName))"
+    private static let fieldsMask = "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName,self))"
 
     /// Google's `403` reasons that mean "slow down" rather than "not allowed".
     private static let rateLimitReasons: Set<String> = [
@@ -38,6 +44,7 @@ public actor GoogleCalendarSource: CalendarSource {
     private let flow: GoogleOAuthFlow
     private let session: URLSession
     private let calendarAPI: URL
+    private let lookupTimeout: Duration
     private let now: @Sendable () -> Date
     private let refreshTokenService: String
     private let log = Log(category: "google-calendar")
@@ -47,45 +54,45 @@ public actor GoogleCalendarSource: CalendarSource {
     /// `openBrowser` is handed the authorization URL and should show it to the
     /// user; it is injected so this target never touches AppKit. Nothing here
     /// reads configuration: the client registration arrives through `client`.
+    ///
+    /// `redirectTimeout` bounds the user-paced `authorize()`; `lookupTimeout`
+    /// bounds each whole `fetchActiveEvent` or `upcomingEvents` call.
     public init(
         client: GoogleOAuthClient,
         openBrowser: @escaping @Sendable (URL) async throws -> Void,
         redirectTimeout: Duration = .seconds(300),
+        lookupTimeout: Duration = .seconds(15),
         session: URLSession = GoogleCalendarSource.makeDefaultSession(),
         endpoints: GoogleEndpoints = .production,
         now: @escaping @Sendable () -> Date = { Date() },
     ) {
         self.init(
-            client: client,
-            openBrowser: openBrowser,
-            redirectTimeout: redirectTimeout,
-            session: session,
-            endpoints: endpoints,
+            flow: GoogleOAuthFlow(
+                client: client,
+                endpoints: endpoints,
+                session: session,
+                openBrowser: openBrowser,
+                redirectTimeout: redirectTimeout,
+            ),
+            lookupTimeout: lookupTimeout,
             now: now,
             refreshTokenService: GoogleRefreshTokenStore.productionService,
         )
     }
 
     /// Lets tests keep the refresh token under a throwaway Keychain service so
-    /// they never touch the maintainer's real item.
+    /// they never touch the maintainer's real item, and hold the flow they
+    /// hand in.
     init(
-        client: GoogleOAuthClient,
-        openBrowser: @escaping @Sendable (URL) async throws -> Void,
-        redirectTimeout: Duration,
-        session: URLSession,
-        endpoints: GoogleEndpoints,
+        flow: GoogleOAuthFlow,
+        lookupTimeout: Duration,
         now: @escaping @Sendable () -> Date,
         refreshTokenService: String,
     ) {
-        flow = GoogleOAuthFlow(
-            client: client,
-            endpoints: endpoints,
-            session: session,
-            openBrowser: openBrowser,
-            redirectTimeout: redirectTimeout,
-        )
-        self.session = session
-        calendarAPI = endpoints.calendarAPI
+        self.flow = flow
+        session = flow.session
+        calendarAPI = flow.endpoints.calendarAPI
+        self.lookupTimeout = lookupTimeout
         self.now = now
         self.refreshTokenService = refreshTokenService
     }
@@ -98,36 +105,78 @@ public actor GoogleCalendarSource: CalendarSource {
     // MARK: - CalendarSource
 
     public func authorize() async throws {
-        let grant = try await flow.authorize()
+        try await reportingCalendarErrors {
+            let grant = try await flow.authorize()
 
-        do {
-            try GoogleRefreshTokenStore.write(grant.refreshToken, service: refreshTokenService)
-        } catch {
-            throw CalendarError.authorizationFailed(reason: "the refresh token could not be stored in Keychain")
+            do {
+                try GoogleRefreshTokenStore.write(grant.refreshToken, service: refreshTokenService)
+            } catch {
+                throw GoogleCalendarFailure.authorizationFailed(reason: "the refresh token could not be stored in Keychain")
+            }
+            cache(grant.access)
+            log.info("google calendar authorized")
         }
-        cache(grant.access)
-        log.info("google calendar authorized")
     }
 
     public func fetchActiveEvent(at instant: Date) async throws -> CalendarEvent? {
-        // Calendar's `timeMin` bounds an event's end exclusively and `timeMax`
-        // bounds its start exclusively; a second of slack each way lets an
-        // event that ends or starts exactly at `instant` come back so the
-        // matcher's inclusive comparison can accept it.
-        let events = try await listEvents(timeMin: instant.addingTimeInterval(-1), timeMax: instant.addingTimeInterval(1))
-        return EventMatcher.activeEvent(at: instant, among: events)
+        try await reportingCalendarErrors {
+            // Calendar's `timeMin` bounds an event's end exclusively and `timeMax`
+            // bounds its start exclusively; a second of slack each way lets an
+            // event that ends or starts exactly at `instant` come back so the
+            // matcher's inclusive comparison can accept it.
+            let events = try await boundedEvents(timeMin: instant.addingTimeInterval(-1), timeMax: instant.addingTimeInterval(1))
+            return EventMatcher.activeEvent(at: instant, among: events)
+        }
     }
 
     public func upcomingEvents(in window: TimeInterval) async throws -> [CalendarEvent] {
         guard window >= 0 else { return [] }
-        let start = now()
-        let events = try await listEvents(timeMin: start, timeMax: start.addingTimeInterval(window + 1))
-        return EventMatcher.upcomingEvents(from: start, window: window, among: events)
+        return try await reportingCalendarErrors {
+            let start = now()
+            let events = try await boundedEvents(timeMin: start, timeMax: start.addingTimeInterval(window + 1))
+            return EventMatcher.upcomingEvents(from: start, window: window, among: events)
+        }
+    }
+
+    /// The only place a `GoogleCalendarFailure` becomes a `CalendarError`.
+    /// Cancellation (`CancellationError`, `URLError(.cancelled)`) is not a
+    /// failure of either kind and passes through untouched.
+    private func reportingCalendarErrors<Result>(_ operation: () async throws -> Result) async throws -> Result {
+        do {
+            return try await operation()
+        } catch let failure as GoogleCalendarFailure {
+            log.warn("google calendar call failed", ["failure": .publicSafe(failure.caseName)])
+            throw failure.calendarError
+        }
     }
 
     // MARK: - Calendar API
 
-    private func listEvents(timeMin: Date, timeMax: Date) async throws -> [GoogleEvent] {
+    /// Races the whole list call (token refresh, request and the one 401
+    /// retry) against `lookupTimeout`. The work runs in a child task and the
+    /// actor stays free while it waits. When the timer wins the work is
+    /// cancelled and the call reports `unreachable`; if the caller itself was
+    /// cancelled that is reported as cancellation instead.
+    private func boundedEvents(timeMin: Date, timeMax: Date) async throws -> [GoogleEvent] {
+        let timeout = lookupTimeout
+        return try await withThrowingTaskGroup(of: [GoogleEvent]?.self) { group in
+            group.addTask { try await self.listEvents(timeMin: timeMin, timeMax: timeMax) }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                return nil
+            }
+            defer { group.cancelAll() }
+
+            guard let events = try await group.next() ?? nil else {
+                try Task.checkCancellation()
+                log.warn("google calendar lookup timed out")
+                throw GoogleCalendarFailure.unreachable
+            }
+            return events
+        }
+    }
+
+    func listEvents(timeMin: Date, timeMax: Date) async throws -> [GoogleEvent] {
         let url = eventsURL(timeMin: timeMin, timeMax: timeMax)
         var token = try await validAccessToken()
 
@@ -137,34 +186,34 @@ public actor GoogleCalendarSource: CalendarSource {
 
             if response.status == 401 {
                 accessToken = nil
-                guard attempt == 1 else { throw CalendarError.authorizationExpired }
+                guard attempt == 1 else { throw GoogleCalendarFailure.authorizationExpired }
                 token = try await refreshAccessToken()
                 continue
             }
             return try events(fromStatus: response.status, body: response.body)
         }
-        throw CalendarError.authorizationExpired
+        throw GoogleCalendarFailure.authorizationExpired
     }
 
     private func events(fromStatus status: Int, body: Data) throws -> [GoogleEvent] {
         switch status {
         case 200 ..< 300:
             guard let list = try? JSONDecoder().decode(GoogleEventList.self, from: body) else {
-                throw CalendarError.malformedResponse
+                throw GoogleCalendarFailure.malformedResponse
             }
             log.info("google calendar events decoded", ["eventCount": .publicSafe(list.events.count)])
             return list.events
         case 403:
-            throw Self.isRateLimit(body) ? CalendarError.rateLimited : CalendarError.authorizationExpired
+            throw Self.isRateLimit(body) ? GoogleCalendarFailure.rateLimited : GoogleCalendarFailure.authorizationExpired
         case 429:
-            throw CalendarError.rateLimited
+            throw GoogleCalendarFailure.rateLimited
         case 500 ... 599:
-            throw CalendarError.unreachable
+            throw GoogleCalendarFailure.unreachable
         default:
             // A 4xx this source doesn't model means the request it built was
             // not one Google understood, which is a shape mismatch, not an
             // authorization problem.
-            throw CalendarError.malformedResponse
+            throw GoogleCalendarFailure.malformedResponse
         }
     }
 
@@ -213,9 +262,9 @@ public actor GoogleCalendarSource: CalendarSource {
         do {
             refreshToken = try GoogleRefreshTokenStore.read(service: refreshTokenService)
         } catch GoogleRefreshTokenStoreError.notFound {
-            throw CalendarError.notAuthorized
+            throw GoogleCalendarFailure.notAuthorized
         } catch {
-            throw CalendarError.authorizationFailed(reason: "the refresh token could not be read from Keychain")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the refresh token could not be read from Keychain")
         }
 
         let grant = try await flow.refresh(refreshToken: refreshToken)

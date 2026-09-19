@@ -3,11 +3,11 @@ import Foundation
 @testable import GoogleCalendarSource
 import Testing
 
-private let readonlyScope = "https://www.googleapis.com/auth/calendar.readonly"
+let readonlyScope = "https://www.googleapis.com/auth/calendar.readonly"
 
 // MARK: - Loopback browser stand-in
 
-private func queryItems(of url: URL) -> [String: String] {
+func queryItems(of url: URL) -> [String: String] {
     let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
     return Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
 }
@@ -15,7 +15,7 @@ private func queryItems(of url: URL) -> [String: String] {
 /// What a browser does after the user consents: request the redirect URI with
 /// the OAuth response in its query. Uses a plain session, so the request hits
 /// the real loopback listener rather than the Google stub.
-private func deliverRedirect(
+func deliverRedirect(
     for authorizationURL: URL,
     code: String? = "auth-code",
     state: String? = nil,
@@ -45,7 +45,7 @@ private func deliverRedirect(
 
 /// Collects values a `@Sendable` browser closure observes, such as the
 /// authorization URL the flow asks it to open.
-private final class Recorder<Value: Sendable>: @unchecked Sendable {
+final class Recorder<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [Value] = []
 
@@ -66,7 +66,7 @@ private final class Recorder<Value: Sendable>: @unchecked Sendable {
     }
 }
 
-private typealias URLRecorder = Recorder<URL>
+typealias URLRecorder = Recorder<URL>
 
 /// The HTTP status the loopback listener answers a plain `GET` with.
 private func loopbackStatus(port: Int, pathAndQuery: String) async throws -> Int {
@@ -99,7 +99,7 @@ private func authorizeRecordingSecrets() async throws -> (state: String, verifie
     return (state, verifier)
 }
 
-private func grantedTokenResponse(scope: String = readonlyScope, refreshToken: String? = "1//new-refresh-token") -> GoogleStub.Responder {
+func grantedTokenResponse(scope: String = readonlyScope, refreshToken: String? = "1//new-refresh-token") -> GoogleStub.Responder {
     { _, _ in
         var body: [String: Any] = ["access_token": "access-from-code", "expires_in": 3600, "scope": scope, "token_type": "Bearer"]
         if let refreshToken {
@@ -335,7 +335,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "the authorization response did not match this request")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -350,7 +350,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "authorization was declined")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -364,7 +364,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "authorization was rejected (server_error)")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.stub.tokenRequests.isEmpty)
@@ -380,7 +380,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "no response arrived from the browser before the timeout")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
 
@@ -413,7 +413,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     let harness = try SourceHarness(storedRefreshToken: nil, openBrowser: { _ in throw NoBrowser() })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "the browser could not be opened")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -427,7 +427,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "Google did not grant read-only calendar access")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -441,7 +441,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "Google did not grant read-only calendar access")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -455,7 +455,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "Google returned no refresh token")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -469,7 +469,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "Google rejected the authorization code")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
@@ -489,7 +489,7 @@ private func isListenerClosed(port: Int) async -> Bool {
     #expect(harness.storedRefreshToken == nil)
 }
 
-@Test func authorizeReportsAnUndecodableTokenResponseAsMalformed() async throws {
+@Test func authorizeReportsAnUndecodableTokenResponseAsUnreachable() async throws {
     let harness = try SourceHarness(
         storedRefreshToken: nil,
         openBrowser: { url in try await deliverRedirect(for: url) },
@@ -497,22 +497,10 @@ private func isListenerClosed(port: Int) async -> Bool {
     )
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.malformedResponse) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.authorize()
     }
     #expect(harness.storedRefreshToken == nil)
-}
-
-@Test func authorizeDoesNotEchoAnArbitraryOAuthErrorTextIntoTheReason() async throws {
-    let harness = try SourceHarness(
-        storedRefreshToken: nil,
-        openBrowser: { url in try await deliverRedirect(for: url, code: nil, error: "Weird Text With SPACES") },
-    )
-    defer { harness.cleanup() }
-
-    await #expect(throws: CalendarError.authorizationFailed(reason: "authorization was rejected (unrecognized error)")) {
-        try await harness.source.authorize()
-    }
 }
 
 // MARK: - Loopback request parsing

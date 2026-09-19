@@ -1,4 +1,3 @@
-import CalendarInterface
 import Foundation
 import Network
 
@@ -53,7 +52,7 @@ final class LoopbackRedirectListener: @unchecked Sendable {
             return items
         }
         try Task.checkCancellation()
-        throw CalendarError.authorizationFailed(reason: "the local redirect listener closed before a response arrived")
+        throw GoogleCalendarFailure.authorizationFailed(reason: "the local redirect listener closed before a response arrived")
     }
 
     func cancel() {
@@ -69,7 +68,7 @@ final class LoopbackRedirectListener: @unchecked Sendable {
                 readinessContinuation.yield(port)
                 readinessContinuation.finish()
             } else {
-                readinessContinuation.finish(throwing: CalendarError.authorizationFailed(reason: "the local redirect listener has no port"))
+                readinessContinuation.finish(throwing: GoogleCalendarFailure.authorizationFailed(reason: "the local redirect listener has no port"))
             }
         case let .failed(error):
             readinessContinuation.finish(throwing: error)

@@ -25,13 +25,13 @@ private func rateLimitBody(reason: String) -> [String: Any] {
 
     let event = try #require(await harness.source.fetchActiveEvent(at: testInstant))
 
-    #expect(event.id.rawValue == "google:evt1")
+    #expect(event.id == "google:evt1")
     #expect(event.title == "Roadmap sync")
     #expect(event.start == at(minutes: -10))
     #expect(event.end == at(minutes: 20))
     #expect(event.attendees == [
-        CalendarAttendee(email: "alice@example.com", displayName: "Alice"),
-        CalendarAttendee(email: "bob@example.org"),
+        CalendarAttendee(email: "alice@example.com", displayName: "Alice", isSelf: false),
+        CalendarAttendee(email: "bob@example.org", displayName: nil, isSelf: false),
     ])
 }
 
@@ -52,7 +52,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(query["singleEvents"] == "true")
     #expect(query["timeMin"] == iso8601(testInstant.addingTimeInterval(-1)))
     #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(1)))
-    #expect(query["fields"] == "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName))")
+    #expect(query["fields"] == "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName,self))")
 }
 
 @Test func fetchActiveEventRefreshesUsingTheStoredTokenAndTheClientCredentials() async throws {
@@ -94,7 +94,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
 
     let event = try await harness.source.fetchActiveEvent(at: testInstant)
 
-    #expect(event?.id.rawValue == "google:quick")
+    #expect(event?.id == "google:quick")
 }
 
 @Test func fetchActiveEventPrefersTheLaterStartWhenOneEventEndsExactlyWhenAnotherStarts() async throws {
@@ -108,7 +108,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
 
     let event = try await harness.source.fetchActiveEvent(at: testInstant)
 
-    #expect(event?.id.rawValue == "google:second")
+    #expect(event?.id == "google:second")
 }
 
 @Test func fetchActiveEventMatchesAnEventThatEndsExactlyAtTheInstant() async throws {
@@ -117,7 +117,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     })
     defer { harness.cleanup() }
 
-    #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.id.rawValue == "google:ending")
+    #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.id == "google:ending")
 }
 
 @Test func fetchActiveEventReturnsNilWhenNothingCoversTheInstant() async throws {
@@ -177,9 +177,31 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.title == "")
 }
 
-// MARK: - Prompt-facing names
+// MARK: - Event mapping
 
-@Test func attendeeEmailsNeverAppearInTheNamesThatReachAPrompt() async throws {
+@Test func everyEventIdCarriesTheGoogleNamespacePrefix() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        eventList([
+            eventJSON(id: "abc123", start: at(minutes: -5), end: at(minutes: 5)),
+            eventJSON(id: "next:one", start: at(minutes: 10), end: at(minutes: 20)),
+        ])
+    })
+    defer { harness.cleanup() }
+
+    #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.id == "google:abc123")
+    #expect(try await harness.source.upcomingEvents(in: 3600).map(\.id) == ["google:next:one"])
+}
+
+@Test func anEventWithAnEmptyIdIsNeverReturned() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        eventList([eventJSON(id: "", start: at(minutes: -5), end: at(minutes: 5))])
+    })
+    defer { harness.cleanup() }
+
+    #expect(try await harness.source.fetchActiveEvent(at: testInstant) == nil)
+}
+
+@Test func anAttendeeIsSelfOnlyWhenGoogleSaysSo() async throws {
     let harness = try SourceHarness(events: { _, _ in
         eventList([
             eventJSON(
@@ -187,9 +209,9 @@ private func rateLimitBody(reason: String) -> [String: Any] {
                 start: at(minutes: -5),
                 end: at(minutes: 5),
                 attendees: [
-                    ["email": "alice.wonder@example.com", "displayName": "Alice"],
-                    ["email": "bob.builder@example.org"],
-                    ["email": "carol@example.net", "displayName": "Carol"],
+                    ["email": "me@example.com", "displayName": "Me", "self": true],
+                    ["email": "other@example.com", "displayName": "Other", "self": false],
+                    ["email": "absent@example.com", "displayName": "Absent"],
                 ],
             ),
         ])
@@ -197,12 +219,43 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     defer { harness.cleanup() }
 
     let event = try #require(await harness.source.fetchActiveEvent(at: testInstant))
-    let promptFacing = event.attendeeDisplayNames.joined(separator: " ")
 
-    #expect(event.attendeeDisplayNames == ["Alice", "Carol"])
-    for fragment in ["@", "example", "wonder", "builder", "bob", "carol@"] {
-        #expect(!promptFacing.contains(fragment))
-    }
+    #expect(event.attendees.map(\.isSelf) == [true, false, false])
+    #expect(event.attendees.map(\.email) == ["me@example.com", "other@example.com", "absent@example.com"])
+}
+
+@Test func anAttendeeWithoutAnEmailKeepsAnEmptyEmailAndItsName() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        eventList([
+            eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5), attendees: [["displayName": "Conference Room", "self": true]]),
+        ])
+    })
+    defer { harness.cleanup() }
+
+    let event = try #require(await harness.source.fetchActiveEvent(at: testInstant))
+
+    #expect(event.attendees == [CalendarAttendee(email: "", displayName: "Conference Room", isSelf: true)])
+}
+
+@Test func displayNamesPassThroughExactlyAsGoogleSentThem() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        eventList([
+            eventJSON(
+                id: "evt",
+                start: at(minutes: -5),
+                end: at(minutes: 5),
+                attendees: [
+                    ["email": "a@example.com", "displayName": "  Padded Name "],
+                    ["email": "b@example.com", "displayName": "b@example.com"],
+                ],
+            ),
+        ])
+    })
+    defer { harness.cleanup() }
+
+    let event = try #require(await harness.source.fetchActiveEvent(at: testInstant))
+
+    #expect(event.attendees.map(\.displayName) == ["  Padded Name ", "b@example.com"])
 }
 
 // MARK: - Access token lifecycle
@@ -251,7 +304,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
 
     let event = try await harness.source.fetchActiveEvent(at: testInstant)
 
-    #expect(event?.id.rawValue == "google:evt")
+    #expect(event?.id == "google:evt")
     #expect(harness.stub.tokenRequests.count == 2)
     #expect(harness.stub.eventRequests.map(\.bearerToken) == ["access-1", "access-2"])
 }
@@ -281,11 +334,11 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(harness.storedRefreshToken == "1//revoked")
 }
 
-@Test func aRefreshRejectedForAnotherReasonIsAnAuthorizationFailureNotAnExpiry() async throws {
+@Test func aRefreshRejectedForAnotherReasonIsReportedAsAnExpiredAuthorization() async throws {
     let harness = try SourceHarness(token: { _, _ in .json(401, ["error": "invalid_client"]) })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.authorizationFailed(reason: "Google rejected the token request (invalid_client)")) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
 }
@@ -294,10 +347,10 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     let harness = try SourceHarness(storedRefreshToken: nil)
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.notAuthorized) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
-    await #expect(throws: CalendarError.notAuthorized) {
+    await #expect(throws: CalendarError.authorizationExpired) {
         try await harness.source.upcomingEvents(in: 3600)
     }
     #expect(harness.stub.requests.isEmpty)
@@ -335,31 +388,31 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(harness.stub.eventRequests.count == 1)
 }
 
-@Test func aTooManyRequestsResponseIsRateLimited() async throws {
+@Test func aTooManyRequestsResponseIsUnreachableWithNoRetry() async throws {
     let harness = try SourceHarness(events: { _, _ in .text(429, "slow down") })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.rateLimited) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
     #expect(harness.stub.eventRequests.count == 1)
 }
 
-@Test func aTokenEndpointThrottleIsRateLimited() async throws {
+@Test func aTokenEndpointThrottleIsUnreachable() async throws {
     let harness = try SourceHarness(token: { _, _ in .text(429, "slow down") })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.rateLimited) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
 }
 
 @Test(arguments: ["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "quotaExceeded", "calendarUsageLimitsExceeded"])
-func aForbiddenResponseWithARateLimitReasonIsRateLimited(reason: String) async throws {
+func aForbiddenResponseWithARateLimitReasonIsUnreachable(reason: String) async throws {
     let harness = try SourceHarness(events: { _, _ in .json(403, rateLimitBody(reason: reason)) })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.rateLimited) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
     #expect(harness.stub.eventRequests.count == 1)
@@ -384,16 +437,16 @@ func aForbiddenResponseWithARateLimitReasonIsRateLimited(reason: String) async t
     }
 }
 
-@Test func anUndecodableSuccessBodyIsMalformed() async throws {
+@Test func anUndecodableSuccessBodyIsUnreachable() async throws {
     let harness = try SourceHarness(events: { _, _ in .text(200, "not json at all") })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.malformedResponse) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
 }
 
-@Test func anEventWithAnUnparseableDateTimeMakesTheResponseMalformed() async throws {
+@Test func anEventWithAnUnparseableDateTimeMakesTheLookupUnreachable() async throws {
     let harness = try SourceHarness(events: { _, _ in
         let badEvent: [String: Any] = [
             "id": "bad",
@@ -404,16 +457,16 @@ func aForbiddenResponseWithARateLimitReasonIsRateLimited(reason: String) async t
     })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.malformedResponse) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
 }
 
-@Test func anUnmodelledClientErrorStatusIsMalformed() async throws {
+@Test func anUnmodelledClientErrorStatusIsUnreachable() async throws {
     let harness = try SourceHarness(events: { _, _ in .text(404, "not found") })
     defer { harness.cleanup() }
 
-    await #expect(throws: CalendarError.malformedResponse) {
+    await #expect(throws: CalendarError.unreachable) {
         try await harness.source.fetchActiveEvent(at: testInstant)
     }
 }
@@ -444,7 +497,7 @@ func aForbiddenResponseWithARateLimitReasonIsRateLimited(reason: String) async t
 
     let events = try await harness.source.upcomingEvents(in: 60 * 60)
 
-    #expect(events.map(\.id.rawValue) == ["google:sooner", "google:later"])
+    #expect(events.map(\.id) == ["google:sooner", "google:later"])
 }
 
 @Test func upcomingEventsAsksForTheWindowStartingNow() async throws {

@@ -26,13 +26,13 @@ private func allDay(_ id: String) -> GoogleEvent {
 @Test func matcherIncludesAnEventStartingExactlyAtTheInstant() {
     let match = EventMatcher.activeEvent(at: at(10), among: [timed("a", from: 10, to: 20)])
 
-    #expect(match?.id.rawValue == "google:a")
+    #expect(match?.id == "google:a")
 }
 
 @Test func matcherIncludesAnEventEndingExactlyAtTheInstant() {
     let match = EventMatcher.activeEvent(at: at(20), among: [timed("a", from: 10, to: 20)])
 
-    #expect(match?.id.rawValue == "google:a")
+    #expect(match?.id == "google:a")
 }
 
 @Test func matcherExcludesAnEventJustOutsideEitherBoundary() {
@@ -45,32 +45,32 @@ private func allDay(_ id: String) -> GoogleEvent {
 @Test func matcherPrefersTheShortestOfNestedEvents() {
     let events = [timed("outer", from: 0, to: 120), timed("inner", from: 30, to: 60), timed("middle", from: 10, to: 90)]
 
-    #expect(EventMatcher.activeEvent(at: at(45), among: events)?.id.rawValue == "google:inner")
+    #expect(EventMatcher.activeEvent(at: at(45), among: events)?.id == "google:inner")
 }
 
 @Test func matcherPrefersTheShorterEventWhenOneEndsExactlyAsAnotherStarts() {
     let events = [timed("long", from: 0, to: 60), timed("short", from: 60, to: 90)]
 
-    #expect(EventMatcher.activeEvent(at: at(60), among: events)?.id.rawValue == "google:short")
+    #expect(EventMatcher.activeEvent(at: at(60), among: events)?.id == "google:short")
 }
 
 @Test func matcherBreaksAnEqualDurationTieWithTheLaterStart() {
     let events = [timed("earlier", from: 0, to: 60), timed("later", from: 30, to: 90)]
 
-    #expect(EventMatcher.activeEvent(at: at(45), among: events)?.id.rawValue == "google:later")
+    #expect(EventMatcher.activeEvent(at: at(45), among: events)?.id == "google:later")
 }
 
 @Test func matcherBreaksAFullTieWithTheSmallerEventID() {
     let events = [timed("b", from: 0, to: 60), timed("a", from: 0, to: 60), timed("c", from: 0, to: 60)]
 
-    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id.rawValue == "google:a")
-    #expect(EventMatcher.activeEvent(at: at(30), among: events.reversed())?.id.rawValue == "google:a")
+    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id == "google:a")
+    #expect(EventMatcher.activeEvent(at: at(30), among: events.reversed())?.id == "google:a")
 }
 
 @Test func matcherIgnoresAllDayEvents() {
     let events = [allDay("holiday"), timed("meeting", from: 0, to: 600)]
 
-    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id.rawValue == "google:meeting")
+    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id == "google:meeting")
 }
 
 @Test func matcherReturnsNilWhenOnlyAllDayEventsAreAround() {
@@ -80,7 +80,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 @Test func matcherIgnoresCancelledEvents() {
     let events = [timed("cancelled", from: 20, to: 40, status: "cancelled"), timed("kept", from: 0, to: 120)]
 
-    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id.rawValue == "google:kept")
+    #expect(EventMatcher.activeEvent(at: at(30), among: events)?.id == "google:kept")
 }
 
 @Test func matcherReturnsNilWhenOnlyCancelledEventsCoverTheInstant() {
@@ -95,7 +95,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 }
 
 @Test func matcherCarriesTitleAttendeesAndTimesIntoTheCalendarEvent() throws {
-    let attendees = [CalendarAttendee(email: "a@example.com", displayName: "Alice")]
+    let attendees = [CalendarAttendee(email: "a@example.com", displayName: "Alice", isSelf: false)]
     let match = try #require(EventMatcher.activeEvent(at: at(5), among: [timed("x", from: 0, to: 30, attendees: attendees)]))
 
     #expect(match.title == "Event x")
@@ -109,7 +109,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 
     let upcoming = EventMatcher.upcomingEvents(from: at(0), window: 60 * 60, among: events)
 
-    #expect(upcoming.map(\.id.rawValue) == ["google:soon", "google:mid", "google:late"])
+    #expect(upcoming.map(\.id) == ["google:soon", "google:mid", "google:late"])
 }
 
 @Test func upcomingExcludesAnEventAlreadyRunning() {
@@ -117,7 +117,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 
     let upcoming = EventMatcher.upcomingEvents(from: at(0), window: 60 * 60, among: events)
 
-    #expect(upcoming.map(\.id.rawValue) == ["google:next"])
+    #expect(upcoming.map(\.id) == ["google:next"])
 }
 
 @Test func upcomingIncludesBothBoundariesOfTheWindowAndExcludesJustBeyond() {
@@ -125,7 +125,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 
     let upcoming = EventMatcher.upcomingEvents(from: at(0), window: 30 * 60, among: events)
 
-    #expect(upcoming.map(\.id.rawValue) == ["google:atNow", "google:atHorizon"])
+    #expect(upcoming.map(\.id) == ["google:atNow", "google:atHorizon"])
 }
 
 @Test func upcomingSkipsAllDayAndCancelledEvents() {
@@ -133,7 +133,7 @@ private func allDay(_ id: String) -> GoogleEvent {
 
     let upcoming = EventMatcher.upcomingEvents(from: at(0), window: 60 * 60, among: events)
 
-    #expect(upcoming.map(\.id.rawValue) == ["google:real"])
+    #expect(upcoming.map(\.id) == ["google:real"])
 }
 
 @Test func upcomingBreaksAStartTieWithTheSmallerEventID() {
@@ -141,5 +141,5 @@ private func allDay(_ id: String) -> GoogleEvent {
 
     let upcoming = EventMatcher.upcomingEvents(from: at(0), window: 60 * 60, among: events)
 
-    #expect(upcoming.map(\.id.rawValue) == ["google:a", "google:b"])
+    #expect(upcoming.map(\.id) == ["google:a", "google:b"])
 }

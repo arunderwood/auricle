@@ -20,9 +20,12 @@ struct GoogleEvent: Equatable, Sendable {
     /// `nil` when the event cannot be a timed `CalendarEvent`: all-day, or
     /// without a usable id.
     var calendarEvent: CalendarEvent? {
-        guard let start, let end, let eventID = CalendarEventID.google(eventID: id) else { return nil }
-        return CalendarEvent(id: eventID, title: title, attendees: attendees, start: start, end: end)
+        guard let start, let end, !id.isEmpty else { return nil }
+        return CalendarEvent(id: Self.idPrefix + id, title: title, start: start, end: end, attendees: attendees)
     }
+
+    /// Namespaces the id so it can never collide with another provider's.
+    static let idPrefix = "google:"
 }
 
 /// Wire shape of `events.list`, with the `fields` mask
@@ -56,7 +59,9 @@ private struct WireEvent: Decodable {
             id: id,
             status: status,
             title: summary ?? "",
-            attendees: (attendees ?? []).map { CalendarAttendee(email: $0.email ?? "", displayName: $0.displayName) },
+            attendees: (attendees ?? []).map {
+                CalendarAttendee(email: $0.email ?? "", displayName: $0.displayName, isSelf: $0.isSelf ?? false)
+            },
             start: start?.dateTime,
             end: end?.dateTime,
         )
@@ -66,6 +71,13 @@ private struct WireEvent: Decodable {
 private struct WireAttendee: Decodable {
     let email: String?
     let displayName: String?
+    let isSelf: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case email
+        case displayName
+        case isSelf = "self"
+    }
 }
 
 private struct WireTime: Decodable {

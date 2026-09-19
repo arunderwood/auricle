@@ -1,4 +1,3 @@
-import CalendarInterface
 import Core
 import CryptoKit
 import Foundation
@@ -85,7 +84,7 @@ struct GoogleOAuthFlow: Sendable {
         do {
             listener = try LoopbackRedirectListener()
         } catch {
-            throw CalendarError.authorizationFailed(reason: "the local redirect listener could not be created")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the local redirect listener could not be created")
         }
         defer { listener.cancel() }
 
@@ -95,7 +94,7 @@ struct GoogleOAuthFlow: Sendable {
         } catch let cancellation as CancellationError {
             throw cancellation
         } catch {
-            throw CalendarError.authorizationFailed(reason: "the local redirect listener could not start")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the local redirect listener could not start")
         }
 
         let redirectURI = "http://127.0.0.1:\(port)"
@@ -112,7 +111,7 @@ struct GoogleOAuthFlow: Sendable {
         } catch let cancellation as CancellationError {
             throw cancellation
         } catch {
-            throw CalendarError.authorizationFailed(reason: "the browser could not be opened")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the browser could not be opened")
         }
 
         let redirect = try await awaitRedirect(from: listener)
@@ -151,7 +150,7 @@ struct GoogleOAuthFlow: Sendable {
             return try await group.next() ?? nil
         }
         guard let redirect else {
-            throw CalendarError.authorizationFailed(reason: "no response arrived from the browser before the timeout")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "no response arrived from the browser before the timeout")
         }
         return redirect
     }
@@ -162,15 +161,15 @@ struct GoogleOAuthFlow: Sendable {
         }
 
         guard value("state") == expectedState else {
-            throw CalendarError.authorizationFailed(reason: "the authorization response did not match this request")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the authorization response did not match this request")
         }
         if let error = value("error") {
-            throw CalendarError.authorizationFailed(reason: error == "access_denied"
+            throw GoogleCalendarFailure.authorizationFailed(reason: error == "access_denied"
                 ? "authorization was declined"
-                : "authorization was rejected (\(sanitizedErrorCode(error)))")
+                : "authorization was rejected")
         }
         guard let code = value("code"), !code.isEmpty else {
-            throw CalendarError.authorizationFailed(reason: "the authorization response carried no code")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "the authorization response carried no code")
         }
         return code
     }
@@ -193,14 +192,14 @@ struct GoogleOAuthFlow: Sendable {
         }
 
         guard let token = try? JSONDecoder().decode(TokenResponse.self, from: response.body) else {
-            throw CalendarError.malformedResponse
+            throw GoogleCalendarFailure.malformedResponse
         }
         let grantedScopes = (token.scope ?? "").split(separator: " ").map(String.init)
         guard grantedScopes.contains(Self.calendarReadonlyScope) else {
-            throw CalendarError.authorizationFailed(reason: "Google did not grant read-only calendar access")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "Google did not grant read-only calendar access")
         }
         guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {
-            throw CalendarError.authorizationFailed(reason: "Google returned no refresh token")
+            throw GoogleCalendarFailure.authorizationFailed(reason: "Google returned no refresh token")
         }
         return AuthorizationGrant(
             access: AccessTokenGrant(accessToken: token.accessToken, expiresIn: TimeInterval(token.expiresIn)),
@@ -220,7 +219,7 @@ struct GoogleOAuthFlow: Sendable {
         }
 
         guard let token = try? JSONDecoder().decode(TokenResponse.self, from: response.body) else {
-            throw CalendarError.malformedResponse
+            throw GoogleCalendarFailure.malformedResponse
         }
         return AccessTokenGrant(accessToken: token.accessToken, expiresIn: TimeInterval(token.expiresIn))
     }
@@ -248,7 +247,7 @@ struct GoogleOAuthFlow: Sendable {
     /// `invalidGrant` is passed in because the same `invalid_grant` answer
     /// means different things: a stale refresh token during a refresh, but a
     /// bad or reused code during the authorization exchange.
-    private static func failure(status: Int, body: Data, invalidGrant: CalendarError) -> CalendarError {
+    private static func failure(status: Int, body: Data, invalidGrant: GoogleCalendarFailure) -> GoogleCalendarFailure {
         if status == 429 {
             return .rateLimited
         }
@@ -260,15 +259,7 @@ struct GoogleOAuthFlow: Sendable {
         if code == "invalid_grant" {
             return invalidGrant
         }
-        return .authorizationFailed(reason: "Google rejected the token request (\(code.map(sanitizedErrorCode) ?? "HTTP \(status)"))")
-    }
-
-    /// Error codes are a small lowercase vocabulary (`invalid_client`, ...).
-    /// Anything else is not echoed, so a hostile or garbled body can't put
-    /// arbitrary text into an error reason.
-    private static func sanitizedErrorCode(_ code: String) -> String {
-        let isPlainCode = !code.isEmpty && code.count <= 64 && code.allSatisfy { $0 == "_" || ($0.isASCII && $0.isLowercase) }
-        return isPlainCode ? code : "unrecognized error"
+        return .authorizationFailed(reason: "Google rejected the token request")
     }
 
     // MARK: - Encoding
