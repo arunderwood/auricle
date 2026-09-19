@@ -87,7 +87,7 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
             promptDir: promptDir,
         )
 
-        let requestBody = try Self.buildRequestBody(prompt: prompt, modelIdentifier: config.modelIdentifier)
+        let requestBody = try Self.buildRequestBody(prompt: prompt, config: config)
         let response = try await httpClient.send(AnthropicRequest(body: requestBody))
         let answer: ClaudeSubstringModelAnswer
         do {
@@ -167,7 +167,7 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
     /// exist, which one carries `cache_control`) depends on which prompt
     /// blocks are non-empty — state that's simpler to assemble as a mutable
     /// array than to model as a fixed set of `Codable` fields.
-    private static func buildRequestBody(prompt: SummarizationPrompt, modelIdentifier: String) throws -> Data {
+    private static func buildRequestBody(prompt: SummarizationPrompt, config: SummarizerConfig) throws -> Data {
         var contentBlocks: [[String: Any]] = []
         var lastCacheableBlockIndex: Int?
 
@@ -190,8 +190,9 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
         contentBlocks.append(["type": "text", "text": prompt.transcript.text])
 
         let body: [String: Any] = [
-            "model": modelIdentifier,
+            "model": config.modelIdentifier,
             "max_tokens": maxTokens,
+            "output_config": AnthropicOutputConfig.body(effort: config.effortLevel),
             "system": [
                 ["type": "text", "text": prompt.system.text, "cache_control": cacheControl],
             ],

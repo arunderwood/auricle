@@ -456,6 +456,44 @@ func anItemWithAMissingOrEmptyQuoteIsDroppedAndTheCallStillSucceeds(ungroundedIt
     #expect(contentBlocks[0]["cache_control"] == nil)
 }
 
+/// Explicit wire names, not `rawValue`: the strings are the API's contract.
+@Test(arguments: [
+    (EffortLevel.low, "low"),
+    (EffortLevel.medium, "medium"),
+    (EffortLevel.high, "high"),
+    (EffortLevel.xhigh, "xhigh"),
+    (EffortLevel.max, "max"),
+])
+func requestSendsTheConfiguredEffortAsOutputConfigEffort(level: EffortLevel, wireName: String) async throws {
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: modelAnswerJSON()))
+
+    _ = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(effortLevel: level),
+    )
+
+    let sentRequest = try #require(SubstringStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(SubstringStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    #expect(json["output_config"] as? [String: String] == ["effort": wireName])
+}
+
+@Test func aDefaultConfigSendsMediumEffortNotTheAPIsHighDefault() async throws {
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: modelAnswerJSON()))
+
+    _ = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(),
+    )
+
+    let sentRequest = try #require(SubstringStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(SubstringStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    #expect(json["output_config"] as? [String: String] == ["effort": "medium"])
+}
+
 /// A prompt comparison builds two substring arms that differ only in their
 /// prompt directory, so the directory must reach the request the API sees.
 @Test func promptDirOverrideReachesTheSentSystemPrompt() async throws {

@@ -427,7 +427,8 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
     let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
 
     #expect(json["model"] as? String == "claude-opus-5")
-    #expect(json["output_config"] == nil)
+    let outputConfig = try #require(json["output_config"] as? [String: Any])
+    #expect(outputConfig["format"] == nil)
     #expect(json["citations"] == nil)
 
     let expectedPrompt = try SummarizationPromptBuilder.build(
@@ -496,6 +497,30 @@ private func makeCitationsEnvelope(answerJSON: String, citations: [[String: Any]
 /// The attendee names on the config are the only attendee data the request
 /// carries: the same builder output as `attendees: config.attendeeNames`, as
 /// its own cacheable block ahead of the uncached document.
+/// Explicit wire names, not `rawValue`: the strings are the API's contract.
+@Test(arguments: [
+    (EffortLevel.low, "low"),
+    (EffortLevel.medium, "medium"),
+    (EffortLevel.high, "high"),
+    (EffortLevel.xhigh, "xhigh"),
+    (EffortLevel.max, "max"),
+])
+func citationsRequestSendsTheConfiguredEffortAsOutputConfigEffort(level: EffortLevel, wireName: String) async throws {
+    let endpoint = uniqueEndpoint()
+    defer { CitationsStubURLProtocol.unregister(url: endpoint) }
+    let body = try makeCitationsEnvelope(answerJSON: modelAnswerJSON(), citations: [])
+    CitationsStubURLProtocol.register(url: endpoint, status: 200, body: body)
+
+    _ = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(effortLevel: level),
+    )
+
+    let sentRequest = try #require(CitationsStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(CitationsStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    #expect(json["output_config"] as? [String: String] == ["effort": wireName])
+}
+
 @Test func citationsRequestCarriesTheConfigAttendeeNamesAsTheAttendeeContextBlock() async throws {
     let transcript = makeTranscript()
     let endpoint = uniqueEndpoint()

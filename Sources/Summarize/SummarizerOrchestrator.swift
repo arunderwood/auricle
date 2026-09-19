@@ -40,10 +40,7 @@ public actor SummarizerOrchestrator {
     /// Calls `primary` once. A thrown `SummarizerError` whose
     /// `isFallbackEligible` is `true` triggers exactly one `fallback` call
     /// when one is configured (and rethrows unchanged when none is),
-    /// passing `config` through unchanged — the orchestrator has no
-    /// primary-call cost data of its own to recompute
-    /// `remainingCostBudgetUSD` from, so the caller-supplied value is
-    /// forwarded as-is. Any other error (a different `Error` type, or a
+    /// passing `config` through unchanged. Any other error (a different `Error` type, or a
     /// `SummarizerError` with `isFallbackEligible == false`) propagates
     /// out of the `catch` below unmatched, which Swift rethrows to this
     /// function's own caller unchanged. A fallback failure is likewise
