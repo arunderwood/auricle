@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # A major bump widens the `from:` range in Package.swift and can raise the
+    # tools-version or macOS floor, so it is taken by hand alongside the toolchain.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: github-actions
+    # "/" covers .github/workflows; composite actions under .github/actions/ are
+    # only scanned when listed.
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore(ci)"
