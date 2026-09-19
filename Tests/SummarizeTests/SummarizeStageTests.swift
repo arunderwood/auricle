@@ -36,8 +36,8 @@ import Testing
     #expect(artifact.actionItems == [QuotedItemArtifact(text: "Follow up with Ben", quote: stageActionQuote)])
     #expect(artifact.decisions == [QuotedItemArtifact(text: "Ship on Friday", quote: stageDecisionQuote)])
     #expect(artifact.transcriptSegments == [
-        TranscriptSegmentArtifact(speaker: "[[Speaker_1]]", text: stageFirstLine),
-        TranscriptSegmentArtifact(speaker: "[[Speaker_2]]", text: stageSecondLine),
+        TranscriptSegmentArtifact(speaker: "[[Speaker_1]]", text: stageFirstText),
+        TranscriptSegmentArtifact(speaker: "[[Speaker_2]]", text: stageSecondText),
     ])
 
     let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))

@@ -10,19 +10,44 @@ enum SummaryArtifactMapper {
     /// One segment per utterance, in transcript order. `speaker` is the
     /// attributed `[[Name]]` wikilink where `speakers` has one and
     /// `[[<speakerLabel>]]` otherwise, so an unattributed speaker is still a
-    /// valid, resolvable link.
+    /// valid, resolvable link. `text` is the utterance without its leading
+    /// `<speakerLabel>: ` (see `CanonicalTranscript.Utterance`), because the
+    /// renderer prints the speaker itself.
     static func transcriptSegments(
         of transcript: CanonicalTranscript,
         transcriptBytes: [UInt8],
         speakers: [String: String]?,
     ) throws -> [TranscriptSegmentArtifact] {
         try transcript.utterances.map { utterance in
-            guard case let .success(text) = TranscriptSlicer.slice(start: utterance.start, end: utterance.end, of: transcriptBytes) else {
+            let start = startAfterLabel(of: utterance, in: transcriptBytes)
+            guard case let .success(text) = TranscriptSlicer.slice(start: start, end: utterance.end, of: transcriptBytes) else {
                 throw SummarizeStageError.segmentExtractionFailed
             }
             let speaker = speakers?[utterance.speakerLabel] ?? "[[\(utterance.speakerLabel)]]"
             return TranscriptSegmentArtifact(speaker: speaker, text: text)
         }
+    }
+
+    /// Where the utterance's text begins. Only this utterance's own
+    /// `<speakerLabel>: ` at the head of its range is skipped, and only once,
+    /// so a label-shaped string later in the text, another speaker's name, or
+    /// a repeat of this label is left alone. Compared as bytes, not
+    /// `Character`s, so a combining mark after the space cannot hide the
+    /// prefix. A range that does not begin with the label is returned as is.
+    /// An out-of-range utterance is also returned as is, for the slicer to
+    /// reject.
+    private static func startAfterLabel(of utterance: CanonicalTranscript.Utterance, in bytes: [UInt8]) -> Int {
+        guard utterance.start >= 0, utterance.start <= utterance.end, utterance.end <= bytes.count else {
+            return utterance.start
+        }
+        let label = Array(utterance.speakerLabel.utf8) + [UInt8(ascii: ":")]
+        let head = bytes[utterance.start ..< utterance.end]
+        guard head.starts(with: label) else { return utterance.start }
+        let afterColon = utterance.start + label.count
+        if afterColon == utterance.end {
+            return afterColon
+        }
+        return bytes[afterColon] == UInt8(ascii: " ") ? afterColon + 1 : utterance.start
     }
 
     /// True unless attribution exists and names every distinct speaker in the

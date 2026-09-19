@@ -68,6 +68,8 @@ func summarizeThenPersistPublishesANoteWithEveryExpectedQuoteAsABlockquote(name:
     // stays inside the blockquote if the renderer prefixes every line.
     #expect(containsConsecutive(blockquoteLines(for: spanning.quote), in: lines), "spanning quote is not one blockquote in \(name)")
 
+    expectEachUtteranceRendersItsSpeakerOnce(lines: lines, transcript: eval.transcript, name: name)
+
     let sectionLines = try quotedItemSectionLines(of: lines)
     let unquoted = sectionLines.filter { !$0.isEmpty && !$0.hasPrefix("- ") && !$0.hasPrefix("  >") && !$0.hasPrefix("## ") }
     #expect(unquoted.isEmpty, "lines outside the blockquote in \(name): \(unquoted)")
@@ -111,6 +113,18 @@ private func blockquoteLines(for quote: String) -> [String] {
 private func containsConsecutive(_ needle: [String], in lines: [String]) -> Bool {
     guard !needle.isEmpty, needle.count <= lines.count else { return false }
     return (0 ... lines.count - needle.count).contains { Array(lines[$0 ..< $0 + needle.count]) == needle }
+}
+
+/// One `**[[Speaker_N]]:** text` paragraph per utterance, with the label
+/// printed by the heading and not again at the start of the text.
+private func expectEachUtteranceRendersItsSpeakerOnce(lines: [String], transcript: CanonicalTranscript, name: String) {
+    let paragraphs = lines.drop { $0 != "## Transcript" }.dropFirst().filter { !$0.isEmpty }
+    #expect(paragraphs.count == transcript.utterances.count, "transcript paragraph count in \(name)")
+    for (paragraph, utterance) in zip(paragraphs, transcript.utterances) {
+        let heading = "**[[\(utterance.speakerLabel)]]:** "
+        #expect(paragraph.hasPrefix(heading), "transcript paragraph in \(name) lacks its speaker: \(paragraph)")
+        #expect(!paragraph.dropFirst(heading.count).hasPrefix("\(utterance.speakerLabel): "), "speaker label printed twice in \(name): \(paragraph)")
+    }
 }
 
 /// Everything between the `Action Items` heading and the `Transcript` heading:
