@@ -75,7 +75,7 @@ func summarizeThenPersistPublishesANoteWithEveryExpectedQuoteAsABlockquote(name:
 
 // MARK: - Helpers
 
-private func groundedItem(_ expected: ExpectedItem) -> GroundedItem {
+private func groundedItem(_ expected: EvalExpectedItem) -> GroundedItem {
     GroundedItem(
         text: expected.text,
         grounding: GroundingPointer(
