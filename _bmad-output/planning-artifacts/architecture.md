@@ -940,9 +940,8 @@ Where:
 **Slug source priority (try each; fall through if it produces an empty or unusable slug):**
 
 1. **Calendar event title** (if calendar enrichment succeeded)
-2. **`with-<attendee-1>-and-<attendee-2>`** for ≤3 attendees with named attribution; **self-attribution is omitted** (a 1:1 with Ben → `with-ben`, not `with-jordan-and-ben`)
-3. **`meeting-at-<HHMM>`** generic fallback; uses 24h local time, 4 digits, no separator (e.g., `meeting-at-0930`)
-4. **`meeting-<first-8-chars-of-id>`** — terminal fallback if all higher-priority sources somehow yield empty (defensive only; should be unreachable in practice)
+2. **`with-<attendee-1>[-and-<attendee-2>]`** for named attendees; **self-attribution is removed first** (a 1:1 with Ben → `with-ben`, not `with-jordan-and-ben`). Each remaining name is normalized and capped at 25 characters *before* joining, so the slug is at most 60 characters (`with-` + 25 + `-and-` + 25). One or two names give this slug; zero names, or more than two, fall through to source 3. Capping each name first matters because truncating the assembled slug can land on the hyphen after `with-` and leave the bare word `with`.
+3. **`meeting-at-<HHMM>`** generic fallback; uses 24h local time, 4 digits, no separator (e.g., `meeting-at-0930`). The chain ends here: this slug is never empty, so no further source exists
 
 **Slug normalization steps (applied in order):**
 
