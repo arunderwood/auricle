@@ -249,6 +249,9 @@ public struct AnthropicHTTPClient: Sendable {
         case 402:
             log.warn("anthropic request failed billing check", ["statusCode": .publicSafe(statusCode)])
             return .terminal(.quotaExceeded)
+        case 400 where Self.isCreditShortfall(data):
+            log.warn("anthropic request failed billing check", ["statusCode": .publicSafe(statusCode)])
+            return .terminal(.quotaExceeded)
         case 429, 500 ... 599:
             log.warn("anthropic request failed, retrying", ["statusCode": .publicSafe(statusCode)])
             return .retryable(.http)
@@ -256,6 +259,22 @@ public struct AnthropicHTTPClient: Sendable {
             log.warn("anthropic request returned an unhandled status", ["statusCode": .publicSafe(statusCode)])
             return .terminal(.malformedResponse)
         }
+    }
+
+    /// The API reports an exhausted prepaid balance as HTTP 400
+    /// `invalid_request_error` rather than 402, so the status alone can't
+    /// tell it apart from a genuinely malformed request — only the parsed
+    /// `error.message` can. The message is inspected here and never logged.
+    static func isCreditShortfall(_ data: Data) -> Bool {
+        guard
+            let raw = try? JSONSerialization.jsonObject(with: data),
+            let json = raw as? [String: Any],
+            let error = json["error"] as? [String: Any],
+            let message = error["message"] as? String
+        else {
+            return false
+        }
+        return message.lowercased().contains("credit balance")
     }
 
     private func buildURLRequest(_ request: AnthropicRequest, apiKey: String) -> URLRequest {
