@@ -71,7 +71,7 @@ phase_app() {
     # Build the workspace tuist generates, not the .xcodeproj inside it.
     # `tuist generate` resolves the package graph into the workspace's derived
     # data; xcodebuild against the bare project computes a different derived
-    # data path and re-resolves all eleven packages from scratch.
+    # data path and re-resolves every package from scratch.
     echo "==> xcodebuild AuricleApp"
     xcodebuild -workspace App/Auricle.xcworkspace -scheme AuricleApp -destination "platform=macOS" build
 
