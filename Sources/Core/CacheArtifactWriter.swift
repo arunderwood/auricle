@@ -83,6 +83,11 @@ public enum CacheArtifactWriter {
     /// at the parsed-object level adds `schema_version` alongside those keys
     /// without requiring every cache artifact type to reserve a property for
     /// it.
+    ///
+    /// Keys are sorted because the parsed object is a `Dictionary`, whose
+    /// iteration order differs between processes: without a fixed order, the
+    /// same value would serialize to different bytes on every run, and an
+    /// artifact that must be reproducible byte for byte could not be.
     private static func encode(_ value: some Encodable, schemaVersion: Int) throws -> Data {
         let valueData: Data
         do {
@@ -103,7 +108,7 @@ public enum CacheArtifactWriter {
         jsonObject["schema_version"] = schemaVersion
 
         do {
-            return try JSONSerialization.data(withJSONObject: jsonObject)
+            return try JSONSerialization.data(withJSONObject: jsonObject, options: [.sortedKeys])
         } catch {
             throw WriteError.encodingFailed(underlying: error)
         }

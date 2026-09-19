@@ -293,6 +293,13 @@ custom_rules:
       - ".*/Sources/WhisperKitTranscriber/.*\\.swift$"
       - ".*/Sources/WhisperKitDiarizer/.*\\.swift$"
       - ".*/Sources/GoogleCalendarSource/.*\\.swift$"
+      # The concrete transcriber's own unit tests construct it to test it, the
+      # same non-bypass as the strategy targets' own directories above.
+      - ".*/Tests/WhisperKitTranscriberTests/.*\\.swift$"
+      # The transcribe stage's env-gated performance test runs the stage against
+      # the real transcriber, because a stub cannot measure the 30-minute
+      # budget. It is the only file in that test target that names it.
+      - ".*/Tests/TranscribeTests/PerformanceTests\\.swift$"
       # A concrete strategy's own test target constructing it to test it is
       # the same non-bypass as the strategy's own source file doing so above:
       # the caller here is the type's own unit test suite, not a `caller`

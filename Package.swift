@@ -77,7 +77,7 @@ let package = Package(
         .target(name: "CalendarInterface", dependencies: ["Core"], path: "Sources/CalendarInterface"),
 
         // === Stages ===
-        .target(name: "Transcribe", dependencies: ["Core", "State", "Telemetry", "TranscriberInterface", "DiarizerInterface"], path: "Sources/Transcribe"),
+        .target(name: "Transcribe", dependencies: ["Core", "State", "Telemetry", "Orchestrator", "TranscriberInterface", "DiarizerInterface"], path: "Sources/Transcribe"),
         .target(name: "Diarize", dependencies: ["Core", "State", "Telemetry", "DiarizerInterface"], path: "Sources/Diarize"),
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
         .target(
@@ -137,7 +137,14 @@ let package = Package(
         .testTarget(name: "AIReviewerInterfaceTests", dependencies: ["AIReviewerInterface", "Core", "TestSupport"], path: "Tests/AIReviewerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "CalendarInterfaceTests", dependencies: ["CalendarInterface", "TestSupport"], path: "Tests/CalendarInterfaceTests"),
-        .testTarget(name: "TranscribeTests", dependencies: ["Transcribe", "TestSupport"], path: "Tests/TranscribeTests"),
+        .testTarget(
+            name: "TranscribeTests",
+            dependencies: [
+                "Transcribe", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "TranscriberInterface", "WhisperKitTranscriber",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/TranscribeTests",
+        ),
         .testTarget(name: "DiarizeTests", dependencies: ["Diarize", "TestSupport"], path: "Tests/DiarizeTests"),
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
         .testTarget(
@@ -152,7 +159,14 @@ let package = Package(
         .testTarget(name: "ClaudeSummarizerTests", dependencies: ["ClaudeSummarizer", "TestSupport", "Summarize"], path: "Tests/ClaudeSummarizerTests"),
         .testTarget(name: "ClaudeAIReviewersTests", dependencies: ["ClaudeAIReviewers", "TestSupport"], path: "Tests/ClaudeAIReviewersTests"),
         .testTarget(name: "ReviewDiarizationTests", dependencies: ["ReviewDiarization", "TestSupport"], path: "Tests/ReviewDiarizationTests"),
-        .testTarget(name: "WhisperKitTranscriberTests", dependencies: ["WhisperKitTranscriber", "TestSupport"], path: "Tests/WhisperKitTranscriberTests"),
+        .testTarget(
+            name: "WhisperKitTranscriberTests",
+            dependencies: [
+                "WhisperKitTranscriber", "TestSupport", "Core", "TranscriberInterface",
+                .product(name: "WhisperKit", package: "WhisperKit"),
+            ],
+            path: "Tests/WhisperKitTranscriberTests",
+        ),
         .testTarget(name: "WhisperKitDiarizerTests", dependencies: ["WhisperKitDiarizer", "TestSupport"], path: "Tests/WhisperKitDiarizerTests"),
         // Summarize and its collaborators: the real source is run through the real stage.
         .testTarget(

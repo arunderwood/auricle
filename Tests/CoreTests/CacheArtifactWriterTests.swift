@@ -136,3 +136,37 @@ private func cleanUp(_ id: MeetingID) {
     #expect(root.lastPathComponent == "com.auricle.app")
     #expect(directory == root.appendingPathComponent(id.rawValue, isDirectory: true))
 }
+
+@Test func writeProducesByteIdenticalFilesForIdenticalInput() throws {
+    let firstID = MeetingID.generate()
+    let secondID = MeetingID.generate()
+    defer {
+        cleanUp(firstID)
+        cleanUp(secondID)
+    }
+    let transcript = CanonicalTranscript(
+        text: "Speaker_1: café\nSpeaker_1: 🚀",
+        utterances: [
+            .init(speakerLabel: "Speaker_1", start: 0, end: 17),
+            .init(speakerLabel: "Speaker_1", start: 18, end: 34),
+        ],
+    )
+
+    try CacheArtifactWriter.write(transcript, for: firstID, named: "transcript.json", schemaVersion: 1)
+    try CacheArtifactWriter.write(transcript, for: secondID, named: "transcript.json", schemaVersion: 1)
+
+    let first = try Data(contentsOf: CacheArtifactWriter.cacheDirectory(for: firstID).appendingPathComponent("transcript.json"))
+    let second = try Data(contentsOf: CacheArtifactWriter.cacheDirectory(for: secondID).appendingPathComponent("transcript.json"))
+    #expect(first == second)
+}
+
+@Test func writeSerializesTopLevelKeysInSortedOrder() throws {
+    let id = MeetingID.generate()
+    defer { cleanUp(id) }
+
+    try CacheArtifactWriter.write(FixtureArtifact(text: "hello", wordCount: 1), for: id, named: "artifact.json", schemaVersion: 1)
+
+    let data = try Data(contentsOf: CacheArtifactWriter.cacheDirectory(for: id).appendingPathComponent("artifact.json"))
+    let json = try #require(String(data: data, encoding: .utf8))
+    #expect(json == #"{"schema_version":1,"text":"hello","word_count":1}"#)
+}
