@@ -51,6 +51,12 @@ The maintainer accepted the public fixtures in `Tests/SummarizeTests/Fixtures/ev
 
 Substring total: $1.77 for 6 calls. The rig records no cost for a failed arm, so the 5 Citations failures are billed but unlisted. No thinking tokens are reported separately: the API counts them inside output tokens.
 
+## Cost note
+
+- **The costs above are three times too high.** The rig priced `claude-opus-5` at $15 input and $75 output per million tokens. The published rate is $5 and $25, so every recorded cost divides by exactly 3. `ami-es2002b` is $0.1894, not $0.5682. The substring total is $0.59, a mean of $0.098 per call. The prompt-tuning spend below is $3.27, not $9.82. The rate table is corrected; these figures stay as recorded so the run reads as it happened.
+- **NFR-C1 is per meeting, for a 30-minute meeting.** At the corrected rate no call in this run reaches the $0.50 default-tier ceiling. `ami-es2002b` is the longest fixture (7,590 words against 2,142 to 5,982 for the other AMI meetings). The fixtures carry byte offsets, not timestamps, so its length is an estimate: 50 to 60 minutes at typical speech rates. It cost less than $0.50 at nearly twice the length NFR-C1 assumes. The summarize stage now records `cost_ceiling_exceeded` in the completed event and logs a warning. It does not refuse the result.
+- **The run used the API's default effort, `high`.** No effort parameter was sent. Shipped code now sends `medium` (the `SummarizerConfig` default, NFR-I6). Cost and item counts at `medium` were not measured.
+
 ## Scored metrics (substring, original prompt)
 
 Scored by the assistant that ran the comparison, by comparing each kept item's meaning with `expected.json`. The maintainer has not yet spot-checked these numbers. Citations has no items to score on 5 transcripts, so its recall is 0 there.

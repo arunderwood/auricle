@@ -2,6 +2,10 @@
 
 Append-only. Each entry records a finding routed to `defer` during a review pass. Do not modify existing entries or look for duplicates.
 
+An entry that starts with `closes:` marks an earlier entry resolved. It names the earlier entry's `source_spec` and the opening words of its `summary`, then says how it closed and where the fix lives. The earlier entry stays as written. An entry with no matching `closes:` is open.
+
+Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. Entries that cite `spec-3-8-smoke-test-rig-scaffold.md` mean that file.
+
 - source_spec: `_bmad-output/implementation-artifacts/1-1-project-initialization-xcode-swiftpm-hybrid.md`
   summary: Story status vocabulary disagrees across tracking files — the story file's `Status` field uses bmad-build's enum (draft/ready-for-dev/in-progress/in-review/done) while `sprint-status.yaml` uses its own documented enum (backlog/ready-for-dev/in-progress/review/done); the same story state is now named `in-review` in one file and `review` in the other.
   evidence: Verified in both files. Each value is correct per its own file's schema comment, so this isn't a bug in either file — it's a structural mismatch between two coexisting BMAD tracking conventions in this repo, predating this story. Reconciling it means picking one canonical vocabulary or adding a mapping between the two skill families, which is outside any single story's scope.
@@ -105,3 +109,74 @@ Append-only. Each entry records a finding routed to `defer` during a review pass
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-close-out-telemetry-blockquote-cross-stage-test.md`
   summary: epics.md:955 and :1128 (Story 1.4) say `summarization_prompt_set_hash` exists from migration #1 and that no later epic needs a column-adding migration.
   evidence: Migration #1 never declared the column, and this story adds it (with `grounding_method`) in migration #4. The planning text is stale; planning documents are outside a build run's edits.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-summarizerinterface-protocol-normalized-summarywithgrounding-output.md`
+  summary: `Sources/Core/Errors.swift`'s top-of-file comment and `PersistError`'s doc comment still say `Persist` is a placeholder with no real implementation.
+  evidence: `Sources/Persist/` holds shipped code since Epic 2 (`PersistStage`, `FrontmatterRenderer`, `VaultWriter`). Lines 8-11 and 28-31 of `Errors.swift` still carry the claim. It predates Story 3.1 and was found by the review pass. Severity low, location `Sources/Core/Errors.swift:8-11,28-31`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-claudecitationssummarizer-citationgroundingvalidator-canonicalization-invariant-tests.md`
+  summary: Near-identical private `URLProtocol` stub classes repeat across test targets with no shared `TestSupport` helper.
+  evidence: Story 3.5 counted four (`AnthropicHTTPClientTests`, `ClaudeSubstringSummarizerTests`, `ClaudeCitationsSummarizerTests`, `CrossModeFixtureTests`). Stories 3.9 and 3.10 added `Tests/SummarizeTests/EvalStubResponses.swift` and `Tests/GoogleCalendarSourceTests/GoogleStub.swift`, so six files now declare a stub. Whether the two newer stubs duplicate the older four was not checked. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-eval-harness-frozen-transcripts-regression-tests.md`
+  summary: Tie the eval harness's default-wiring arm to the real composition root once Story 3.8 locks the default.
+  evidence: `EvalDefaultWiring` in `Tests/SummarizeTests/SummarizeEvalHarnessTests.swift` hard-coded Citations primary with a substring fallback, mirroring the provisional wiring in `App/auricle-cli/Verbs/InternalStageWorker.swift`. `App/` has no test target, so nothing checked the two agreed. Story 3.8 locked substring with no fallback and the harness kept the old composition; the Epic 3 retro found it (VG-1). Severity low when logged, major once the default flipped.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-google-calendar-source-oauth-pkce-event-matcher.md`
+  summary: A loopback listener stuck in `.waiting` would hang `authorize()` outside `redirectTimeout`.
+  evidence: `LoopbackRedirectListener.start()` awaits only `.ready`, `.failed` or `.cancelled`, `handle(state:)` ignores `.waiting`, and `GoogleOAuthFlow.awaitRedirect` applies the timeout only after `start()` returns. Whether `NWListener` on `127.0.0.1` with an ephemeral port ever reports `.waiting` and never resolves is unverified. It settles by running `authorize()` where the listener cannot bind and observing which state arrives. Location `Sources/GoogleCalendarSource/LoopbackRedirectListener.swift` (`handle(state:)`). Severity medium (unverified).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrategy.md`
+  summary: Pass `--vault-path` (and the meetings subdirectory) to the summarize worker from GUI dispatch once a config layer supplies `vault_path`.
+  evidence: `SubprocessDispatcher.makeProcess` built `__internal-stage <stage> <id> --worker-protocol-version N` only, so a dispatched summarize run got an empty glossary and the wedge measurement read 0 eligible corrections. `Core/Config` did not exist. Location `Sources/Orchestrator/SubprocessDispatcher.swift`. Severity medium.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`, "Record `summarization_prompt_set_hash` in telemetry"
+  resolution: The stage writes `summarizationPromptSetHash` from the per-mode hashes it resolves before the paid call (`Sources/Summarize/SummarizeStage.swift`, `resolvePromptSetHashes` and the telemetry write). Migration #4 added the column.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`, "`telemetry.grounding_method` has no column"
+  resolution: Migration #4 (`Sources/State/Migrations/Migration004_TelemetryGroundingAndPromptSetHash.swift`) adds `grounding_method` and `State.Telemetry.groundingMethod` carries it.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`, "A multi-line `quote` renders as a broken blockquote in the vault note"
+  resolution: `FrontmatterRenderer.renderBlockquote` prefixes every line of the quote with `>`.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-8-smoke-test-rig-scaffold.md`, "Assemble >=5 real meeting transcripts"
+  resolution: Superseded. The maintainer accepted six public fixtures in `Tests/SummarizeTests/Fixtures/eval/` as the comparison set (Epic 3 retro SR-4). Validation on the maintainer's own recordings moves to Epic 4.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-8-smoke-test-rig-scaffold.md`, "Wire `SummarizerOrchestrator(primary:fallback:)` in the composition roots"
+  resolution: `auricle-cli` wires `SummarizerOrchestrator(primary: ClaudeSubstringSummarizer())` with no fallback. `AuricleApp` has no summarize path until Epic 4 or 6 (Epic 3 retro SR-5).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-strategy-comparison-rig-scaffold.md`
+  summary: Spot-check the hand scores (recall, false-keeps, quote quality) in `Tests/fixtures/strategy-comparison-results.md`.
+  evidence: The comparison ran and its outcome is recorded, so the entry "Score recall, precision (false-keeps) and quote quality per transcript by hand" is answered in substance. The results file says the maintainer has not spot-checked the recall and false-keep scores. The default flip rests on the computed metrics (Citations returned no items on 5 of 6 transcripts), not on the hand scores (Epic 3 retro SR-6).
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-9-eval-harness-frozen-transcripts-regression-tests.md`, "Tie the eval harness's default-wiring arm to the real composition root"
+  resolution: `Sources/ClaudeSummarizer/ShippedSummarization.swift` holds the shipped orchestrator. `InternalStageWorker` and the eval harness both build it, and a test fails if the definition gains a fallback. `SummarizerConfig()` is still built separately in the worker and the harness. Nothing checks that the worker itself calls the factory, because `App/` has no test target.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrategy.md`, "Pass `--vault-path` (and the meetings subdirectory) to the summarize worker"
+  resolution: `SubprocessDispatcher.makeProcess` appends `--vault-path` from `Core/Config` (`vault_path` in `~/.auricle/config.toml`). `meetings_subdir` is read by `Config` but not passed, because the summarize worker does not use it. No default `vault_path` exists, so an unset key still gives an empty glossary.
+
+- closes: `_bmad-output/implementation-artifacts/1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config.md`, "Implement `Core/Config.swift`"
+  resolution: `Sources/Core/Config.swift` loads `~/.auricle/config.toml` with an injectable location. It covers `vault_path`, `meetings_subdir` and the Google Calendar client keys only. The other FR58 keys are not read yet, and symlink normalization is not done.
+
+- closes: `_bmad-output/implementation-artifacts/1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config.md`, "Implement `CanonicalTranscript`"
+  resolution: `Sources/Core/CanonicalTranscript.swift` landed with Story 3.1.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
+  summary: Confirm that the real transcribe stage writes utterance ranges that include the `Speaker_N: ` prefix.
+  evidence: The earlier entry "Whether an utterance's `[start,end)` range includes the `<Speaker_N>: ` prefix is undefined" is decided: ranges include the prefix (doc comment on `CanonicalTranscript.Utterance.start`, and the Story 4.1 acceptance criterion in `epics.md`). `SummaryArtifactMapper` strips one leading label and leaves a range without one unchanged, so a note prints each label once either way. Story 4.1 still has to write ranges that way; nothing has produced a real transcript yet.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-claudesubstringsummarizer-substringgroundingvalidator.md`
+  summary: Raise `max_tokens` or stream for `xhigh` and `max` effort.
+  evidence: `ClaudeSubstringSummarizer` sends `max_tokens` 16384. The API documentation recommends about 64k at `xhigh` and `max`, so those levels can end as `summarizer_response_truncated` on a long transcript. Found while mapping the effort level to the request.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
+  summary: The `StageRunner` completion write can still fail after a paid call and mark the meeting `summarization_failed`.
+  evidence: The summarize stage's own post-write bookkeeping (telemetry, meeting row) no longer fails the stage. The completion write inside `StageRunner.run` is outside the stage's control. A retry pays again. Found while fixing RV-3 of the Epic 3 retro.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-summarizerorchestrator-primary-fallback-wiring.md`
+  summary: A fallback outcome carries only the answering strategy's cost.
+  evidence: Already recorded against Story 3.7. Restated here because the cost-ceiling check compares the answering call's cost to the ceiling, so a failed primary call's spend is invisible to it. No fallback is wired today.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-google-calendar-source-oauth-pkce-event-matcher.md`
+  summary: Nothing signs the maintainer in to Google, so a wired calendar source stays degraded.
+  evidence: `InternalStageWorker` builds `GoogleCalendarSource.headless(...)` when `google_calendar.client_id` is set. Its browser opener throws, so an unauthorized run degrades to `needs-calendar-enrichment` instead of hanging. The only planned sign-in trigger is the Story 9.1 Settings button. Whether a Keychain prompt appears inside the headless worker (RV-4) and whether the `fields` mask and the `eventType` and `transparency` values match the real Calendar API are untested.
