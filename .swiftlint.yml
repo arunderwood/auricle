@@ -158,11 +158,12 @@ custom_rules:
       # outside AtomicWriter's domain the same way VaultWriterTests.swift's
       # fixture setup does.
       - ".*/Tests/SummarizeTests/PromptBuilderSnapshotTests\\.swift$"
-      # Plants a pre-existing "original" vault note and a summary.json
-      # fixture directly on disk to exercise PersistStage's re-publish and
-      # summary-decode paths — same rationale as VaultWriterTests.swift
-      # above.
-      - ".*/Tests/PersistTests/PersistStageTests\\.swift$"
+      # Plants a pre-existing "original" vault note, a hand-edited note and a
+      # summary.json fixture directly on disk to exercise PersistStage's
+      # re-publish and summary-decode paths — same rationale as
+      # VaultWriterTests.swift above. Covers PersistStageTests,
+      # PersistStageRepublishTests and the shared PersistStageFixture.
+      - ".*/Tests/PersistTests/PersistStage[A-Za-z]*\\.swift$"
       # Plants a file at the meeting's cache-directory path to exercise
       # CacheArtifactWriter's directory-creation failure — same rationale as
       # VaultWriterTests.swift above: the fixture writes the blocking state

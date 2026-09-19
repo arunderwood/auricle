@@ -53,7 +53,6 @@ private func publishedNote(_ fixture: StageFixture) async throws -> String {
 
     let persisted = try await PersistStage.run(
         meetingID: fixture.meetingID,
-        isRepublish: false,
         cacheDirectory: CacheArtifactWriter.cacheDirectory(for: fixture.meetingID),
         vaultPath: vault,
         meetingsSubdir: "Meetings",

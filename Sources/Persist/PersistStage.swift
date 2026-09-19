@@ -5,7 +5,7 @@ import State
 import Telemetry
 
 /// The `persist` stage entry point: composes `FrontmatterRenderer` (2.1) +
-/// `FilenameResolver` (2.2) + `VaultWriter` (2.3) into the `summarizing` →
+/// `FilenameResolver` (2.2) + `VaultWriter` (2.3) into the `persisting` →
 /// `published` transition, plus re-publish (`--reattribute`) semantics
 /// (Decision 2.3/2.4). The whole body runs inside `StageRunner.run`'s `work`
 /// closure — this type never writes `stage_events`/`meetings.state` itself.
@@ -82,14 +82,18 @@ public enum PersistStage {
     }
 
     /// Reads `summary.json` from `cacheDirectory`, fetches `meetingID`'s row,
-    /// writes the rendered note (fresh publish or rerun, per `isRepublish`),
-    /// updates `meetings.vault_note_path`, and returns through
-    /// `stageRunner.run` so the `summarizing` → `published`/`persist_failed`
-    /// transition and its `stage_events` rows are always the two-transaction
-    /// pattern's own writes, never this stage's.
+    /// publishes the rendered note, updates `meetings.vault_note_path`, and
+    /// returns through `stageRunner.run` so the `persisting` →
+    /// `published`/`persist_failed` transition and its `stage_events` rows are
+    /// always the two-transaction pattern's own writes, never this stage's.
+    ///
+    /// The stage is never told which path it is on. A run is a re-publish
+    /// exactly when the meeting's `vaultNotePath` names a file that still
+    /// exists; otherwise it is a fresh publish. Output identical to what a
+    /// vault file already holds is reused rather than written again, so
+    /// re-running the stage never leaves a duplicate note behind.
     public static func run(
         meetingID: MeetingID,
-        isRepublish: Bool,
         cacheDirectory: URL,
         vaultPath: URL,
         meetingsSubdir: String,
@@ -102,7 +106,6 @@ public enum PersistStage {
             do {
                 return try await publish(
                     meetingID: meetingID,
-                    isRepublish: isRepublish,
                     cacheDirectory: cacheDirectory,
                     vaultLocation: vaultLocation,
                     stateStore: stateStore,
@@ -122,7 +125,6 @@ public enum PersistStage {
 
     private static func publish(
         meetingID: MeetingID,
-        isRepublish: Bool,
         cacheDirectory: URL,
         vaultLocation: VaultLocation,
         stateStore: StateStore,
@@ -153,7 +155,6 @@ public enum PersistStage {
 
         let writtenURL = try writeNote(
             resolved: resolved,
-            isRepublish: isRepublish,
             vaultLocation: vaultLocation,
             clock: clock,
         )
@@ -164,29 +165,19 @@ public enum PersistStage {
         return .completed(targetState: .published, metadataJSON: encodeMetadataJSON(vaultNotePath: writtenURL.path))
     }
 
-    /// Picks the rerun path (Decision 2.3) or the standard fresh-publish path
-    /// (Decision 2.4) and performs exactly one vault write. `isRepublish`
-    /// alone never selects the rerun path — a nil or dangling
+    /// Picks the re-publish path (Decision 2.3) or the fresh-publish path
+    /// (Decision 2.4) and performs at most one vault write. A nil or dangling
     /// `vaultNotePath` (never published, or the user deleted the original)
-    /// always falls through to a standard publish, per Decision 2.3's
-    /// documented fallback.
+    /// always falls through to a fresh publish, per Decision 2.3's documented
+    /// fallback.
     private static func writeNote(
         resolved: ResolvedMeeting,
-        isRepublish: Bool,
         vaultLocation: VaultLocation,
         clock: TimeSource,
     ) throws -> URL {
-        if isRepublish,
-           let existingPath = resolved.meeting.vaultNotePath,
+        if let existingPath = resolved.meeting.vaultNotePath,
            FileManager.default.fileExists(atPath: existingPath) {
-            let originalURL = URL(fileURLWithPath: existingPath)
-            let (rerunDate, _) = localDateAndTime(from: clock.now(), in: clock.timeZone)
-            let rerunURL = try nextRerunURL(originalURL: originalURL, rerunDate: rerunDate)
-            let markdown = FrontmatterRenderer.render(
-                meeting: frontmatterMeeting(resolved, supersedes: originalURL.lastPathComponent),
-            )
-            try VaultWriter.writeExact(markdown, to: rerunURL)
-            return rerunURL
+            return try republish(resolved: resolved, storedNoteURL: URL(fileURLWithPath: existingPath), clock: clock)
         }
 
         let markdown = FrontmatterRenderer.render(meeting: frontmatterMeeting(resolved, supersedes: nil))
@@ -204,6 +195,45 @@ public enum PersistStage {
             vaultPath: vaultLocation.vaultPath,
             meetingsSubdir: vaultLocation.meetingsSubdir,
         )
+    }
+
+    /// The stored note is the meeting's current published note, so nothing is
+    /// written when it already holds what this run would render. Otherwise the
+    /// new rendering goes to a `--rerun-` sibling that supersedes it, and the
+    /// stored note is never opened for writing: it may carry the user's edits.
+    private static func republish(resolved: ResolvedMeeting, storedNoteURL: URL, clock: TimeSource) throws -> URL {
+        // A stored re-run carries the `supersedes` its own publish rendered.
+        // Comparing against a rendering without it would never match, and every
+        // unchanged run would then write another re-run.
+        let storedSupersedes = supersedesValue(ofNoteAt: storedNoteURL)
+        let unchanged = FrontmatterRenderer.render(meeting: frontmatterMeeting(resolved, supersedes: storedSupersedes))
+        if VaultWriter.fileHasContents(unchanged, at: storedNoteURL) {
+            return storedNoteURL
+        }
+
+        let (rerunDate, _) = localDateAndTime(from: clock.now(), in: clock.timeZone)
+        let markdown = FrontmatterRenderer.render(
+            meeting: frontmatterMeeting(resolved, supersedes: storedNoteURL.lastPathComponent),
+        )
+        let target = try nextRerunTarget(storedNoteURL: storedNoteURL, rerunDate: rerunDate, markdown: markdown)
+        if !target.alreadyHoldsMarkdown {
+            try VaultWriter.writeExact(markdown, to: target.url)
+        }
+        return target.url
+    }
+
+    /// `nil` for a note that supersedes nothing and for one whose frontmatter
+    /// cannot be read (hand-edited beyond parsing): both compare as "changed"
+    /// unless the bytes match a rendering without `supersedes`.
+    private static func supersedesValue(ofNoteAt url: URL) -> String? {
+        guard
+            let data = try? Data(contentsOf: url),
+            let contents = String(data: data, encoding: .utf8),
+            let frontmatter = try? FrontmatterReader.read(noteContents: contents)
+        else {
+            return nil
+        }
+        return frontmatter.supersedes
     }
 
     private static func frontmatterMeeting(_ resolved: ResolvedMeeting, supersedes: String?) -> MeetingForFrontmatter {
@@ -246,21 +276,34 @@ public enum PersistStage {
     /// stem. `[0-9]`, not `\d`: ICU's `\d` also matches non-ASCII digits.
     private static let rerunSuffixPattern = "--rerun-[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]+)?$"
 
-    /// Builds `<base-stem>--rerun-<rerunDate>[-N].md` in the original's own
+    /// Where a re-run's markdown goes: `alreadyHoldsMarkdown` is set when
+    /// `url` exists with exactly those bytes, so no write is needed.
+    private struct RerunTarget {
+        let url: URL
+        let alreadyHoldsMarkdown: Bool
+    }
+
+    /// Finds `<base-stem>--rerun-<rerunDate>[-N].md` in the stored note's own
     /// directory (Decision 2.4's own text: this is a different axis than
     /// `FilenameResolver`'s single-hyphen ordinal, and belongs to the
     /// persist stage, not that resolver). Deterministic, existence-checked
     /// candidates — never `FilenameResolver.resolve`, which has no rerun
     /// suffix shape to produce.
     ///
-    /// `originalURL` is whatever `meetings.vault_note_path` holds, which is
+    /// A candidate that exists with exactly `markdown` is this meeting's own
+    /// earlier write, left unrecorded by a failure after the write, and is
+    /// reused. A candidate with other bytes belongs to a different re-run and
+    /// is skipped. The date is the run's own, so a retry on a later day does
+    /// not find an earlier day's orphaned re-run and writes a new one.
+    ///
+    /// `storedNoteURL` is whatever `meetings.vault_note_path` holds, which is
     /// the previous re-run once one exists. The candidate is built from the
     /// stem with that re-run's suffix stripped, so every re-run of a meeting
     /// is a sibling of the first note (`<base>--rerun-D[-N]`) rather than a
     /// suffix stacked on a suffix, and the same-day ordinal stays reachable.
-    private static func nextRerunURL(originalURL: URL, rerunDate: String) throws -> URL {
-        let directory = originalURL.deletingLastPathComponent()
-        var stem = originalURL.deletingPathExtension().lastPathComponent
+    private static func nextRerunTarget(storedNoteURL: URL, rerunDate: String, markdown: String) throws -> RerunTarget {
+        let directory = storedNoteURL.deletingLastPathComponent()
+        var stem = storedNoteURL.deletingPathExtension().lastPathComponent
         if let suffixRange = stem.range(of: rerunSuffixPattern, options: .regularExpression) {
             stem.removeSubrange(suffixRange)
         }
@@ -274,7 +317,10 @@ public enum PersistStage {
             }
             let candidateURL = directory.appendingPathComponent("\(stem)--rerun-\(rerunDate)\(suffix).md")
             guard FileManager.default.fileExists(atPath: candidateURL.path) else {
-                return candidateURL
+                return RerunTarget(url: candidateURL, alreadyHoldsMarkdown: false)
+            }
+            if VaultWriter.fileHasContents(markdown, at: candidateURL) {
+                return RerunTarget(url: candidateURL, alreadyHoldsMarkdown: true)
             }
             let nextOrdinal = (ordinal ?? 1) + 1
             guard nextOrdinal <= maxRerunOrdinal else {

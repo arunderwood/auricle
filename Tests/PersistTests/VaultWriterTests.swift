@@ -221,6 +221,57 @@ private func chmod(_ url: URL, _ permissions: Int) throws {
     #expect(try Data(contentsOf: result) == Data("hello".utf8))
 }
 
+@Test func reusesTheUnsuffixedPathWhenItAlreadyHoldsExactlyTheMarkdownBeingWritten() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    let subdirURL = vaultPath.appendingPathComponent("Meetings")
+    try FileManager.default.createDirectory(at: subdirURL, withIntermediateDirectories: true)
+    let existingURL = subdirURL.appendingPathComponent("2026-04-28-tuesday-sync.md")
+    try Data("hello".utf8).write(to: existingURL)
+    let modifiedBefore = try #require(FileManager.default.attributesOfItem(atPath: existingURL.path)[.modificationDate] as? Date)
+
+    let result = try VaultWriter.write("hello", meeting: makeMeeting(), vaultPath: vaultPath, meetingsSubdir: "Meetings")
+
+    #expect(result == existingURL)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: subdirURL.path) == [existingURL.lastPathComponent])
+    let modifiedAfter = try FileManager.default.attributesOfItem(atPath: existingURL.path)[.modificationDate] as? Date
+    #expect(modifiedAfter == modifiedBefore)
+}
+
+@Test func reusesAnOrdinalPathThatHoldsTheMarkdownBeingWrittenAfterSkippingAForeignOne() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    let subdirURL = vaultPath.appendingPathComponent("Meetings")
+    try FileManager.default.createDirectory(at: subdirURL, withIntermediateDirectories: true)
+    try Data("foreign".utf8).write(to: subdirURL.appendingPathComponent("2026-04-28-tuesday-sync.md"))
+    let ownURL = subdirURL.appendingPathComponent("2026-04-28-tuesday-sync-2.md")
+    try Data("hello".utf8).write(to: ownURL)
+
+    let result = try VaultWriter.write("hello", meeting: makeMeeting(), vaultPath: vaultPath, meetingsSubdir: "Meetings")
+
+    #expect(result == ownURL)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: subdirURL.path).count == 2)
+}
+
+@Test func advancesToOrdinalTwoWhenTheExistingFileDiffersByASingleByte() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    let subdirURL = vaultPath.appendingPathComponent("Meetings")
+    try FileManager.default.createDirectory(at: subdirURL, withIntermediateDirectories: true)
+    let existingURL = subdirURL.appendingPathComponent("2026-04-28-tuesday-sync.md")
+    let existingContent = Data("hello\n".utf8)
+    try existingContent.write(to: existingURL)
+
+    let result = try VaultWriter.write("hello", meeting: makeMeeting(), vaultPath: vaultPath, meetingsSubdir: "Meetings")
+
+    #expect(result == subdirURL.appendingPathComponent("2026-04-28-tuesday-sync-2.md"))
+    #expect(try Data(contentsOf: existingURL) == existingContent)
+    #expect(try Data(contentsOf: result) == Data("hello".utf8))
+}
+
 /// References VaultWriter.maxCollisionOrdinal directly (internal access, via
 /// @testable import) rather than a hardcoded duplicate that could drift from
 /// the real cap.

@@ -907,14 +907,17 @@ auricle:
 
 DP4 + FR36 + NFR-R2 (never edit existing vault files) collides with FR40 (stable deterministic filenames). Resolution: re-publish writes a sibling file with a deterministic suffix; the original is preserved untouched; both notes carry frontmatter linkage.
 
-**When `auricle run <id> --reattribute` (or any other re-publish path) runs:**
+**When the persist stage runs for a meeting (`auricle run <id> --reattribute`, a bare resume, or any other path):**
 
-1. Confirm the original vault note still exists at `meetings.vault_note_path`. If it doesn't (user deleted it), treat as fresh publish (no rerun suffix; standard filename per Decision 2.4).
-2. Construct re-run filename: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md`
+The stage is not told which path it is on. It derives that from `meetings.vault_note_path`.
+
+1. Confirm the stored note still exists at `meetings.vault_note_path`. If it doesn't (never published, or the user deleted it), treat as fresh publish (no rerun suffix; standard filename per Decision 2.4). A fresh publish whose target filename already holds exactly the bytes about to be written is that meeting's own earlier write, so it returns that path and writes nothing.
+2. If the stored note exists and its bytes equal what this run renders, nothing changed since the last publish: write nothing and leave `meetings.vault_note_path` as it is. A stored re-run is compared against a rendering that carries its own `auricle.supersedes`.
+3. Otherwise (new summary, re-attribution, or the user edited the note in Obsidian), construct re-run filename: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md`
    - Example: `2026-04-28-tuesday-sync-with-ben.md` → `2026-04-28-tuesday-sync-with-ben--rerun-2026-05-15.md`
    - The double-hyphen separator (`--`) before `rerun` provides visual distinction from the single-hyphen slug separators inside the original filename.
-3. **Multiple reruns on the same calendar day:** append a counter: `--rerun-<YYYY-MM-DD>-2.md`, `--rerun-<YYYY-MM-DD>-3.md`. Re-run date is in the user's local timezone (consistent with Decision 2.4's date-prefix rule).
-4. Write the re-run note via the atomic-write primitive. Frontmatter includes `auricle.supersedes: "<original-filename>"` (just the filename, no path — Obsidian resolves wikilink-style).
+   - **Multiple reruns on the same calendar day:** append a counter: `--rerun-<YYYY-MM-DD>-2.md`, `--rerun-<YYYY-MM-DD>-3.md`. Re-run date is in the user's local timezone (consistent with Decision 2.4's date-prefix rule). A candidate that already holds exactly the bytes about to be written is reused rather than skipped for the next counter. A retry on a later day names a new re-run date, so it does not reuse an earlier day's orphaned re-run.
+4. Write the re-run note (unless it is being reused) via the atomic-write primitive. Frontmatter includes `auricle.supersedes: "<original-filename>"` (just the filename, no path — Obsidian resolves wikilink-style).
 5. Update `meetings.vault_note_path` to point at the re-run note (the latest publish becomes the canonical one for `auricle status` lookups).
 6. Notification body distinguishes: *"auricle: re-published Tuesday Sync with Ben (rerun 2026-05-15)"*.
 7. Historical publishes are queryable via `stage_events` rows where `stage='persist'` and `event='completed'` for that meeting.
@@ -974,7 +977,8 @@ Where:
 - **Re-publish vs same-day-collision discriminator:** the two paths use different suffixes, on different axes:
   - Same-day collision (different meeting that happens to slugify the same): `<date>-<slug>-2.md` (single hyphen, ordinal counter)
   - Re-publish (same meeting, intentional re-run): `<date>-<slug>--rerun-<YYYY-MM-DD>.md` (double hyphen, date suffix per Decision 2.3)
-  - The persist stage knows which path it's on (re-publish is triggered explicitly via `--reattribute`); no ambiguity in code, just visually distinct in the filesystem.
+  - The persist stage derives which path it's on from the stored note (re-publish exactly when `meetings.vault_note_path` names an existing file); no ambiguity in code, just visually distinct in the filesystem.
+  - Either loop skips a candidate that holds other bytes but stops at one that already holds exactly the bytes being written: that file is this meeting's own earlier write, so the stage reuses it instead of adding an ordinal.
 - **Cross-Mac collisions** (same date, identical slug, different meetings on different Macs): not detected pre-publish on either Mac (each Mac sees no local conflict at write time). Surfaces at sync time as a git merge conflict OR an iCloud silent `(2)` rename. Accepted as low-probability, manually recoverable. See trade-off discussion above.
 
 **Example filenames:**
