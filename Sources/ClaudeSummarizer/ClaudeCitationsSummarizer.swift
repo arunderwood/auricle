@@ -80,14 +80,15 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
         glossary: Glossary,
         config: SummarizerConfig,
     ) async throws -> SummaryWithGrounding {
-        // `attendees: []`/`promptDir: nil` always: neither channel exists on
-        // this fixed protocol signature or on `SummarizerConfig` today — the
-        // stage entry point (Story 3.7) threads real attendee data and
-        // `--prompt-dir` resolution in, not a strategy.
+        // Attendees arrive as names on `config`: the protocol signature has no
+        // `Meeting`, and the stage that resolved them has already dropped
+        // every email. `promptDir: nil` because this strategy has no
+        // prompt-directory channel, so the bundled prompt set is what the
+        // stage hashes.
         let prompt = try SummarizationPromptBuilder.build(
             transcript: transcript,
             glossary: glossary,
-            attendees: [],
+            attendees: config.attendeeNames,
             mode: .citations,
             promptDir: nil,
         )

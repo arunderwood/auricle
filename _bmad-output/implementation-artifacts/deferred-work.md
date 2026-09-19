@@ -59,8 +59,8 @@ Append-only. Each entry records a finding routed to `defer` during a review pass
   evidence: No telemetry column or `State.Telemetry` field exists (needs a migration), and the strategies discard `SummarizationPrompt.promptSetHash`, so neither `SummaryWithGrounding` nor `SummarizerOrchestrator.Outcome` can surface it. The hash also differs per mode, so it depends on which strategy answered.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
-  summary: Thread real attendees and `--prompt-dir` into the prompt.
-  evidence: Both strategies hard-code `attendees: []` and `promptDir: nil`; `SummarizerStrategy.summarize` and `SummarizerConfig` have no channel for either. Calendar attendees arrive with Stories 3.10/3.11.
+  summary: Thread `--prompt-dir` into the prompt.
+  evidence: `ClaudeCitationsSummarizer` hard-codes `promptDir: nil`, and `SummarizerStrategy.summarize` and `SummarizerConfig` have no channel for it. Attendees are threaded by Story 3.11 through `SummarizerConfig.attendeeNames`.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
   summary: A multi-line `quote` renders as a broken blockquote in the vault note.

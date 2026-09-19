@@ -1,3 +1,4 @@
+import CalendarInterface
 @testable import Core
 import Foundation
 import GRDB
@@ -10,18 +11,27 @@ import Testing
 
 // MARK: - Strategy stubs
 
-/// Returns a fixed result or throws a fixed error, and counts its calls so a
-/// test can prove the summarizer was, or was never, reached.
+/// Returns a fixed result or throws a fixed error, counts its calls so a
+/// test can prove the summarizer was, or was never, reached, and keeps the
+/// config of the last call so a test can see what the stage handed it.
+/// `onSummarize` runs inside the call, before the result is returned, so a
+/// test can change state the way something else running alongside the
+/// summarizer would.
 actor StageStubStrategy: SummarizerStrategy {
     private let result: Result<SummaryWithGrounding, any Error>
+    private let onSummarize: (@Sendable () async throws -> Void)?
     private(set) var callCount = 0
+    private(set) var lastConfig: SummarizerConfig?
 
-    init(_ result: Result<SummaryWithGrounding, any Error>) {
+    init(_ result: Result<SummaryWithGrounding, any Error>, onSummarize: (@Sendable () async throws -> Void)? = nil) {
         self.result = result
+        self.onSummarize = onSummarize
     }
 
-    func summarize(transcript _: CanonicalTranscript, glossary _: Glossary, config _: SummarizerConfig) async throws -> SummaryWithGrounding {
+    func summarize(transcript _: CanonicalTranscript, glossary _: Glossary, config: SummarizerConfig) async throws -> SummaryWithGrounding {
         callCount += 1
+        lastConfig = config
+        try await onSummarize?()
         return try result.get()
     }
 }
@@ -162,12 +172,17 @@ struct StageFixture {
         try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("summary.json")
     }
 
+    func calendarURL() throws -> URL {
+        try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("calendar.json")
+    }
+
     /// `promptSetHash` replaces the stage's prompt-file hash resolution; nil
     /// runs the stage exactly as production does.
     func run(
         primary: StageStubStrategy,
         fallback: StageStubStrategy? = nil,
         config: SummarizerConfig = SummarizerConfig(),
+        calendarSource: (any CalendarSource)? = nil,
         promptSetHash: (@Sendable (SummarizationMode) throws -> String)? = nil,
     ) async throws -> StageRunner.StageOutcome {
         let orchestrator = SummarizerOrchestrator(
@@ -184,6 +199,7 @@ struct StageFixture {
                 glossary: Glossary(),
                 config: config,
                 timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
+                calendarSource: calendarSource,
                 promptSetHash: promptSetHash,
             )
         }
@@ -196,6 +212,7 @@ struct StageFixture {
             glossary: Glossary(),
             config: config,
             timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
+            calendarSource: calendarSource,
         )
     }
 

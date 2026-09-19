@@ -33,23 +33,26 @@ enum SummaryArtifactMapper {
         return !labels.isSubset(of: speakers.keys)
     }
 
-    /// The artifact for a stage that ran without calendar enrichment: no
-    /// event title, no attendees, no self link, and `needsCalendarEnrichment`
-    /// set so persist tags the note for a later backfill.
+    /// The artifact for one run. Without a `match` it is the unenriched
+    /// variant: `title` (the generic capture-time title) stands, there is no
+    /// event title, no attendees and no self link, and `needsCalendarEnrichment`
+    /// is set so persist tags the note for a later backfill. With one, the
+    /// event supplies all four and the tag is not set.
     static func artifact(
         title: String,
+        match: CalendarEnrichment.Match? = nil,
         grounded: SummaryWithGrounding,
         transcriptSegments: [TranscriptSegmentArtifact],
         needsAttribution: Bool,
         transcriptBytes: [UInt8],
     ) throws -> SummaryArtifact {
         try SummaryArtifact(
-            title: title,
-            calendarEventTitle: nil,
-            attendees: [],
-            selfWikilink: nil,
+            title: match?.title ?? title,
+            calendarEventTitle: match?.title,
+            attendees: match?.attendeeWikilinks ?? [],
+            selfWikilink: match?.selfWikilink,
             needsAttribution: needsAttribution,
-            needsCalendarEnrichment: true,
+            needsCalendarEnrichment: match == nil,
             summary: grounded.summary,
             actionItems: quotedItems(grounded.actionItems, transcriptBytes: transcriptBytes),
             decisions: quotedItems(grounded.decisions, transcriptBytes: transcriptBytes),

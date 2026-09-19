@@ -8,6 +8,7 @@ import Testing
     #expect(config.effortLevel == .medium)
     #expect(config.promptCachingEnabled)
     #expect(config.remainingCostBudgetUSD == nil)
+    #expect(config.attendeeNames.isEmpty)
 }
 
 @Test func summarizerConfigMemberwiseInitRoundTripsAndSupportsEquatable() {
@@ -31,4 +32,25 @@ import Testing
     )
     #expect(config == identical)
     #expect(config != SummarizerConfig())
+}
+
+@Test func withAttendeeNamesReplacesOnlyTheNames() {
+    let config = SummarizerConfig(
+        modelIdentifier: "claude-haiku-4-5",
+        effortLevel: .high,
+        promptCachingEnabled: false,
+        remainingCostBudgetUSD: 0.12,
+        attendeeNames: ["Old Name"],
+    )
+
+    let replaced = config.withAttendeeNames(["Ada Lovelace"])
+
+    #expect(replaced == SummarizerConfig(
+        modelIdentifier: "claude-haiku-4-5",
+        effortLevel: .high,
+        promptCachingEnabled: false,
+        remainingCostBudgetUSD: 0.12,
+        attendeeNames: ["Ada Lovelace"],
+    ))
+    #expect(replaced != config)
 }
