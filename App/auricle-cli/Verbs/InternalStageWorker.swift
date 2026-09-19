@@ -1,7 +1,9 @@
 import ArgumentParser
+import CalendarInterface
 import ClaudeSummarizer
 import Core
 import Foundation
+import GoogleCalendarSource
 import Orchestrator
 import State
 import Summarize
@@ -93,6 +95,7 @@ struct InternalStageWorker: AsyncParsableCommand {
                 orchestrator: orchestrator,
                 glossary: vaultGlossary(),
                 config: SummarizerConfig(),
+                calendarSource: calendarSource(),
             )
         } catch StateStoreError.meetingNotFound {
             writeStderr("__internal-stage: no meeting with ID \(meetingID).")
@@ -118,5 +121,22 @@ struct InternalStageWorker: AsyncParsableCommand {
         return VaultGlossaryBuilder(vaultPath: url).buildOrEmpty { error in
             writeStderr("__internal-stage: continuing without a vault glossary (\(type(of: error))).")
         }
+    }
+
+    /// `nil` when `~/.auricle/config.toml` names no Google client id or cannot
+    /// be read: a calendar is an aid to the note, never a reason to withhold
+    /// it, and the stage already treats a missing source as unenriched. The
+    /// worker reads the config itself, unlike the vault path, because the
+    /// client id is not something the dispatcher passes along. The line
+    /// written names the failure's type only.
+    private func calendarSource() -> (any CalendarSource)? {
+        let config: Config
+        do {
+            config = try Config.load()
+        } catch {
+            writeStderr("__internal-stage: continuing without a calendar (\(type(of: error))).")
+            return nil
+        }
+        return GoogleCalendarSource.headless(config.googleCalendar)
     }
 }

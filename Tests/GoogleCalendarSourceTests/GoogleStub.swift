@@ -265,8 +265,16 @@ func eventJSON(
     status: String = "confirmed",
     attendees: [[String: Any]]? = nil,
     allDayDate: String? = nil,
+    eventType: String? = nil,
+    transparency: String? = nil,
 ) -> [String: Any] {
     var event: [String: Any] = ["id": id, "status": status]
+    if let eventType {
+        event["eventType"] = eventType
+    }
+    if let transparency {
+        event["transparency"] = transparency
+    }
     if let summary {
         event["summary"] = summary
     }

@@ -28,10 +28,13 @@ public actor GoogleCalendarSource: CalendarSource {
 
     private static let listPageSize = 250
 
-    /// Limited to what `CalendarEvent` carries, plus `status`, which the
-    /// matcher needs to skip cancelled events. Times ask for `dateTime` only;
-    /// an all-day event's bare `date` is never used.
-    private static let fieldsMask = "items(id,status,summary,start(dateTime),end(dateTime),attendees(email,displayName,self))"
+    /// Limited to what `CalendarEvent` carries, plus what the matcher needs to
+    /// choose between events: `status`, `eventType` and `transparency` on the
+    /// event, and each attendee's `responseStatus` (only the `self` attendee's
+    /// is read, to spot an event the user declined). Times ask for `dateTime`
+    /// only; an all-day event's bare `date` is never used.
+    private static let fieldsMask = "items(id,status,summary,eventType,transparency,start(dateTime),end(dateTime),"
+        + "attendees(email,displayName,self,responseStatus))"
 
     /// Google's `403` reasons that mean "slow down" rather than "not allowed".
     private static let rateLimitReasons: Set<String> = [
@@ -126,8 +129,13 @@ public actor GoogleCalendarSource: CalendarSource {
             // Calendar's `timeMin` bounds an event's end exclusively and `timeMax`
             // bounds its start exclusively; a second of slack each way lets an
             // event that ends or starts exactly at `instant` come back so the
-            // matcher's inclusive comparison can accept it.
-            let events = try await boundedEvents(timeMin: instant.addingTimeInterval(-1), timeMax: instant.addingTimeInterval(1))
+            // matcher's inclusive comparison can accept it. `timeMax` reaches
+            // the matcher's lead-in past `instant` so an event about to start
+            // is fetched too.
+            let events = try await boundedEvents(
+                timeMin: instant.addingTimeInterval(-1),
+                timeMax: instant.addingTimeInterval(EventMatcher.leadIn + 1),
+            )
             return EventMatcher.activeEvent(at: instant, among: events)
         }
     }
