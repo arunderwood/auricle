@@ -82,7 +82,7 @@ let package = Package(
         .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
         .target(
             name: "Summarize",
-            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "SummarizerInterface", "CalendarInterface", "VaultGlossary"],
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "SummarizerInterface", "AIReviewerInterface", "CalendarInterface", "VaultGlossary"],
             path: "Sources/Summarize",
             resources: [.copy("Prompts")],
         ),
@@ -134,7 +134,7 @@ let package = Package(
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "SummarizerInterfaceTests", dependencies: ["SummarizerInterface", "TestSupport"], path: "Tests/SummarizerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
-        .testTarget(name: "AIReviewerInterfaceTests", dependencies: ["AIReviewerInterface", "TestSupport"], path: "Tests/AIReviewerInterfaceTests"),
+        .testTarget(name: "AIReviewerInterfaceTests", dependencies: ["AIReviewerInterface", "Core", "TestSupport"], path: "Tests/AIReviewerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "CalendarInterfaceTests", dependencies: ["CalendarInterface", "TestSupport"], path: "Tests/CalendarInterfaceTests"),
         .testTarget(name: "TranscribeTests", dependencies: ["Transcribe", "TestSupport"], path: "Tests/TranscribeTests"),
@@ -142,7 +142,10 @@ let package = Package(
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
         .testTarget(
             name: "SummarizeTests",
-            dependencies: ["Summarize", "TestSupport", "ClaudeSummarizer", "Orchestrator", "State", "Persist", "CalendarInterface", .product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: [
+                "Summarize", "TestSupport", "ClaudeSummarizer", "Orchestrator", "State", "Persist", "CalendarInterface", "AIReviewerInterface",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             path: "Tests/SummarizeTests",
             resources: [.copy("Snapshots"), .copy("Fixtures")],
         ),
@@ -152,7 +155,7 @@ let package = Package(
         .testTarget(name: "WhisperKitTranscriberTests", dependencies: ["WhisperKitTranscriber", "TestSupport"], path: "Tests/WhisperKitTranscriberTests"),
         .testTarget(name: "WhisperKitDiarizerTests", dependencies: ["WhisperKitDiarizer", "TestSupport"], path: "Tests/WhisperKitDiarizerTests"),
         .testTarget(name: "GoogleCalendarSourceTests", dependencies: ["GoogleCalendarSource", "TestSupport"], path: "Tests/GoogleCalendarSourceTests"),
-        .testTarget(name: "VaultGlossaryTests", dependencies: ["VaultGlossary", "TestSupport"], path: "Tests/VaultGlossaryTests"),
+        .testTarget(name: "VaultGlossaryTests", dependencies: ["VaultGlossary", "Core", "TestSupport"], path: "Tests/VaultGlossaryTests"),
         .testTarget(
             name: "PersistTests",
             dependencies: ["Persist", "TestSupport", "Orchestrator", "State", .product(name: "GRDB", package: "GRDB.swift")],

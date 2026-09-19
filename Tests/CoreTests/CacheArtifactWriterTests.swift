@@ -126,3 +126,13 @@ private func cleanUp(_ id: MeetingID) {
         Issue.record("Expected .directoryCreationFailed, got \(error)")
     }
 }
+
+@Test func cacheDirectoryIsThePerMeetingSubdirectoryOfTheCacheRoot() throws {
+    let id = MeetingID.generate()
+
+    let root = try CacheArtifactWriter.cacheRoot()
+    let directory = try CacheArtifactWriter.cacheDirectory(for: id)
+
+    #expect(root.lastPathComponent == "com.auricle.app")
+    #expect(directory == root.appendingPathComponent(id.rawValue, isDirectory: true))
+}
