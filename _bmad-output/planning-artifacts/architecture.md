@@ -172,7 +172,7 @@ The one substantive open question is **project structure**: pure Xcode project, 
 **Rationale for Selection:**
 
 - **SwiftPM target boundaries enforce SRP at the build-system level.** Each stage module is a separate SwiftPM library target whose dependencies are explicit in `Package.swift`. `Capture` can be declared with no dependency on `Transcribe`; the build system rejects any accidental import. This is the strongest mechanical enforcement of the SOLID discipline locked above.
-- **Strategy protocols live in protocol-only targets.** `SummarizerInterface`, `DiarizerInterface`, `TranscriberInterface`, `CalendarInterface` are tiny SwiftPM library targets containing only the protocol declarations. Concrete implementations (`ClaudeSummarizer`, `WhisperKitDiarizer`, `GoogleCalendarSource`, etc.) are separate targets that depend on the interface target. The orchestrator depends on the interface targets, not the implementation targets — DIP enforced by manifest, not by convention.
+- **Strategy protocols live in protocol-only targets.** `SummarizerInterface`, `DiarizerInterface`, `TranscriberInterface`, `CalendarInterface` are tiny SwiftPM library targets containing only the protocol declarations. Concrete implementations (`ClaudeSummarizer`, `WhisperKitDiarizer`, `GoogleCalendarSource`, etc.) are separate targets that depend on the interface target. The orchestrator depends on the interface targets, not the implementation targets — DIP enforced by manifest, not by convention. One accepted exception: the Claude strategy targets depend on `Summarize` for `SummarizationPromptBuilder` and its bundled `Prompts/`, so a future local-LLM strategy target (FR33) that shares the prompt builder takes the same edge.
 - **Xcode project remains the build-and-ship surface.** Code signing, notarization (`xcrun notarytool`), hardened runtime, entitlements, Info.plist, asset catalogs, and the `.app`/`.dmg` artifact pipeline all stay in Xcode where the tooling is mature and matches Apple's documented release flow.
 - **Both executables share the same library code.** `AuricleApp` (SwiftUI GUI) and `auricle-cli` (swift-argument-parser CLI) are two Xcode targets, both depending on the same SwiftPM library. There is no language boundary, no IPC protocol, no parallel implementation — exactly what the PRD calls for in §Project Type.
 - **CI-runnable smoke test (NFR-M5) is straightforward.** `swift test` from the repo root runs all library-target tests without needing Xcode. The Xcode project's executable targets are tested via `xcodebuild` in a separate CI step.
@@ -1357,9 +1357,11 @@ public enum GroundingMethod: String, Codable {
 
 **Why no separate "raw response" field:** strategies translate from their own raw API output (Anthropic Citations response, free-form quote string, local-LLM JSON, etc.) into the normalized shape inside their own implementation. Nothing outside the strategy needs to know the raw response format. This satisfies LSP — substituting one `SummarizerStrategy` for another genuinely produces equivalent downstream behavior.
 
-#### Decision 3.2: Two grounding strategies — Citations primary, substring as v1.1 + fallback
+#### Decision 3.2: Two grounding strategies — substring is the MVP default; Citations ships unwired
 
-**`ClaudeCitationsSummarizer` (MVP default):**
+> **As built (Decision 3.6 outcome):** the composition root wires `SummarizerOrchestrator(primary: ClaudeSubstringSummarizer())` with no fallback. Citations returned no real citation objects on 5 of 6 comparison transcripts, so a Citations primary or a Citations fallback would spend a paid call to fail. `ClaudeCitationsSummarizer` and its validator stay in the tree, tested, for the day Anthropic's Citations behavior changes. Where this decision says "primary", "default" or "fallback" for Citations below, read it as the original design.
+
+**`ClaudeCitationsSummarizer` (designed as the MVP default; not wired):**
 
 > `[Pn]` markers below and under Decision 3.4 are measured-behaviour findings from
 > [`research/technical-claude-code-agent-sdk-session-capability-2026-09-16/research.md`](research/technical-claude-code-agent-sdk-session-capability-2026-09-16/research.md) — see that document's *Empirical findings* section and source
@@ -1376,7 +1378,7 @@ public enum GroundingMethod: String, Codable {
 - **A fabricated citation is an ungrounded item and must be dropped.** A response can be well-formed, complete, correct on the facts, and carry citation-shaped prose with no citation objects behind it [P12]. `CitationGroundingValidator` therefore counts **real citation objects**, never a citation-looking field in the model's JSON; zero real citations on a response that requested them raises `SummarizerError.citationsUnavailable` and falls back per Decision 3.3. NFR-R7's hard gate is what makes this safe: an item whose grounding cannot be validated is dropped, not rendered.
 - Validates each pointer via `CitationGroundingValidator` (sanity-checks bounds; well-formed responses always pass)
 
-**`ClaudeSubstringSummarizer` (MVP fallback + v1.1 local-LLM path):**
+**`ClaudeSubstringSummarizer` (MVP default + v1.1 local-LLM path):**
 - Calls `messages.create` on `claude-opus-5` (same prompt skeleton, no Citations enabled) — asks for items with a `source_transcript_quote` field of type string
 - Maps each returned quote string to a `GroundingPointer { transcriptStart, transcriptEnd, sourceMethod: .substring }` by performing literal substring search in the canonical transcript
 - Validates via `SubstringGroundingValidator`: items where the quote is not found verbatim in the canonical transcript are dropped, with the drop reason logged at `warn` level and recorded in `telemetry.quote_validation_drop_count`
@@ -1517,7 +1519,9 @@ The Citations-vs-substring choice is not deferred to "dogfood guesswork" — the
 - **If Citations matches or beats substring on every transcript:** Citations is locked as MVP default.
 - **If substring catches anything Citations missed (any false-drop, any recall miss) on any transcript in the smoke-test set:** default flips to substring; revisit before dogfood begins. The trust-poison cost of a single missed commitment in dogfood vastly exceeds the cost of running with a slightly-less-capable validator that doesn't drop real items.
 
-**Outcome documentation:** smoke-test results are recorded in a build log (`tests/fixtures/smoke-test-results.md` or similar) — captures which transcripts were used, the metric scores, and the rationale for the default-validator choice. Future maintainers can re-run the smoke-test set when Anthropic ships new Citations behavior or when prompt design evolves.
+**Outcome documentation:** smoke-test results are recorded in a build log (`Tests/fixtures/strategy-comparison-results.md`) — captures which transcripts were used, the metric scores, and the rationale for the default-validator choice. Future maintainers can re-run the smoke-test set when Anthropic ships new Citations behavior or when prompt design evolves.
+
+**Outcome (executed 2026-09-18; results in `Tests/fixtures/strategy-comparison-results.md`):** the default flipped to substring, with no Citations fallback. The comparison set was six public fixtures (four AMI meetings, two film scenes) in place of the maintainer's own recordings, by the maintainer's choice; validating the wedge on real audio moves to Epic 4.
 
 #### Decision 3.7: J1.5 trust-calibration surface (Mary's hidden requirement)
 
@@ -2589,13 +2593,13 @@ Diarize        → Core, State, Telemetry, DiarizerInterface
 ReviewDiarization → Core, State, Telemetry, AIReviewerInterface  # the reviewing_diarization stage (Dec 5.3)
 Capture        → Core, State, Telemetry, Permissions
 Attribute      → Core, State, Telemetry, AIReviewerInterface  # consumes diarization_suggestions.json schema for sheet rendering
-Summarize      → Core, State, Telemetry, SummarizerInterface, CalendarInterface, VaultGlossary
+Summarize      → Core, State, Telemetry, Orchestrator, SummarizerInterface, AIReviewerInterface, CalendarInterface, VaultGlossary  # Orchestrator: StageRunner; AIReviewerInterface: GlossaryJargonCorrector
 Persist        → Core, State, Telemetry
 Verify         → Core, State, Telemetry, Notifications
 Notifications  → Core, State
 VaultGlossary  → Core
 
-ClaudeSummarizer        → Core, SummarizerInterface
+ClaudeSummarizer        → Core, SummarizerInterface, VaultGlossary, Summarize  # the strategies use SummarizationPromptBuilder, which lives in Summarize
 ClaudeAIReviewers       → Core, AIReviewerInterface, ClaudeSummarizer  # reuses AnthropicHTTPClient + KeychainAPIKey (Dec 5.2)
 WhisperKitTranscriber   → Core, TranscriberInterface
 WhisperKitDiarizer      → Core, DiarizerInterface
@@ -2680,7 +2684,7 @@ The two composition roots — `App/Auricle/AuricleApp.swift` and `App/auricle-cl
 @main
 struct AuricleApp: App {
     let orchestrator: Orchestrator = {
-        let summarizer = ClaudeCitationsSummarizer(/* with substring as fallback */)
+        let summarizer = ClaudeSubstringSummarizer()  // no fallback (Decision 3.6)
         let transcriber = WhisperKitTranscriber()
         let diarizer = WhisperKitDiarizer()
         let diarizationReviewer = ClaudeDiarizationReviewer()  // Dec 5.2; flag-controlled at call time
@@ -2821,7 +2825,7 @@ USER: clicks Stop (or `auricle stop`)
     Summarize/SummarizeStage
     VaultGlossary/VaultGlossaryBuilder → glossary
     GoogleCalendarSource → calendar.json (if reachable)
-    SummarizerOrchestrator(primary: ClaudeCitations, fallback: ClaudeSubstring)
+    SummarizerOrchestrator(primary: ClaudeSubstring)  # no fallback (Decision 3.6)
     Validator → summary.json
     StateStore: 'summarizing' → 'published' (after persist)
   ↓

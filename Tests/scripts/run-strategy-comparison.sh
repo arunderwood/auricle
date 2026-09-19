@@ -18,7 +18,7 @@
 #
 # results.md holds no item text and no quotes, but fixture file names appear
 # in it as given: name fixtures neutrally before copying it into
-# Tests/fixtures/smoke-test-results.md, the path Story 3.8 fixes. detail.md is
+# Tests/fixtures/strategy-comparison-results.md, the path Story 3.8 fixes. detail.md is
 # real meeting content and is never committed.
 #
 # Extra arguments go to the verb. `--arm substring --arm substring:<dir>`
