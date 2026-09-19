@@ -188,22 +188,14 @@ public enum SummarizeStage {
             throw SummarizeStageError.summaryWriteFailed
         }
 
-        if let match = enrichment.match {
-            try await refreshMeetingRow(for: meetingID, with: match, in: stateStore)
-        }
-
-        try await telemetryRecorder.record(
-            meetingID: meetingID,
-            patch: State.Telemetry(
-                meetingID: meetingID.rawValue,
-                quoteValidationDropCount: outcome.summary.quoteValidationDropCount,
-                summarizationPath: "claude_api",
-                summarizationModel: config.modelIdentifier,
-                summarizationEffortBudget: config.effortLevel.rawValue,
-                costUSD: outcome.summary.cost.costUSD,
-                groundingMethod: outcome.summary.groundingMethod.rawValue,
-                summarizationPromptSetHash: promptSetHashes[outcome.summary.groundingMethod.summarizationMode],
-            ),
+        await recordAfterSummaryWritten(
+            for: meetingID,
+            outcome: outcome,
+            config: config,
+            match: enrichment.match,
+            promptSetHash: promptSetHashes[outcome.summary.groundingMethod.summarizationMode],
+            stateStore: stateStore,
+            telemetryRecorder: telemetryRecorder,
         )
 
         return .completed(
@@ -224,17 +216,6 @@ public enum SummarizeStage {
         } catch {
             log.warn("calendar.json write failed", ["error": .publicSafe(String(reflecting: type(of: error)))])
         }
-    }
-
-    /// Fetches the row afresh rather than reusing the one read before the
-    /// stage started: `StageRunner` has moved `state` since, and writing the
-    /// old value back would undo that. A row that has vanished is left for
-    /// `StageRunner`'s own completion write to report.
-    private static func refreshMeetingRow(for meetingID: MeetingID, with match: CalendarEnrichment.Match, in stateStore: StateStore) async throws {
-        guard var meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else { return }
-        meeting.title = match.title
-        meeting.calendarEventID = match.eventID
-        try await stateStore.updateMeeting(meeting)
     }
 
     // MARK: - Inputs
@@ -329,15 +310,15 @@ public enum SummarizeStage {
 
     // MARK: - Failure classification
 
-    /// Only a case name or a type name is ever recorded, never an error's own
-    /// message: a foreign error can embed a path, a response body or transcript
+    /// Only a case name, a type name or a fixed sentence is ever recorded,
+    /// never an error's own message: a foreign error can embed a path, a response body or transcript
     /// text, and `error_message` is persisted in `stage_events`.
     private static func failure(for error: Error) -> (errorClass: String, message: String) {
         switch error {
         case let stageError as SummarizeStageError:
             (stageError.errorClass, String(describing: stageError))
         case let summarizerError as SummarizerError:
-            (summarizerError.stageErrorClass, String(describing: summarizerError))
+            (summarizerError.stageErrorClass, summarizerError.stageErrorMessage)
         default:
             ("summarize_unexpected_error", String(reflecting: type(of: error)))
         }

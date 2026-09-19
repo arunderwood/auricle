@@ -8,9 +8,12 @@ import SummarizerInterface
 /// transcript — the non-Citations grounding contract (Decision 3.2).
 /// Declared alongside, not nested inside, `ClaudeSubstringModelAnswer`: this
 /// codebase's nesting-depth rule caps types at one level deep.
+///
+/// The quote is optional so an item the model left ungrounded is dropped like
+/// one whose quote does not resolve, rather than failing the whole paid call.
 private struct ClaudeSubstringModelAnswerItem: Decodable {
     let text: String
-    let sourceTranscriptQuote: String
+    let sourceTranscriptQuote: String?
 
     enum CodingKeys: String, CodingKey {
         case text
@@ -130,8 +133,11 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
         var grounded: [GroundedItem] = []
         var dropCount = 0
         for (index, item) in items.enumerated() {
-            guard let pointer = SubstringGroundingValidator.validate(quote: item.sourceTranscriptQuote, in: transcript) else {
-                log.warn("dropping item: quote not found verbatim in transcript", Self.dropLogFields(section: section, index: index))
+            guard
+                let quote = item.sourceTranscriptQuote, !quote.isEmpty,
+                let pointer = SubstringGroundingValidator.validate(quote: quote, in: transcript)
+            else {
+                log.warn("dropping item: quote missing or not found verbatim in transcript", Self.dropLogFields(section: section, index: index))
                 dropCount += 1
                 continue
             }

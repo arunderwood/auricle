@@ -144,11 +144,11 @@ private func modelAnswerJSON(
 
 /// Wraps a model-answer JSON string in the Messages API's standard envelope
 /// `AnthropicHTTPClient.send(_:)` already knows how to parse.
-private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-5") throws -> Data {
+private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-5", stopReason: String = "end_turn") throws -> Data {
     try JSONSerialization.data(withJSONObject: [
         "model": model,
         "content": [["type": "text", "text": modelAnswerText]],
-        "stop_reason": "end_turn",
+        "stop_reason": stopReason,
         "usage": ["input_tokens": 100, "output_tokens": 50],
     ])
 }
@@ -233,6 +233,84 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     #expect(result.actionItems.count == 1)
     #expect(result.decisions.count == 1)
     #expect(result.quoteValidationDropCount == 1)
+}
+
+// MARK: - Items without a quote
+
+/// One item carrying no usable quote must not cost the whole paid call: it is
+/// dropped and counted, and the item next to it is still grounded.
+@Test(arguments: [
+    #"{"text": "Ben drafts the brief"}"#,
+    #"{"text": "Ben drafts the brief", "source_transcript_quote": ""}"#,
+    #"{"text": "Ben drafts the brief", "source_transcript_quote": null}"#,
+])
+func anItemWithAMissingOrEmptyQuoteIsDroppedAndTheCallStillSucceeds(ungroundedItem: String) async throws {
+    let transcript = makeTranscript()
+    let decisionQuote = "Let's push the launch to the 15th."
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    let answer = """
+    {"summary": "Team discussed launch plans.", "action_items": [\(ungroundedItem)], \
+    "decisions": [{"text": "Launch moves to the 15th", "source_transcript_quote": "\(decisionQuote)"}]}
+    """
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: answer))
+
+    let result = try await makeSummarizer(endpoint: endpoint).summarize(
+        transcript: transcript, glossary: Glossary(), config: SummarizerConfig(),
+    )
+
+    #expect(result.actionItems.isEmpty)
+    #expect(result.decisions.map(\.text) == ["Launch moves to the 15th"])
+    #expect(result.quoteValidationDropCount == 1)
+    #expect(result.cost.costUSD > 0)
+}
+
+@Test func anItemWhoseQuoteIsOfTheWrongTypeStillThrowsMalformedResponse() async throws {
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    let payload: [String: Any] = [
+        "summary": "Team discussed launch plans.",
+        "action_items": [["text": "Ben drafts the brief", "source_transcript_quote": 7]],
+        "decisions": [],
+    ]
+    let answer = try #require(String(bytes: JSONSerialization.data(withJSONObject: payload), encoding: .utf8))
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: answer))
+
+    await #expect(throws: SummarizerError.malformedResponse) {
+        _ = try await makeSummarizer(endpoint: endpoint).summarize(
+            transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(),
+        )
+    }
+}
+
+// MARK: - Truncated response
+
+/// A `max_tokens` stop leaves the JSON cut off mid-value. That is a budget
+/// problem, not a malformed answer, and the two must not share a class.
+@Test func aResponseCutOffAtMaxTokensThrowsResponseTruncatedNotMalformedResponse() async throws {
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    let cutOff = #"{"summary": "Team discussed launch plans.", "action_items": [{"text": "Ben dra"#
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: cutOff, stopReason: "max_tokens"))
+
+    await #expect(throws: SummarizerError.responseTruncated) {
+        _ = try await makeSummarizer(endpoint: endpoint).summarize(
+            transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(),
+        )
+    }
+}
+
+@Test func aCutOffBodyWithAnOrdinaryStopReasonIsStillMalformedResponse() async throws {
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    let cutOff = #"{"summary": "Team discussed launch plans.", "action_items": [{"text": "Ben dra"#
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: cutOff))
+
+    await #expect(throws: SummarizerError.malformedResponse) {
+        _ = try await makeSummarizer(endpoint: endpoint).summarize(
+            transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(),
+        )
+    }
 }
 
 // MARK: - Structurally malformed JSON
