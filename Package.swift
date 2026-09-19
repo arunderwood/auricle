@@ -154,7 +154,15 @@ let package = Package(
         .testTarget(name: "ReviewDiarizationTests", dependencies: ["ReviewDiarization", "TestSupport"], path: "Tests/ReviewDiarizationTests"),
         .testTarget(name: "WhisperKitTranscriberTests", dependencies: ["WhisperKitTranscriber", "TestSupport"], path: "Tests/WhisperKitTranscriberTests"),
         .testTarget(name: "WhisperKitDiarizerTests", dependencies: ["WhisperKitDiarizer", "TestSupport"], path: "Tests/WhisperKitDiarizerTests"),
-        .testTarget(name: "GoogleCalendarSourceTests", dependencies: ["GoogleCalendarSource", "CalendarInterface", "TestSupport"], path: "Tests/GoogleCalendarSourceTests"),
+        // Summarize and its collaborators: the real source is run through the real stage.
+        .testTarget(
+            name: "GoogleCalendarSourceTests",
+            dependencies: [
+                "GoogleCalendarSource", "CalendarInterface", "TestSupport", "Core", "Summarize", "SummarizerInterface", "State", "Orchestrator", "Telemetry",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/GoogleCalendarSourceTests",
+        ),
         .testTarget(name: "VaultGlossaryTests", dependencies: ["VaultGlossary", "Core", "TestSupport"], path: "Tests/VaultGlossaryTests"),
         .testTarget(
             name: "PersistTests",
