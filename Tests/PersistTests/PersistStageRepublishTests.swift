@@ -205,9 +205,9 @@ import Testing
     let noteURL = fixture.meetingsSubdirURL.appendingPathComponent("\(expectedLocalDate)-tuesday-sync.md")
     let noteBytes = try Data(contentsOf: noteURL)
     let noteModified = try modificationDate(of: noteURL)
-    var meeting = try await readMeeting(fixture, meetingID)
-    meeting.vaultNotePath = nil
-    try await fixture.store.updateMeeting(meeting)
+    try await fixture.database.write { db in
+        try db.execute(sql: "UPDATE meetings SET vault_note_path = NULL WHERE id = ?", arguments: [meetingID.rawValue])
+    }
 
     try await requireCompleted(fixture.run(meetingID: meetingID))
 

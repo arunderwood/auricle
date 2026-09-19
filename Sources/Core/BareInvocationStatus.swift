@@ -21,36 +21,74 @@ public struct PendingMeetingSummary: Sendable, Equatable {
 }
 
 /// The four outcomes `auricle`'s bare invocation (Decision 1.5) can print,
-/// in `BareInvocationResolver.resolve`'s priority order.
+/// in `BareInvocationResolver.resolve`'s priority order. The two `awaiting`
+/// cases carry the id of the meeting the hint is about, so the command it
+/// suggests acts on that meeting and not on whichever the resolver's
+/// `current` and `last` keywords happen to name.
 public enum BareInvocationStatus: Sendable, Equatable {
     case recording(id: String, elapsed: String)
-    case awaitingAttribution
-    case awaitingVerification
+    case awaitingAttribution(id: String)
+    case awaitingVerification(id: String)
     case nothingInFlight
+
+    /// The one line the bare command prints.
+    public var message: String {
+        switch self {
+        case let .recording(id, elapsed):
+            "Recording \(id) — \(elapsed)"
+        case let .awaitingAttribution(id):
+            "Last meeting awaiting attribution: auricle attribute \(id)"
+        case let .awaitingVerification(id):
+            "Last meeting awaiting your review: auricle keep \(id)"
+        case .nothingInFlight:
+            "Nothing in flight."
+        }
+    }
 }
 
 public enum BareInvocationResolver {
     /// Checks, in order, for a meeting `recording` → `awaiting_attribution`
     /// → `awaiting_verification`, falling back to `nothingInFlight` —
     /// Decision 1.5's bare-invocation priority, and Story 1.7's own
-    /// boundary on it.
+    /// boundary on it. Within a state the newest meeting wins, so a stranded
+    /// older meeting never masks a newer one.
     public static func resolve(
         pending: [PendingMeetingSummary],
         now: Date = Date(),
     ) -> BareInvocationStatus {
-        if let recording = pending.first(where: { $0.state == "recording" }) {
+        if let recording = newest(in: pending, state: "recording") {
             return .recording(
                 id: recording.id,
                 elapsed: elapsed(since: recording.referenceTimestamp, now: now),
             )
         }
-        if pending.contains(where: { $0.state == "awaiting_attribution" }) {
-            return .awaitingAttribution
+        if let awaitingAttribution = newest(in: pending, state: "awaiting_attribution") {
+            return .awaitingAttribution(id: awaitingAttribution.id)
         }
-        if pending.contains(where: { $0.state == "awaiting_verification" }) {
-            return .awaitingVerification
+        if let awaitingVerification = newest(in: pending, state: "awaiting_verification") {
+            return .awaitingVerification(id: awaitingVerification.id)
         }
         return .nothingInFlight
+    }
+
+    /// Newest by `referenceTimestamp`, ties by the larger id. ULIDs sort by
+    /// creation time, so the larger id is the later-created meeting.
+    private static func newest(in pending: [PendingMeetingSummary], state: String) -> PendingMeetingSummary? {
+        pending.filter { $0.state == state }.max { isOlder($0, than: $1) }
+    }
+
+    /// Timestamps are compared as instants: one with fractional seconds and
+    /// one without can differ by under a second in the wrong text order
+    /// (`...00Z` sorts after `...00.398Z` but is the earlier instant). One that
+    /// will not parse counts as older than every one that does, so the order
+    /// stays a total order however the input is arranged.
+    private static func isOlder(_ lhs: PendingMeetingSummary, than rhs: PendingMeetingSummary) -> Bool {
+        let lhsDate = ISO8601UTC.date(from: lhs.referenceTimestamp) ?? .distantPast
+        let rhsDate = ISO8601UTC.date(from: rhs.referenceTimestamp) ?? .distantPast
+        if lhsDate != rhsDate {
+            return lhsDate < rhsDate
+        }
+        return lhs.id < rhs.id
     }
 
     /// "unknown duration" only if `referenceTimestamp` fails to parse as

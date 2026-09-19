@@ -798,7 +798,7 @@ END;
 | Busy timeout | `Configuration.busyMode = .timeout(5.0)` on every opener | Subprocess transactions are <50ms; 5s is generous |
 | Foreign keys | `PRAGMA foreign_keys = ON` per connection | GRDB enables by default; verify in test |
 | WAL persistence | Set `journal_mode=WAL` in migration #1 | Sticky in file header; subsequent opens inherit |
-| Checkpointing | GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit AND on every state transition (NFR-R6) | Subprocesses do NOT checkpoint — let GUI own it |
+| Checkpointing | GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit, plus SQLite's automatic checkpoint between quits (NFR-R10) | Subprocesses issue no explicit checkpoint — let GUI own it |
 | Reactive observation | **GRDB `ValueObservation` is in-process only** — does not see external writes | GUI must use file-watch (`DispatchSource.makeFileSystemObjectSource` on `db.sqlite3-wal`, 100ms debounce) OR poll `meetings.updated_at` while a subprocess is in-flight. Recommended: file-watch |
 | Migrations | Use `GRDB.DatabaseMigrator`; never hand-roll | Migrations are forward-only; identified by string ID |
 | Partial indexes | Created via raw SQL (`db.execute(sql:)`) — GRDB's typed builder doesn't support `WHERE` clause on indexes | Not a blocker, just don't expect the type-safe builder |
@@ -1063,7 +1063,7 @@ The retry-policy table above defines retry budgets *within* a stage. A separate,
 
 | Active state | Wall-clock stale-detection budget | Synthesized transition on stale |
 |---|---|---|
-| `transcribing` | 2 × NFR-P3 transcribe budget (≈ 60s for typical 30-min meeting; configurable) | `transcription_failed` (transient — `auricle run <id>` resumes) |
+| `transcribing` | 2 × NFR-P3 transcribe budget (≈ 60s for typical 30-min meeting; scaled by audio length) | `transcription_failed` (permanent — the user resumes it with `auricle run <id>`) |
 | `reviewing_diarization` | **90s fixed** (per-stage override; not 2× typical Haiku response) | Treated as benign timeout, NOT failure: an empty `diarization_suggestions.json` stub is written and the meeting advances to `awaiting_attribution`. A `stage_events.failed` row is recorded with `error_class='ai_reviewer_timeout'` for telemetry. The Attribution sheet renders without AI hints (acoustic warnings only, per UX spec Step 10 "AI review behavior — non-blocking"). Budget rationale: long-tail Anthropic latency (network stall, 503) drives a conservative ceiling; this is the first stage to use a per-stage override (the table previously assumed 2× of the inner-stage retry budget for every stage). |
 | `attributing` | None — user-paced; no auto-failure | n/a |
 | `summarizing` | 2 × NFR-P5 summarize budget (≈ 12 min — covers the 5-min retry budget × 2) | `summarization_failed` (transient — queues for resume) |

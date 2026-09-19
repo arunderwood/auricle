@@ -47,19 +47,143 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
     #expect(pending.map(\.id).sorted() == ["01PENDINGMEETINGIDAAAAAAA"])
 }
 
-@Test func updateMeetingPersistsChanges() async throws {
+// MARK: - Column-scoped writers
+
+@Test func setVaultNotePathWritesOnlyThatColumn() async throws {
     let store = try makeStore()
-    try await store.insertMeeting(makeMeeting())
+    let original = makeMeeting()
+    try await store.insertMeeting(original)
 
-    var updated = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
-    updated.state = "captured"
-    updated.captureEndedAt = "2026-01-01T00:30:00Z"
-    updated.durationSeconds = 1800
-    try await store.updateMeeting(updated)
+    try await store.setVaultNotePath(meetingID: original.id, path: "/vault/Meetings/2026-01-01 Tuesday Sync.md")
 
-    let fetched = try await store.fetchMeeting(id: "01STATESTORETESTMEETING00")
-    #expect(fetched?.state == "captured")
-    #expect(fetched?.durationSeconds == 1800)
+    let fetched = try #require(try await store.fetchMeeting(id: original.id))
+    #expect(fetched.vaultNotePath == "/vault/Meetings/2026-01-01 Tuesday Sync.md")
+    var expected = original
+    expected.vaultNotePath = fetched.vaultNotePath
+    expected.updatedAt = fetched.updatedAt
+    #expect(fetched == expected)
+}
+
+@Test func setCalendarMatchWritesOnlyTheTitleAndEventID() async throws {
+    let store = try makeStore()
+    let original = makeMeeting()
+    try await store.insertMeeting(original)
+
+    try await store.setCalendarMatch(meetingID: original.id, title: "Weekly Sync", calendarEventID: "google:evt123")
+
+    let fetched = try #require(try await store.fetchMeeting(id: original.id))
+    #expect(fetched.title == "Weekly Sync")
+    #expect(fetched.calendarEventID == "google:evt123")
+    var expected = original
+    expected.title = "Weekly Sync"
+    expected.calendarEventID = "google:evt123"
+    expected.updatedAt = fetched.updatedAt
+    #expect(fetched == expected)
+}
+
+@Test func theColumnWritersThrowMeetingNotFoundForAMissingRow() async throws {
+    let store = try makeStore()
+
+    await #expect(throws: StateStoreError.meetingNotFound(id: "01MISSINGMEETINGID0000000")) {
+        try await store.setVaultNotePath(meetingID: "01MISSINGMEETINGID0000000", path: "/vault/note.md")
+    }
+    await #expect(throws: StateStoreError.meetingNotFound(id: "01MISSINGMEETINGID0000000")) {
+        try await store.setCalendarMatch(meetingID: "01MISSINGMEETINGID0000000", title: "T", calendarEventID: "E")
+    }
+}
+
+// MARK: - Guarded state transitions
+
+private func transition(
+    _ store: StateStore,
+    id: String = "01STATESTORETESTMEETING00",
+    to targetState: String,
+    event: String = "completed",
+    expectedState: String? = nil,
+    expectedUpdatedAt: String? = nil,
+) async throws {
+    try await store.recordStageTransition(
+        meetingID: id,
+        stage: "summarize",
+        event: event,
+        occurredAt: "2026-01-01T00:10:00Z",
+        targetState: targetState,
+        expectedState: expectedState,
+        expectedUpdatedAt: expectedUpdatedAt,
+    )
+}
+
+@Test func aGuardedTransitionLandsWhenTheRowStillMatchesWhatWasRead() async throws {
+    let store = try makeStore()
+    try await store.insertMeeting(makeMeeting().with(state: "summarizing"))
+    let read = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
+
+    try await transition(store, to: "summarization_failed", event: "failed", expectedState: "summarizing", expectedUpdatedAt: read.updatedAt)
+
+    let after = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
+    #expect(after.state == "summarization_failed")
+    #expect(try await store.fetchStageEvents(meetingID: "01STATESTORETESTMEETING00").map(\.event) == ["failed"])
+}
+
+/// The row read at `updated_at` T, then a real write that leaves `state`
+/// unchanged, as a stage completing into its own active state does. State
+/// alone cannot tell the two apart; `updated_at` can.
+@Test func aSameStateWriteAfterTheReadMakesAGuardedTransitionStale() async throws {
+    let store = try makeStore()
+    try await store.insertMeeting(makeMeeting().with(state: "summarizing"))
+    let read = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
+
+    try await transition(store, to: "summarizing", expectedState: "summarizing")
+    let eventsBefore = try await store.fetchStageEvents(meetingID: "01STATESTORETESTMEETING00")
+
+    await #expect(throws: StateStoreError.staleWrite(id: "01STATESTORETESTMEETING00")) {
+        try await transition(store, to: "summarization_failed", event: "failed", expectedState: "summarizing", expectedUpdatedAt: read.updatedAt)
+    }
+
+    let after = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
+    #expect(after.state == "summarizing")
+    #expect(try await store.fetchStageEvents(meetingID: "01STATESTORETESTMEETING00") == eventsBefore)
+}
+
+@Test func aGuardedTransitionWhoseExpectedStateDiffersIsStaleAndRollsTheEventBack() async throws {
+    let store = try makeStore()
+    try await store.insertMeeting(makeMeeting().with(state: "published"))
+
+    await #expect(throws: StateStoreError.staleWrite(id: "01STATESTORETESTMEETING00")) {
+        try await transition(store, to: "summarization_failed", event: "failed", expectedState: "summarizing")
+    }
+
+    let after = try #require(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00"))
+    #expect(after.state == "published")
+    #expect(try await store.fetchStageEvents(meetingID: "01STATESTORETESTMEETING00").isEmpty)
+}
+
+@Test func anUnguardedTransitionStillWritesWhateverTheCurrentState() async throws {
+    let store = try makeStore()
+    try await store.insertMeeting(makeMeeting().with(state: "published"))
+
+    try await transition(store, to: "summarizing", event: "started")
+
+    #expect(try await store.fetchMeeting(id: "01STATESTORETESTMEETING00")?.state == "summarizing")
+}
+
+@Test func aGuardedTransitionForAMissingMeetingIsMeetingNotFoundNotStale() async throws {
+    let store = try makeStore()
+
+    await #expect(throws: StateStoreError.meetingNotFound(id: "01MISSINGMEETINGID0000000")) {
+        try await transition(
+            store,
+            id: "01MISSINGMEETINGID0000000",
+            to: "summarization_failed",
+            event: "failed",
+            expectedState: "summarizing",
+            expectedUpdatedAt: "2026-01-01T00:00:00Z",
+        )
+    }
+    await #expect(throws: StateStoreError.meetingNotFound(id: "01MISSINGMEETINGID0000000")) {
+        try await transition(store, id: "01MISSINGMEETINGID0000000", to: "summarizing", event: "started")
+    }
+    #expect(try await store.fetchStageEvents(meetingID: "01MISSINGMEETINGID0000000").isEmpty)
 }
 
 @Test func stageEventRoundTripsAndAssignsAutoincrementedID() async throws {

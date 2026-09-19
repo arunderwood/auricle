@@ -13,24 +13,8 @@ import TranscriberInterface
 /// The worker names no concrete transcriber. The one thing that is specific to
 /// a strategy, making its model present, arrives as the `ensureModel` closure.
 public enum TranscribeWorker {
-    /// How the process should end. `message` is a fixed sentence or a type
-    /// name, never an error's own text, because the caller writes it to
-    /// stderr and a foreign error can embed a path or transcript text.
-    public struct Exit: Sendable, Equatable {
-        public let code: Int32
-        public let message: String?
-
-        public init(code: Int32, message: String? = nil) {
-            self.code = code
-            self.message = message
-        }
-    }
-
-    /// Decision 1.5's state error: the state store could not be read or
-    /// written, or the stage failed in a way a retry would not change.
-    static let stateErrorExitCode: Int32 = 2
-    /// There is no meeting with the id the caller was given.
-    static let meetingNotFoundExitCode: Int32 = 3
+    /// How the process should end; see `WorkerExitStatus`.
+    public typealias Exit = WorkerExitStatus
 
     /// The meeting is looked up before `ensureModel` runs, so an id with no
     /// meeting behind it never starts a model download. `ensureModel` then
@@ -55,7 +39,7 @@ public enum TranscribeWorker {
                 return unknownMeeting
             }
         } catch {
-            return Exit(code: stateErrorExitCode, message: "could not read the meeting (\(typeName(of: error))).")
+            return Exit(code: WorkerExitCode.stateError, message: "could not read the meeting (\(typeName(of: error))).")
         }
 
         await ensureModel()
@@ -72,11 +56,11 @@ public enum TranscribeWorker {
         } catch StateStoreError.meetingNotFound {
             return unknownMeeting
         } catch {
-            return Exit(code: stateErrorExitCode, message: "could not record its progress (\(typeName(of: error))).")
+            return Exit(code: WorkerExitCode.stateError, message: "could not record its progress (\(typeName(of: error))).")
         }
     }
 
-    private static let unknownMeeting = Exit(code: meetingNotFoundExitCode, message: "no meeting has the given ID.")
+    private static let unknownMeeting = Exit(code: WorkerExitCode.meetingNotFound, message: "no meeting has the given ID.")
 
     private static func typeName(of error: Error) -> String {
         String(reflecting: type(of: error))

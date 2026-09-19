@@ -65,6 +65,26 @@ import Testing
     #expect(metadata["fallback_error_class"] == nil)
 }
 
+/// The two wedge-validation columns are written from values the stage resolves
+/// itself, so a stage that dropped them or read the wrong mode's hash would
+/// otherwise leave the row silently incomplete.
+@Test func theTelemetryRowCarriesTheGroundingMethodAndTheAnsweringModesPromptSetHash() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+    let substringHash = String(repeating: "5a", count: 32)
+    let citationsHash = String(repeating: "c1", count: 32)
+
+    _ = try await fixture.run(
+        primary: StageStubStrategy(.success(makeStageGrounded(method: .substring))),
+        promptSetHash: { $0 == .substring ? substringHash : citationsHash },
+    )
+
+    let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))
+    #expect(telemetry.groundingMethod == "substring")
+    #expect(telemetry.summarizationPromptSetHash == substringHash)
+}
+
 @Test func telemetryRecordsTheConfiguredModelAndEffort() async throws {
     let fixture = try await StageFixture()
     defer { fixture.cleanUp() }

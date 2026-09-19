@@ -5,15 +5,13 @@ import State
 /// contributes rollup data — subprocess writers for count/cost/model
 /// columns, the GUI Attribution sheet for applied/rejected columns
 /// (AR-AI-5) — calls `record(meetingID:patch:)` rather than reaching
-/// `StateStore`'s telemetry API directly. Which columns a given caller may
-/// patch (AR-AI-5's write-authority matrix) is caller discipline, not
-/// something this method validates — a patch touching a column another
-/// writer owns is a code-review reject today, and a lint rule's job later,
-/// the same as every other AR-PAT-4 primitive in this codebase.
+/// `StateStore`'s telemetry API directly.
 ///
-/// `patch` is `State.Telemetry` — spelled out explicitly at every use site
-/// in this file, since the unqualified name coincides with the `Telemetry`
-/// *module* this type itself lives in.
+/// The write-authority matrix is enforced by types: `record` accepts only a
+/// `TelemetryPatch`, and each conforming type carries one writer's columns
+/// and no others. The five reserved `transcription_suggestions_*` and
+/// `transcription_review_*` columns have no patch type, so nothing can write
+/// them until a writer exists.
 public actor TelemetryRecorder {
     private let stateStore: StateStore
 
@@ -21,13 +19,8 @@ public actor TelemetryRecorder {
         self.stateStore = stateStore
     }
 
-    /// `meetingID` is authoritative over whatever `patch.meetingID` happens
-    /// to carry — callers build `patch` for its non-identity columns only,
-    /// so this always stamps the row with the identity passed alongside it
-    /// rather than trusting two separate copies of the same value to agree.
-    public func record(meetingID: MeetingID, patch: State.Telemetry) async throws {
-        var patch = patch
-        patch.meetingID = meetingID.rawValue
-        try await stateStore.upsertTelemetry(patch)
+    /// The row is keyed by `meetingID`; a patch carries no identity of its own.
+    public func record(meetingID: MeetingID, patch: some TelemetryPatch) async throws {
+        try await stateStore.upsertTelemetry(patch.telemetry(for: meetingID))
     }
 }

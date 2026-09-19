@@ -93,3 +93,14 @@ private let idC = MeetingID(ulid: "01BRAND00000000000000000WN")!
 
     #expect(resolver.resolve("01ARZ") == .notFound)
 }
+
+/// `ß` uppercases to `SS`: without the ASCII check, six of them pass the
+/// length gate and reach the data source as twelve `S`s.
+@Test func aNonASCIIPrefixIsNotFoundAndNeverReachesTheDataSource() throws {
+    let dataSource = FakeMeetingIDDataSource()
+    dataSource.pool = try [#require(MeetingID(ulid: String(repeating: "S", count: 26)))]
+    let resolver = MeetingIDResolver(dataSource: dataSource)
+
+    #expect(resolver.resolve(String(repeating: "\u{DF}", count: 6)) == .notFound)
+    #expect(resolver.resolve(String(repeating: "\u{DF}", count: 13)) == .notFound)
+}

@@ -172,3 +172,77 @@ private func makeMeeting(id: String, state: String) -> Meeting {
     let events = try await store.fetchStageEvents(meetingID: id.rawValue)
     #expect(events.isEmpty)
 }
+
+// MARK: - State guard
+
+@Test func aGuardForwardedThroughRecordLandsWhenTheMeetingStillMatches() async throws {
+    let store = try makeStore()
+    let id = meetingID("SG7")
+    try await store.insertMeeting(makeMeeting(id: id.rawValue, state: "summarizing"))
+    let read = try #require(try await store.fetchMeeting(id: id.rawValue))
+    let logger = StageEventLogger(stateStore: store)
+
+    try await logger.record(event: StageEventRecord(
+        meetingID: id,
+        stage: .summarize,
+        kind: .failed,
+        occurredAt: "2026-01-01T00:06:00Z",
+        targetState: .summarizationFailed,
+        expectedState: .summarizing,
+        expectedUpdatedAt: read.updatedAt,
+    ))
+
+    #expect(try await store.fetchMeeting(id: id.rawValue)?.state == "summarization_failed")
+    #expect(try await store.fetchStageEvents(meetingID: id.rawValue).map(\.event) == ["failed"])
+}
+
+@Test func aGuardThatNoLongerMatchesThrowsStaleWriteThroughTheLoggerAndWritesNothing() async throws {
+    let store = try makeStore()
+    let id = meetingID("SG8")
+    try await store.insertMeeting(makeMeeting(id: id.rawValue, state: "published"))
+    let logger = StageEventLogger(stateStore: store)
+
+    for kind in [StageEventKind.started, .completed, .failed] {
+        await #expect(throws: StateStoreError.staleWrite(id: id.rawValue)) {
+            try await logger.record(event: StageEventRecord(
+                meetingID: id,
+                stage: .summarize,
+                kind: kind,
+                occurredAt: "2026-01-01T00:06:00Z",
+                targetState: .summarizationFailed,
+                expectedState: .summarizing,
+            ))
+        }
+    }
+
+    #expect(try await store.fetchMeeting(id: id.rawValue)?.state == "published")
+    #expect(try await store.fetchStageEvents(meetingID: id.rawValue).isEmpty)
+}
+
+@Test func retriedEventWithAStateGuardThrowsBeforeTouchingTheStore() async throws {
+    let store = try makeStore()
+    let id = meetingID("SG9")
+    try await store.insertMeeting(makeMeeting(id: id.rawValue, state: "summarizing"))
+    let logger = StageEventLogger(stateStore: store)
+
+    await #expect(throws: StageEventLogger.RecordError.unexpectedStateGuard(kind: .retried)) {
+        try await logger.record(event: StageEventRecord(
+            meetingID: id,
+            stage: .summarize,
+            kind: .retried,
+            occurredAt: "2026-01-01T00:07:00Z",
+            expectedState: .summarizing,
+        ))
+    }
+    await #expect(throws: StageEventLogger.RecordError.unexpectedStateGuard(kind: .retried)) {
+        try await logger.record(event: StageEventRecord(
+            meetingID: id,
+            stage: .summarize,
+            kind: .retried,
+            occurredAt: "2026-01-01T00:07:00Z",
+            expectedUpdatedAt: "2026-01-01T00:00:00Z",
+        ))
+    }
+
+    #expect(try await store.fetchStageEvents(meetingID: id.rawValue).isEmpty)
+}

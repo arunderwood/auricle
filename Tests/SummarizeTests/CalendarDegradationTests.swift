@@ -1,6 +1,7 @@
 import CalendarInterface
 @testable import Core
 import Foundation
+import GRDB
 import Orchestrator
 import Persist
 import State
@@ -206,15 +207,26 @@ private func runExpectingDegradation(_ source: StubCalendarSource?) async throws
     #expect(seen.effortLevel == .high)
 }
 
+/// A second connection to the same file stands in for another process writing a
+/// column while the summarizer runs. The refresh must write only the calendar
+/// columns, so it cannot put back the value the stage read before that.
 @Test func theRowRefreshKeepsColumnsChangedWhileTheSummarizerRan() async throws {
-    let fixture = try await makeFixture()
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appendingPathComponent("auricle.sqlite3").path
+    let fixture = try await StageFixture(store: StateStore.production(path: path))
     defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
     let store = fixture.store
     let meetingID = fixture.meetingID
+    var configuration = Configuration()
+    configuration.busyMode = .timeout(5)
+    let otherConnection = try DatabaseQueue(path: path, configuration: configuration)
     let primary = StageStubStrategy(.success(makeStageGrounded())) {
-        guard var row = try await store.fetchMeeting(id: meetingID.rawValue) else { return }
-        row.audioCachePath = "/cache/audio.m4a"
-        try await store.updateMeeting(row)
+        try otherConnection.write { db in
+            try db.execute(sql: "UPDATE meetings SET audio_cache_path = ? WHERE id = ?", arguments: ["/cache/audio.m4a", meetingID.rawValue])
+        }
     }
 
     _ = try await fixture.run(primary: primary, calendarSource: StubCalendarSource(.success(makeEvent())))

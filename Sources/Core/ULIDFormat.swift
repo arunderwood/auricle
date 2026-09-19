@@ -34,8 +34,13 @@ public enum ULIDFormat {
     /// accept strings this type has always rejected — that leniency is a
     /// consciously separate, not-yet-made decision, not a side effect of
     /// this type's backing implementation.
+    ///
+    /// ASCII only, checked before uppercasing: `ß` uppercases to `SS`, so for
+    /// non-ASCII input the UTF-8 byte count no longer bounds the character
+    /// count, and 13 of them would expand into 26 alphabet characters.
     public static func isValid(_ string: String) -> Bool {
-        guard string.utf8.count == 26 else { return false }
+        let bytes = string.utf8
+        guard bytes.count == 26, bytes.allSatisfy({ $0 < 0x80 }) else { return false }
         return string.uppercased().allSatisfy { alphabetSet.contains($0) }
     }
 }

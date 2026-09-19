@@ -49,21 +49,21 @@ private struct StubWorkError: Error, Equatable {}
     let resolvedID = try #require(MeetingID(ulid: id))
 
     let outcome = try await runner.run(stage: .transcribe, meetingID: resolvedID, activeState: .transcribing) {
-        .completed(targetState: .awaitingAttribution)
+        .completed(targetState: .reviewingDiarization)
     }
 
     guard case let .completed(targetState, _) = outcome else {
         Issue.record("expected .completed outcome, got \(outcome)")
         return
     }
-    #expect(targetState == .awaitingAttribution)
+    #expect(targetState == .reviewingDiarization)
 
     let events = try await store.fetchStageEvents(meetingID: id)
     #expect(events.map(\.event) == ["started", "completed"])
     #expect(events.allSatisfy { $0.stage == "transcribe" })
 
     let meeting = try #require(try await store.fetchMeeting(id: id))
-    #expect(meeting.state == "awaiting_attribution")
+    #expect(meeting.state == "reviewing_diarization")
 }
 
 @Test func runOnFailedWritesBothTransactionsAndFoldsErrorClassIntoMetadata() async throws {

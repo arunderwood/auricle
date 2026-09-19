@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// The transcribe stage's retry policy (Decision 4.2): one retry, in a fresh
@@ -29,7 +30,7 @@ public enum TranscribeRetryPolicy {
 
         var isRetryable: Bool {
             switch self {
-            case let .exited(status): status == TranscribeStage.retryableExitCode
+            case let .exited(status): status == WorkerExitCode.retryable
             case let .signaled(signal): !Self.cancellationSignals.contains(signal)
             }
         }

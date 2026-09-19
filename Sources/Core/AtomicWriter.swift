@@ -33,6 +33,20 @@ public enum AtomicWriter {
     /// than requested. It is an exact mode, not subject to the umask. When
     /// `nil` the file keeps the umask-derived default.
     public static func write(_ data: Data, to path: URL, permissions: Int? = nil) throws {
+        try perform(data, to: path, permissions: permissions, beforeRename: nil)
+    }
+
+    /// `write`'s whole sequence, with `beforeRename` run once the temp file is
+    /// complete and closed and the rename has not happened yet. That is the
+    /// instant a kill leaves a full temp file beside an untouched target, so a
+    /// test can abort a real write there by throwing from the hook; the hook's
+    /// error propagates unchanged.
+    static func perform(
+        _ data: Data,
+        to path: URL,
+        permissions: Int?,
+        beforeRename: (() throws -> Void)?,
+    ) throws {
         let tempURL = temporaryURL(for: path)
 
         guard FileManager.default.createFile(atPath: tempURL.path, contents: nil) else {
@@ -73,6 +87,8 @@ public enum AtomicWriter {
         } catch {
             throw WriteError.closeFailed(path: tempURL.path, underlying: error)
         }
+
+        try beforeRename?()
 
         guard rename(tempURL.path, path.path) == 0 else {
             throw WriteError.renameFailed(from: tempURL.path, to: path.path, errno: errno)

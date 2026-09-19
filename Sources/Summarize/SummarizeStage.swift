@@ -115,12 +115,13 @@ public enum SummarizeStage {
         }
     }
 
-    /// The process exit code for `__internal-stage summarize`: 0 on success,
-    /// 2 (Decision 1.5's state error) on any failure.
+    /// The process exit code for `__internal-stage summarize`:
+    /// `WorkerExitCode.success` on success, `stateError` (Decision 1.5) on any
+    /// failure.
     public static func exitCode(for outcome: StageRunner.StageOutcome) -> Int32 {
         switch outcome {
-        case .completed: 0
-        case .failed: 2
+        case .completed: WorkerExitCode.success
+        case .failed: WorkerExitCode.stateError
         }
     }
 

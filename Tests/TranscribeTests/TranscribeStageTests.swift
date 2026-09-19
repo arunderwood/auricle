@@ -267,7 +267,7 @@ func retryableTranscriberFailuresExitWithTheRetryableCode(error: TranscriberErro
     func code(_ errorClass: String) -> Int32 {
         TranscribeStage.exitCode(for: .failed(targetState: .transcriptionFailed, errorClass: errorClass))
     }
-    #expect(TranscribeStage.retryableExitCode == 75)
+    #expect(WorkerExitCode.retryable == 75)
     for retryable in ["transcribe_model_unavailable", "transcribe_model_load_failed", "transcribe_failed"] {
         #expect(code(retryable) == 75)
     }
