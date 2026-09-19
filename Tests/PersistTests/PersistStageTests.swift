@@ -217,11 +217,6 @@ import Testing
 
 // MARK: - Filename inputs and error-class folds
 
-// Every `PersistStage` scenario runs on the private fixtures at the top of
-// this file, so the file stays whole instead of splitting. Only this file
-// is exempt from the 600-line limit.
-// swiftlint:disable file_length
-
 /// `title` and `calendar_event_title` are separate parameters, and so are the
 /// two fields the attendee slug reads, because each feeds a different
 /// consumer: the filename slug chain reads the calendar title, attendees and
@@ -364,19 +359,9 @@ private func requirePersistFailed(_ outcome: StageRunner.StageOutcome, errorClas
 /// the vault write, so `StageRunner`'s own transaction that records the
 /// failure still goes through.
 @Test func aStateStoreFailureInsideThePublishFoldsIntoPersistUnexpectedErrorClass() async throws {
-    let queue = try DatabaseQueue()
-    let store = try StateStore.forTesting(writer: queue)
-    let base = try makeFixture()
-    defer { try? FileManager.default.removeItem(at: base.directory) }
-    let fixture = TestFixture(
-        directory: base.directory,
-        vaultPath: base.vaultPath,
-        meetingsSubdirURL: base.meetingsSubdirURL,
-        cacheDirectory: base.cacheDirectory,
-        store: store,
-        runner: makeRunner(store: store),
-    )
-    try await queue.write {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    try await fixture.database.write {
         try $0.execute(sql: """
         CREATE TRIGGER reject_vault_note_path BEFORE UPDATE ON meetings
         WHEN NEW.vault_note_path IS NOT NULL
@@ -384,13 +369,13 @@ private func requirePersistFailed(_ outcome: StageRunner.StageOutcome, errorClas
         """)
     }
     let meetingID = MeetingID.generate()
-    try await store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
 
     let outcome = try await fixture.run(meetingID: meetingID)
 
     let errorMessage = try requirePersistFailed(outcome, errorClass: "persist_unexpected_error")
     #expect(errorMessage?.contains("rejected") == true)
-    let meeting = try #require(try await store.fetchMeeting(id: meetingID.rawValue))
+    let meeting = try #require(try await fixture.store.fetchMeeting(id: meetingID.rawValue))
     #expect(meeting.vaultNotePath == nil)
     #expect(meeting.state == "persist_failed")
 }
