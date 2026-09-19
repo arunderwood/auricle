@@ -15,12 +15,12 @@ Both strategies still ship. Substring is required for the v1.1+ local-LLM path (
 - Run at: 2026-09-19T00:04:40Z (UTC).
 - Model: `claude-opus-5`, default `SummarizerConfig`, empty glossary, no attendee context.
 - Code: revision `bba0180dede975336000dc5447395b980107bfce` plus the prompt-contract and `max_tokens` changes made for this run.
-- Prompt set hash, citations: `ec6a789d002dbc7dc481a65fce114ba9f5757fa821d9a252c9b7347e532fc5a5`.
-- Prompt set hash, substring: `b32698f9fc388e5f06648973ea501b25ac586c9dbac034b64b462737a43bd8cb`.
-- Re-run: stage the fixtures flat and run the script.
+- Prompt set hash, citations (original prompt): `ec6a789d002dbc7dc481a65fce114ba9f5757fa821d9a252c9b7347e532fc5a5`.
+- Prompt set hash, substring (original prompt): `b32698f9fc388e5f06648973ea501b25ac586c9dbac034b64b462737a43bd8cb`.
+- Re-run: point the script at the committed fixtures.
 
   ```bash
-  d=$(mktemp -d) && for f in Tests/SummarizeTests/Fixtures/eval/*/transcript.json; do cp "$f" "$d/$(basename "$(dirname "$f")").json"; done && AURICLE_COMPARISON_TRANSCRIPTS=$d Tests/scripts/run-strategy-comparison.sh
+  AURICLE_COMPARISON_TRANSCRIPTS=Tests/SummarizeTests/Fixtures/eval Tests/scripts/run-strategy-comparison.sh
   ```
 
 ## Transcripts
@@ -51,7 +51,7 @@ The maintainer accepted the public fixtures in `Tests/SummarizeTests/Fixtures/ev
 
 Substring total: $1.77 for 6 calls. The rig records no cost for a failed arm, so the 5 Citations failures are billed but unlisted. No thinking tokens are reported separately: the API counts them inside output tokens.
 
-## Scored metrics (substring)
+## Scored metrics (substring, original prompt)
 
 Scored by the assistant that ran the comparison, by comparing each kept item's meaning with `expected.json`. The maintainer has not yet spot-checked these numbers. Citations has no items to score on 5 transcripts, so its recall is 0 there.
 
@@ -76,6 +76,30 @@ Quote quality: quotes are verbatim and read sensibly on the two movie scenes. On
 - Substring dropped no item and missed one of 20. Its `source_transcript_quote` values validated verbatim on every transcript.
 - A Citations fallback under a substring primary would cost a paid call that failed on 5 of 6 transcripts. So the orchestrator has no fallback.
 - `office-space-interview` returned 0 items from substring on two earlier runs and 4 on this one. A single run is a sample, not a measurement. Re-run before relying on a false-keep count.
+
+## Substring prompt tuning
+
+After the strategy choice above, the substring prompt was tightened to cut false-keeps. The `--arm substring:<prompt dir>` option ran each variant beside the original prompt on the same six transcripts. Scores are by hand against `expected.json`; the mechanical scorer differed by at most three items per arm.
+
+`tighter` defines an action item as a task one named person commits to or is assigned after the meeting, and a decision as a choice the group explicitly settles. It excludes questions, floated ideas, one participant's suggestion, requirements handed in from outside, meeting logistics and the next meeting time. It says to prefer precision and to report each item once. `strict` added a rule requiring visible acceptance or agreement. `tighter2` also counted an unanswered instruction from the person in charge.
+
+| Prompt | Items kept | Recall | False-keeps | Run |
+|---|---|---|---|---|
+| original | 49 | 19 of 20 | about 30 | 1 |
+| `tighter` | 21 | 17 of 20 | 4 | 1 |
+| `strict` | 22 | 17 of 20 | 5 | 1 |
+| `tighter` (repeat) | 21 | 17 of 20 | 4 | 2 |
+| `tighter2` | 22 | 17 of 20 | 4 | 2 |
+
+`tighter` is now the bundled prompt. Its two runs agree, and the other two variants add rules without helping.
+
+- All of the recall loss is on `margin-call-boardroom`: the three plan items (call the traders in, 40 percent by a set time, all trades gone by a set time) are instructions with no owner who accepts them. `expected.json` marks these as a judgment call. `tighter2` did not recover them.
+- The original prompt missed one item that `tighter` found: the project manager's minutes task on `ami-es2002b`.
+- `office-space-interview` kept 0 items in all five runs here. The original prompt kept 4 on the earlier recorded run.
+- The bundled prompt is shared with the Citations strategy, so its wording changed there too. Citations was not re-measured.
+- Prompt set hash, substring (tuned): `cd7100dd803f1559c2d9283838c241079a75ddb859772d9170fc78031b641dfa`.
+- Prompt set hash, citations (tuned): `18b0243600bb87bc000301a7b7c07b4c521b6697ac9d43a227f477bdb91411b3`.
+- Spend for the tuning: $9.82 across the three runs that returned.
 
 ## Run history
 
