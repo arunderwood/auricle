@@ -1148,7 +1148,8 @@ So that every vault note has stable structure, schema-valid frontmatter, and con
 **And** speakers in summary text are rendered as `[[wikilinks]]` resolvable to existing or to-be-created people-notes (FR38)
 **And** frontmatter `attendees` array uses YAML list of `"[[Wikilink]]"` strings (per Decision 2.2)
 **And** the `auricle:` block contains only identity/lineage fields (`meeting_id`, `schema_version`, optional `supersedes`) per cross-cutting concern #11 — never operational fields like retention timer state, timing telemetry, or model identifiers
-**And** tags array contains `auricle/meeting` baseline; conditional flag tags appear per Decision 2.2 variants (`auricle/needs-attribution`, `auricle/needs-calendar-enrichment`, `auricle/needs-summary`)
+**And** tags array contains `auricle/meeting` baseline; conditional flag tags appear per Decision 2.2 variants (`auricle/needs-attribution`, `auricle/needs-calendar-enrichment`)
+**And** this story renders only those two flag tags — `auricle/needs-summary` belongs to the `published_partial` variant, which lands with Story 4.7
 
 **Given** the standard variant (calendar enriched + attribution complete)
 **When** I render the meeting
@@ -1282,10 +1283,8 @@ So that the stage produces exactly one new vault note per execution, never edits
 **And** `meetings.vault_note_path` is updated to point at the re-run note (latest publish becomes canonical for `auricle status` lookups)
 **And** the original vault note is **never modified** by auricle (DP4 + FR36 + NFR-R2 — verified by file-mtime invariance test)
 
-**Given** a re-publish completes
-**When** the notification fires
-**Then** the notification body distinguishes: *"auricle: re-published Tuesday Sync with Ben (rerun 2026-05-15)"* per AR-DATA-7
-**And** historical publish paths are reconstructible from `stage_events` rows where `stage='persist'` and `event='completed'` for that meeting (forensic audit trail; not first-class queryable per AR-DATA-7)
+**Given** a meeting that has been published more than once
+**Then** every historical publish path is reconstructible from the `stage_events` rows where `stage='persist'` and `event='completed'` for that meeting (forensic audit trail; not first-class queryable per AR-DATA-7)
 
 **Given** the persist stage runs idempotently per NFR-R5
 **When** I re-run a successfully-published persist stage
@@ -1328,7 +1327,7 @@ So that future readers can correctly interpret older notes (FR41 `auricle:` bloc
 - **5 stories** sized for single dev-agent completion
 - **All FRs covered:** FR26 (Story 2.4 — auricle never re-edits), FR35 (Story 2.4), FR36 (Story 2.3 — atomic write), FR37 (Story 2.1), FR38 (Story 2.1), FR39 (Story 2.1), FR40 (Story 2.2), FR41 (Story 2.1)
 - **NFRs primarily verified:** NFR-R1 (Story 2.3), NFR-R2 (Story 2.3 + 2.4), NFR-R7 persist-side hard gate (consumed downstream by Epic 3), NFR-P8 (Story 2.3), NFR-S4 (Story 2.3), NFR-I3 (frontmatter compatible with Obsidian URL scheme), NFR-I4 (Story 2.5)
-- **All architectural commitments addressed:** AR-DATA-6 (Stories 2.1, 2.5), AR-DATA-7 (Story 2.4 re-publish), AR-DATA-8 (Story 2.2), AR-DATA-9 (Story 2.3 vault path validation), AR-PAT-9 (Story 2.1 markdown discipline)
+- **All architectural commitments addressed:** AR-DATA-6 (Stories 2.1, 2.5; the `auricle/needs-summary` tag is Story 4.7), AR-DATA-7 (Story 2.4 re-publish; the re-publish notification text is Story 4.8), AR-DATA-8 (Story 2.2), AR-DATA-9 (Story 2.3 vault path validation), AR-PAT-9 (Story 2.1 markdown discipline)
 - **No future-story dependencies:** every story is independently completable in sequence
 
 ---
@@ -2080,13 +2079,26 @@ So that the entire Epic 4 pipeline is invocable from one user-facing CLI verb (n
 **Then** the verb skips attribution and publishes with `Speaker_N` placeholder names + `auricle/needs-attribution` tag per FR25
 **And** if summarize then fails, the meeting transitions to `published_partial` per Decision 4.1 (carries `auricle/needs-attribution` AND `auricle/needs-summary` tags)
 
+**Given** a meeting in `published_partial` (published with `Speaker_N` placeholders, and summarize produced no usable output)
+**When** persist renders the note
+**Then** `FrontmatterRenderer` accepts a `needsSummary` input (a `needsSummary` field on `MeetingForFrontmatter`, beside `needsAttribution` and `needsCalendarEnrichment`) that adds the `auricle/needs-summary` tag
+**And** the tags array is `auricle/meeting`, `auricle/needs-attribution`, `auricle/needs-summary` for the `--publish-anyway` + failed-summarize case
+**And** the note omits the `## Action Items` and `## Decisions` sections entirely — not empty headings
+
+**Given** the run verb reaches the persist stage after summarize
+**When** persist runs in-process (AR-PIPE-1; not through `__internal-stage`)
+**Then** the verb calls `PersistStage.run` with the meeting's cache directory (which holds `summary.json`) and the `vault_path` and `meetings_subdir` values from `Core/Config` (`Sources/Core/Config.swift`; set in `~/.auricle/config.toml`)
+**And** the verb passes no caller-supplied re-publish flag — persist derives a re-publish from whether the meeting's stored note (`meetings.vault_note_path`) still exists on disk, and writes a fresh publish when it does not
+**And** a resume from `persist_failed` re-runs the persist stage only, not the stages before it
+
 **Given** user agency on retries (UX-DR53 + Decision 4.2)
 **When** a retry is in flight in a foreground TTY
 **Then** SIGINT (Ctrl-C) cancels the in-flight HTTP request, transitions to `summarization_failed` immediately, exits 130 (standard for SIGINT) per Decision 4.2
 
 **Given** the test suite
 **When** I run integration tests against the binary
-**Then** `Tests/CLITests/RunVerbTests.swift` covers: bare `auricle run <id>` resume; `--from`/`--to`/`--only` permutations; `--force` against permanent fail-state; `--reattribute` preserves retention timer; `--publish-anyway` produces `auricle/needs-attribution` tag; flag conflicts rejected at parse time; SIGINT cancels and exits 130
+**Then** `Tests/CLITests/RunVerbTests.swift` covers: bare `auricle run <id>` resume; `--from`/`--to`/`--only` permutations; `--force` against permanent fail-state; `--reattribute` preserves retention timer; `--publish-anyway` produces `auricle/needs-attribution` tag; flag conflicts rejected at parse time; SIGINT cancels and exits 130; a completed run leaves a note published at the configured vault path; `--reattribute` on a published meeting produces a `--rerun-` sibling whose frontmatter carries `auricle.supersedes`
+**And** `Tests/PersistTests/FrontmatterRendererTests.swift` includes a snapshot test for the `published_partial` variant: `auricle/needs-summary` and `auricle/needs-attribution` tags both present, no Action Items or Decisions sections
 
 ---
 
@@ -2115,6 +2127,12 @@ So that the exit-criteria smoke test (Story 4.9) can validate the *full* loop �
 **And** the meeting state stays at `awaiting_verification` (visible in `auricle list` from Epic 9 Story; in Epic 4 the state is observable only via direct SQLite inspection)
 **And** Story 4.8 is explicitly tagged as an **incomplete-but-shippable stub for FR42/FR43**; the full verification path (FR44 + retention arming) lands in Epic 8
 
+**Given** a persist stage that completes as a re-publish (a `--rerun-<YYYY-MM-DD>[-N]` sibling was written per AR-DATA-7)
+**When** `Notifier.fire(...)` posts the notification
+**Then** the body distinguishes the re-publish: *"auricle: re-published Tuesday Sync with Ben (rerun 2026-05-15)"* per AR-DATA-7, with the rerun date taken from the sibling's `--rerun-` suffix
+**And** a persist that fell back to a fresh publish (the original note was deleted, so no `--rerun-` sibling exists) uses the standard *"meeting ready"* body
+**And** the `userInfo` payload keeps the same shape as the standard notification
+
 **Given** notification permission has been revoked
 **When** the persist stage completes
 **Then** `Notifier.fire(...)` logs at `warn` level and proceeds; the meeting still transitions to `awaiting_verification` per NFR-R8
@@ -2122,7 +2140,7 @@ So that the exit-criteria smoke test (Story 4.9) can validate the *full* loop �
 
 **Given** the test suite
 **When** I run `Tests/NotificationsTests/NotifierStubTests.swift`
-**Then** tests cover: `UNNotificationRequest` constructed with correct payload format; `URL(string: "obsidian://open?vault=...&file=...")` constructed correctly; notification permission revoked → graceful degradation
+**Then** tests cover: `UNNotificationRequest` constructed with correct payload format; `URL(string: "obsidian://open?vault=...&file=...")` constructed correctly; re-publish → body reads *"auricle: re-published <title> (rerun <YYYY-MM-DD>)"* while fresh publish and fresh-publish fallback → standard *"meeting ready"* body; notification permission revoked → graceful degradation
 
 ---
 
@@ -2177,7 +2195,7 @@ So that scope creep doesn't dilute the Pipeline Validation milestone and the CLI
 - **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 (4.8 cannot land before 4.1–4.7; 4.9 is the explicit gate)
 - **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR42 stub (Story 4.8 — full path in Epic 8), FR43 stub (Story 4.8 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
 - **NFRs primarily verified:** NFR-P3 (Story 4.1 perf test), NFR-P4 (Story 4.2 perf test), NFR-P10 peak memory (Stories 4.1 + 4.2 — WhisperKit subprocess constraint), NFR-Pr1 transcribe local (Story 4.1), NFR-Pr4 first-name speakers + email scrubbing (consumed in Story 4.6 + Epic 3 Story 3.10), NFR-C1 v1.1+ tier (Story 4.5 + Story 4.9 empirical validation), NFR-I8 local-LLM v1.1+ slot (Story 4.4 + Story 4.5 telemetry contract)
-- **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7)
+- **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7), AR-PIPE-1 in-process persist wiring (Story 4.7), AR-DATA-6 `auricle/needs-summary` tag (Story 4.7), AR-DATA-7 re-publish notification text (Story 4.8)
 - **Explicit exit-criteria gate (John + Amelia):** Story 4.9 is the named gate, not a fiction; ≥80% quote-grounding pass-rate + NFR-C1 cost ceiling + CI integration
 - **Type-system parity contract (Sally + Amelia):** Story 4.6 places `AttributionViewModel` in `Core/` — Epic 7's GUI sheet imports the same type; FR23/FR25 splits across epics carry no divergence risk
 - **No future-story dependencies within the epic:** every story is independently completable in sequence
