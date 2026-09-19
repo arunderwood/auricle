@@ -1,0 +1,169 @@
+import AVFoundation
+import Core
+import Foundation
+import Orchestrator
+import State
+import Telemetry
+import TranscriberInterface
+
+/// The `transcribe` stage entry point: reads `audio.wav` from the meeting's
+/// cache directory, runs the injected `TranscriberStrategy`, and writes the
+/// `transcript.json` every later stage reads. The whole body runs inside
+/// `StageRunner.run`'s `work` closure, so this type never writes
+/// `stage_events` or `meetings.state` itself, and every failure is folded
+/// into a `transcription_failed` outcome rather than thrown.
+///
+/// The stage depends on the `TranscriberStrategy` protocol only. It knows no
+/// concrete transcriber, no diarizer, and nothing about how a transcript was
+/// produced beyond the `CanonicalTranscript` it gets back.
+public enum TranscribeStage {
+    /// The process exit code for a failure a fresh process may not repeat
+    /// (`EX_TEMPFAIL` in `sysexits.h`). It is what tells the caller a retry
+    /// is worth making.
+    public static let retryableExitCode: Int32 = 75
+
+    private static let audioArtifactName = "audio.wav"
+    private static let transcriptArtifactName = "transcript.json"
+    private static let transcriptSchemaVersion = 1
+
+    /// Completes into `transcribing`: no state sits between transcribe,
+    /// diarize and review, so the state the stage entered is the state it
+    /// leaves the meeting in.
+    ///
+    /// Throws `StateStoreError.meetingNotFound` when `meetingID` has no row,
+    /// before anything is recorded: `StageRunner.run`'s first transaction
+    /// cannot start for a meeting that does not exist, and where foreign
+    /// keys are enforced it would fail with a `DatabaseError` instead of a
+    /// typed error the caller can act on.
+    public static func run(
+        meetingID: MeetingID,
+        stateStore: StateStore,
+        stageRunner: StageRunner,
+        transcriber: any TranscriberStrategy,
+        config: TranscriberConfig = TranscriberConfig(),
+    ) async throws -> StageRunner.StageOutcome {
+        guard try await stateStore.fetchMeeting(id: meetingID.rawValue) != nil else {
+            throw StateStoreError.meetingNotFound(id: meetingID.rawValue)
+        }
+        return try await stageRunner.run(stage: .transcribe, meetingID: meetingID, activeState: .transcribing) {
+            do {
+                return try await transcribe(meetingID: meetingID, transcriber: transcriber, config: config)
+            } catch {
+                let classified = failure(for: error)
+                return .failed(
+                    targetState: .transcriptionFailed,
+                    errorClass: classified.errorClass,
+                    errorMessage: classified.message,
+                )
+            }
+        }
+    }
+
+    /// 0 on success, `retryableExitCode` for a failure a fresh process might
+    /// not repeat, and 2 (Decision 1.5's state error) for every other one.
+    public static func exitCode(for outcome: StageRunner.StageOutcome) -> Int32 {
+        switch outcome {
+        case .completed:
+            0
+        case let .failed(_, errorClass, _, _):
+            TranscribeStageError.retryableErrorClasses.contains(errorClass) ? retryableExitCode : 2
+        }
+    }
+
+    // MARK: - Stage body
+
+    /// The audio is opened before the transcriber is called, so a file that
+    /// is missing or is not audio fails without paying for a model load.
+    private static func transcribe(
+        meetingID: MeetingID,
+        transcriber: any TranscriberStrategy,
+        config: TranscriberConfig,
+    ) async throws -> StageRunner.StageOutcome {
+        let audio = try audioURL(for: meetingID)
+        let durationSeconds = try audioDurationSeconds(of: audio)
+
+        let transcript: CanonicalTranscript
+        do {
+            transcript = try await transcriber.transcribe(audio: audio, config: config)
+        } catch let error as TranscriberError {
+            throw TranscribeStageError(error)
+        }
+
+        do {
+            try CacheArtifactWriter.write(transcript, for: meetingID, named: transcriptArtifactName, schemaVersion: transcriptSchemaVersion)
+        } catch {
+            throw TranscribeStageError.transcriptWriteFailed
+        }
+
+        return .completed(
+            targetState: .transcribing,
+            metadataJSON: encodeMetadataJSON(config: config, audioDurationSeconds: durationSeconds, transcript: transcript),
+        )
+    }
+
+    /// A cache root that cannot be resolved means the audio cannot be found
+    /// either, so it is reported as the missing audio it causes.
+    private static func audioURL(for meetingID: MeetingID) throws -> URL {
+        let url: URL
+        do {
+            url = try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent(audioArtifactName)
+        } catch {
+            throw TranscribeStageError.audioMissing
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw TranscribeStageError.audioMissing
+        }
+        return url
+    }
+
+    private static func audioDurationSeconds(of url: URL) throws -> Int {
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forReading: url)
+        } catch {
+            throw TranscribeStageError.audioUnreadable
+        }
+        let sampleRate = file.processingFormat.sampleRate
+        guard sampleRate > 0 else {
+            throw TranscribeStageError.audioUnreadable
+        }
+        return Int((Double(file.length) / sampleRate).rounded())
+    }
+
+    // MARK: - metadata_json
+
+    /// Encodes `TranscribeMeta` directly, not wrapped in
+    /// `StageMetadata.transcribe`, whose enum-keyed encoding would nest the
+    /// payload under a `"transcribe"` key — a different shape than Decision
+    /// 4.5 specifies for this row. Encoding these scalar fields cannot fail
+    /// in practice, and `work` must not crash the process on the one path
+    /// that least needs an escape hatch, so a failure degrades to `{}`.
+    private static func encodeMetadataJSON(config: TranscriberConfig, audioDurationSeconds: Int, transcript: CanonicalTranscript) -> String {
+        let meta = TranscribeMeta(
+            modelID: config.modelID,
+            audioDurationSeconds: audioDurationSeconds,
+            transcriptChars: transcript.text.count,
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard
+            let data = try? encoder.encode(meta),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+        return json
+    }
+
+    // MARK: - Failure classification
+
+    /// Only a case name, a type name or a fixed sentence is ever recorded,
+    /// never an error's own message: a foreign error can embed a path or
+    /// transcript text, and `error_message` is persisted in `stage_events`.
+    private static func failure(for error: Error) -> (errorClass: String, message: String) {
+        if let stageError = error as? TranscribeStageError {
+            return (stageError.errorClass, String(describing: stageError))
+        }
+        return ("transcribe_unexpected_error", String(reflecting: type(of: error)))
+    }
+}

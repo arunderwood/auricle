@@ -9,7 +9,10 @@ import State
 import Summarize
 import SummarizerInterface
 import Telemetry
+import Transcribe
+import TranscriberInterface
 import VaultGlossary
+import WhisperKitTranscriber
 
 // AR-PIPE-7: the GUI's and `CrashRecovery`'s subprocess-dispatch mechanism,
 // not a user-facing verb — `shouldDisplay: false` keeps it out of `auricle
@@ -37,6 +40,8 @@ struct InternalStageWorker: AsyncParsableCommand {
         switch InternalStageValidator.validate(stage: stage, workerProtocolVersion: workerProtocolVersion) {
         case .valid:
             switch PipelineStage(rawValue: stage) {
+            case .transcribe:
+                try await runTranscribe()
             case .summarize:
                 try await runSummarize()
             default:
@@ -58,6 +63,55 @@ struct InternalStageWorker: AsyncParsableCommand {
                 )
             }
             throw ExitCode(2)
+        }
+    }
+
+    /// Builds the concrete transcriber and hands it to `TranscribeWorker`,
+    /// which owns the ordering and the exit codes so `swift test` reaches
+    /// them. The id is parsed before anything else, so a malformed one never
+    /// opens the state store.
+    private func runTranscribe() async throws {
+        guard let meetingID = MeetingID(ulid: id) else {
+            writeStderr("__internal-stage: '\(id)' is not a valid meeting ID.")
+            throw ExitCode(1)
+        }
+
+        let stateStore: StateStore
+        do {
+            stateStore = try StateStore.subprocess()
+        } catch {
+            writeStderr("__internal-stage: could not open the state store (\(type(of: error))).")
+            throw ExitCode(2)
+        }
+
+        let config = TranscriberConfig()
+        let modelStore = WhisperKitModelStore()
+        let exit = await TranscribeWorker.run(
+            meetingID: meetingID,
+            stateStore: stateStore,
+            stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
+            transcriber: WhisperKitTranscriber(store: modelStore),
+            config: config,
+            ensureModel: { await Self.provisionModelIfMissing(modelStore, config: config) },
+        )
+        if let message = exit.message {
+            writeStderr("__internal-stage: \(message)")
+        }
+        if exit.code != 0 {
+            throw ExitCode(exit.code)
+        }
+    }
+
+    /// The one line written says a download is starting and, if it fails,
+    /// names the failure's type only. A failed download is not fatal here: the
+    /// stage runs anyway and records the missing model as its own failure.
+    private static func provisionModelIfMissing(_ modelStore: WhisperKitModelStore, config: TranscriberConfig) async {
+        guard !modelStore.isProvisioned(modelID: config.modelID) else { return }
+        writeStderr("__internal-stage: downloading the transcription model (one time only).")
+        do {
+            try await modelStore.provision(modelID: config.modelID)
+        } catch {
+            writeStderr("__internal-stage: the transcription model could not be downloaded (\(type(of: error))).")
         }
     }
 

@@ -5,10 +5,11 @@ import Foundation
 // translated to one of these immediately at the Apple-framework callback
 // boundary that produced it, never propagated raw.
 //
-// All four domains live in this one file for now rather than four near-empty
-// files: each domain's owning target (`Capture`, `TranscriberInterface`,
-// `Persist`, `Verify`) is still a placeholder with no real implementation to
-// split alongside (AR-PAT-1 allows coupled secondary types sharing a file).
+// The three domains here live in one file rather than three near-empty files:
+// each domain's owning target (`Capture`, `Persist`, `Verify`) is still a
+// placeholder with no real implementation to split alongside (AR-PAT-1 allows
+// coupled secondary types sharing a file). `TranscriberError` and
+// `SummarizerError` live in their own interface targets.
 
 public enum CaptureError: Error, Sendable {
     /// `category` is a plain string, not `TCCCategory`: `Core` cannot depend
@@ -18,12 +19,6 @@ public enum CaptureError: Error, Sendable {
     case permissionRevokedMidstream
     case streamInterrupted(reason: String)
     case diskFull
-}
-
-/// `Transcribe`'s stage logic doesn't exist yet, so there's nothing concrete
-/// to model failure around beyond a generic reason string.
-public enum TranscribeError: Error, Sendable {
-    case stageFailed(reason: String)
 }
 
 /// `Persist`'s stage logic doesn't exist yet, so there's nothing concrete to
