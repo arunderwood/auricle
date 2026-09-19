@@ -1143,7 +1143,7 @@ So that every vault note has stable structure, schema-valid frontmatter, and con
 
 **Acceptance Criteria:**
 
-**Given** a `MeetingForFrontmatter` value containing meeting metadata (title, date, attendees as wikilinks, audio path, calendar event ID, schema version, retention policy, summary text, action items, decisions, transcript segments)
+**Given** a `MeetingForFrontmatter` value containing meeting metadata (title, date, attendees as wikilinks, schema version, summary text, action items, decisions, transcript segments)
 **When** I call `FrontmatterRenderer.render(meeting:)`
 **Then** the output is markdown with: YAML frontmatter under `---` fences carrying exactly the Decision 2.2 schema (title, date, tags, attendees as `[[wikilinks]]`, `auricle:` block with `meeting_id` + `schema_version: 1`); body containing one-paragraph summary, `## Action Items` section with bullets each followed by `> source quote` blockquote, `## Decisions` section with same structure, collapsed `## Transcript` section at the bottom (per FR37)
 **And** speakers in summary text are rendered as `[[wikilinks]]` resolvable to existing or to-be-created people-notes (FR38)

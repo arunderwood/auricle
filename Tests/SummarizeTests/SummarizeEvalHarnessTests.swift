@@ -147,8 +147,5 @@ private func frontmatterMeeting(_ artifact: SummaryArtifact) -> MeetingForFrontm
         actionItems: artifact.actionItems.map { QuotedItem(text: $0.text, quote: $0.quote) },
         decisions: artifact.decisions.map { QuotedItem(text: $0.text, quote: $0.quote) },
         transcriptSegments: artifact.transcriptSegments.map { TranscriptSegment(speaker: $0.speaker, text: $0.text) },
-        audioPath: nil,
-        calendarEventID: nil,
-        retentionPolicy: nil,
     )
 }
