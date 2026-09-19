@@ -171,6 +171,13 @@ private func validEnvelopeJSON(
     ])
 }
 
+private func errorEnvelopeJSON(message: String) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [
+        "type": "error",
+        "error": ["type": "invalid_request_error", "message": message],
+    ])
+}
+
 // MARK: - Successful request
 
 @Test func successfulRequestReturnsDecodedResponseWithNoRetry() async throws {
@@ -296,6 +303,36 @@ private func validEnvelopeJSON(
     #expect(await spy.recordedDelays.isEmpty)
 }
 
+@Test func creditBalanceFourHundredThrowsQuotaExceededWithNoRetry() async throws {
+    let token = UUID().uuidString
+    defer { StubURLProtocol.unregister(token: token) }
+    let body = try errorEnvelopeJSON(
+        message: "Your credit balance is too low to access the Anthropic API. "
+            + "Please go to Plans & Billing to upgrade or purchase credits.",
+    )
+    StubURLProtocol.register(token: token) { _ in .http(status: 400, body: body) }
+    let spy = DelaySpy()
+    let client = makeClient(sleep: { await spy.record($0) })
+
+    await #expect(throws: SummarizerError.quotaExceeded) {
+        _ = try await client.send(makeRequest(token: token))
+    }
+    #expect(StubURLProtocol.attemptCount(for: token) == 1)
+    #expect(await spy.recordedDelays.isEmpty)
+}
+
+@Test func creditBalanceMatchIsCaseInsensitive() async throws {
+    let token = UUID().uuidString
+    defer { StubURLProtocol.unregister(token: token) }
+    let body = try errorEnvelopeJSON(message: "YOUR CREDIT BALANCE IS TOO LOW")
+    StubURLProtocol.register(token: token) { _ in .http(status: 400, body: body) }
+    let client = makeClient()
+
+    await #expect(throws: SummarizerError.quotaExceeded) {
+        _ = try await client.send(makeRequest(token: token))
+    }
+}
+
 // MARK: - Malformed / other 4xx (no retry)
 
 @Test func otherFourHundredStatusThrowsMalformedResponseWithNoRetry() async throws {
@@ -308,6 +345,30 @@ private func validEnvelopeJSON(
         _ = try await client.send(makeRequest(token: token))
     }
     #expect(StubURLProtocol.attemptCount(for: token) == 1)
+}
+
+@Test func unrelatedFourHundredWithAnErrorBodyStillThrowsMalformedResponse() async throws {
+    let token = UUID().uuidString
+    defer { StubURLProtocol.unregister(token: token) }
+    let body = try errorEnvelopeJSON(message: "max_tokens: must be greater than 0")
+    StubURLProtocol.register(token: token) { _ in .http(status: 400, body: body) }
+    let client = makeClient()
+
+    await #expect(throws: SummarizerError.malformedResponse) {
+        _ = try await client.send(makeRequest(token: token))
+    }
+    #expect(StubURLProtocol.attemptCount(for: token) == 1)
+}
+
+@Test func nonJSONFourHundredBodyMentioningCreditBalanceStillThrowsMalformedResponse() async throws {
+    let token = UUID().uuidString
+    defer { StubURLProtocol.unregister(token: token) }
+    StubURLProtocol.register(token: token) { _ in .http(status: 400, body: Data("credit balance".utf8)) }
+    let client = makeClient()
+
+    await #expect(throws: SummarizerError.malformedResponse) {
+        _ = try await client.send(makeRequest(token: token))
+    }
 }
 
 // MARK: - Malformed 200 body
