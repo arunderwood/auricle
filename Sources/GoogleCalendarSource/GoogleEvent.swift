@@ -7,15 +7,64 @@ import Foundation
 /// it as a bare `date`, which the source does not request, so no `dateTime`
 /// arrives.
 struct GoogleEvent: Equatable, Sendable {
+    /// Calendar entries that block time without being a meeting anyone joins.
+    private static let nonMeetingTypes: Set<String> = ["focusTime", "outOfOffice", "workingLocation"]
+
     let id: String
     let status: String?
     let title: String
     let attendees: [CalendarAttendee]
     let start: Date?
     let end: Date?
+    let eventType: String?
+    /// `"transparent"` when the owner marked the event as not blocking their time.
+    let transparency: String?
+    /// The signed-in user's own reply, taken from the attendee Google flags
+    /// `self`. `nil` when the event has no attendee list (one the user made
+    /// for themselves) or the reply was not requested.
+    let selfResponseStatus: String?
+
+    init(
+        id: String,
+        status: String?,
+        title: String,
+        attendees: [CalendarAttendee],
+        start: Date?,
+        end: Date?,
+        eventType: String? = nil,
+        transparency: String? = nil,
+        selfResponseStatus: String? = nil,
+    ) {
+        self.id = id
+        self.status = status
+        self.title = title
+        self.attendees = attendees
+        self.start = start
+        self.end = end
+        self.eventType = eventType
+        self.transparency = transparency
+        self.selfResponseStatus = selfResponseStatus
+    }
 
     var isCancelled: Bool {
         status == "cancelled"
+    }
+
+    var isDeclined: Bool {
+        selfResponseStatus == "declined"
+    }
+
+    var isFree: Bool {
+        transparency == "transparent"
+    }
+
+    /// Whether the event could be the meeting a recording belongs to. An event
+    /// the user declined is not one they attend, and a focus, out-of-office or
+    /// working-location block covers the hours around real meetings.
+    var isMeetingCandidate: Bool {
+        guard !isCancelled, !isDeclined else { return false }
+        guard let eventType else { return true }
+        return !Self.nonMeetingTypes.contains(eventType)
     }
 
     /// `nil` when the event cannot be a timed `CalendarEvent`: all-day, or
@@ -54,6 +103,8 @@ private struct WireEvent: Decodable {
     let attendees: [WireAttendee]?
     let start: WireTime?
     let end: WireTime?
+    let eventType: String?
+    let transparency: String?
 
     var event: GoogleEvent {
         GoogleEvent(
@@ -65,6 +116,9 @@ private struct WireEvent: Decodable {
             },
             start: start?.dateTime,
             end: end?.dateTime,
+            eventType: eventType,
+            transparency: transparency,
+            selfResponseStatus: attendees?.first { $0.isSelf == true }?.responseStatus,
         )
     }
 }
@@ -73,11 +127,13 @@ private struct WireAttendee: Decodable {
     let email: String?
     let displayName: String?
     let isSelf: Bool?
+    let responseStatus: String?
 
     private enum CodingKeys: String, CodingKey {
         case email
         case displayName
         case isSelf = "self"
+        case responseStatus
     }
 }
 

@@ -51,8 +51,8 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     let query = request.query
     #expect(query["singleEvents"] == "true")
     #expect(query["timeMin"] == iso8601(testInstant.addingTimeInterval(-1)))
-    #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(1)))
-    #expect(query["fields"] == "items(id,status,summary,start(dateTime),end(dateTime),attendees(email,displayName,self))")
+    #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(EventMatcher.leadIn + 1)))
+    #expect(query["fields"] == "items(id,status,summary,eventType,transparency,start(dateTime),end(dateTime),attendees(email,displayName,self,responseStatus))")
 }
 
 @Test func fetchActiveEventAsksForTheInstantItIsGivenNotTheCurrentTime() async throws {
@@ -66,7 +66,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
 
     let query = try #require(harness.stub.eventRequests.first).query
     #expect(query["timeMin"] == iso8601(testInstant.addingTimeInterval(-1)))
-    #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(1)))
+    #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(EventMatcher.leadIn + 1)))
     #expect(event?.id == "google:evt")
 }
 
