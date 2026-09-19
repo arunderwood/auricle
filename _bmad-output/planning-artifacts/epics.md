@@ -250,7 +250,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 #### Pipeline Orchestration Contracts (Decision Group 1)
 
 - **AR-PIPE-1:** Subprocess vs in-process boundary per stage: `transcribe`+`diarize` (combined), `summarize`, `reviewing_diarization` run as subprocesses spawned by the GUI (and independently by CLI). `capture`, `attribute`, `persist`, `notify`, `verify`, `discard` run in-process. CLI exposes every stage as an independently-runnable subprocess regardless of GUI dispatch.
-- **AR-PIPE-2:** Canonical pipeline state names (persisted as strings in SQLite): `recording → captured → transcribing → reviewing_diarization → awaiting_attribution → attributing → summarizing → published → awaiting_verification → verified → retention_expired`. Plus terminal/error branches: `silent`, `discarded`, `capture_failed`, `transcription_failed`, `summarization_failed`, `persist_failed`, `published_partial`.
+- **AR-PIPE-2:** Canonical pipeline state names (persisted as strings in SQLite): `recording → captured → transcribing → reviewing_diarization → awaiting_attribution → attributing → summarizing → persisting → published → awaiting_verification → verified → retention_expired`. Plus terminal/error branches: `silent`, `discarded`, `capture_failed`, `transcription_failed`, `summarization_failed`, `persist_failed`, `published_partial`.
 - **AR-PIPE-3:** Two-transaction pattern per stage: Txn A (`stage_events.started` + `meetings.state = '<active>'`) then Txn B (`stage_events.completed|failed` + `meetings.state = '<target>'`). The active "_ing" state is the canonical reconciliation signal for crash recovery (no separate sweep table). Crash recovery on launch re-dispatches stages stuck in active states.
 - **AR-PIPE-4:** Cache-dir handoff layout at `~/Library/Caches/com.auricle.app/<meeting-id>/` containing: `audio.wav`, `transcript.json` (immutable), `diarization.json` (immutable), `snippets/speaker_N.wav`, `diarization_suggestions.json`, `transcription_suggestions.json` (declared, no MVP impl), `attribution.json` (with `segment_overrides` + `segment_splits` per Decision 5.4), `calendar.json`, `glossary.json`, `summary.json`, `state.json`. Every JSON file carries a top-level `schema_version` field. All writes via atomic-write primitive. Permissions 0600. Cache-dir is the IPC mechanism (no shared memory, no message queue).
 - **AR-PIPE-5:** Audio file format: PCM 16-bit, 16kHz mono WAV. Mic + system audio mixed during capture into one mono stream.
@@ -282,7 +282,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 #### Failure / Recovery / Security (Decision Group 4)
 
 - **AR-FAIL-1:** Four failure categories: `transient` (auto-retry with budget + Stop-Trying affordance), `permanent` (mark `*_failed`, surface to user, no auto-retry), `userActionable` (mark `awaiting_*`, no auto-retry, user resumes), `benignTerminal` (correct detection of "nothing to do" — `silent`, future similar). `enum FailureCategory` is a property derived from canonical state name.
-- **AR-FAIL-2:** Per-stage retry/backoff policy per Decision 4.2: capture (best-effort stream restart, 3 fails in 30s); transcribe (1 retry after fresh subprocess restart); summarize (exponential backoff 1→2→4→8→16s, 5min total budget); persist (1 retry after 1s); notify (1 retry, non-blocking failure). Wall-clock stale-detection: `transcribing` 2× NFR-P3 budget; `reviewing_diarization` **90s fixed** (synthesizes empty-stub passthrough, not failure); `summarizing` 2× NFR-P5 budget; `published` 30s. Orchestrator periodic sweep (every 10s foreground, 60s backgrounded) calls `StageRunner.synthesizeFailure(...)`.
+- **AR-FAIL-2:** Per-stage retry/backoff policy per Decision 4.2: capture (best-effort stream restart, 3 fails in 30s); transcribe (1 retry after fresh subprocess restart); summarize (exponential backoff 1→2→4→8→16s, 5min total budget); persist (1 retry after 1s); notify (1 retry, non-blocking failure). Wall-clock stale-detection: `transcribing` 2× NFR-P3 budget; `reviewing_diarization` **90s fixed** (synthesizes empty-stub passthrough, not failure); `summarizing` 2× NFR-P5 budget; `persisting` 60s fixed; `published` 30s. Orchestrator periodic sweep (every 10s foreground, 60s backgrounded) calls `StageRunner.synthesizeFailure(...)`.
 - **AR-FAIL-3:** User agency on retries: GUI inline "Retry N of M — next attempt in Xs [Stop trying]"; CLI `Ctrl-C` (SIGINT) cancels retries (exit code 130). Subprocess token billing risk on crash logged in telemetry.
 - **AR-FAIL-4:** `Verifier` Swift `actor` is the single converge point for all verification callers (notification-click, GUI confirm, `auricle keep`). Idempotent SQL via `COALESCE`; `UNIQUE(meeting_id)` constraint on `retention_timers`. Both writes (open Obsidian + arm timer) happen regardless of whether Obsidian launches successfully.
 - **AR-FAIL-5:** Notification payload format (binding contract surviving Sparkle upgrades): `{meeting_id, schema_version, payload_version}`. Click handler tolerates unknown `payload_version` from future binary by falling back to "lookup meeting by ID, present in main window."
@@ -321,7 +321,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 - **UX-DR1 [MVP]:** Single workflow window architecture (Principle 8). auricle's primary surface is a single main window. Modal workflow tasks (notably speaker attribution) appear as **sheets attached to the main window** — never as separate `NSWindowController`-per-meeting windows that auto-foreground. Multi-meeting concurrency handled via sheet queue + banner counter. Settings (Cmd-,) and Doctor remain as conventional separate windows since user-initiated and rarely used.
 - **UX-DR2 [MVP]:** Row-expand inline IA for the main meeting list (Variant 1). `LazyVStack` of `MeetingRowView` cells; each row has `@State expanded: Bool` toggling a per-row inline operations console showing pipeline timeline, contextual actions (Retry / Discard / Open attribution), retention countdown, and copy-pasteable `log show` line.
-- **UX-DR3 [MVP]:** Meeting list sort priority: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing|reviewing_diarization|summarizing > published > verified > retention_expired > silent|discarded`, then by `capture_started_at desc`. Bottom filters: `[Show verified · Show discarded]` toggle chips (defaults: verified on, terminal off).
+- **UX-DR3 [MVP]:** Meeting list sort priority: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing|reviewing_diarization|summarizing|persisting > published > verified > retention_expired > silent|discarded`, then by `capture_started_at desc`. Bottom filters: `[Show verified · Show discarded]` toggle chips (defaults: verified on, terminal off).
 - **UX-DR4 [MVP]:** Window sizing — Main window: resizable, `@SceneStorage`-persisted, default 800×600, minimum ~700×500. Attribution sheet: ~600×700 content-fit, non-resizable per macOS sheet conventions, minimum 540×500. Settings: macOS Settings scene system-driven. Doctor: fixed narrow column ~480×fitToContent.
 
 #### Design System & Tokens
@@ -992,13 +992,13 @@ So that no stage code path bypasses telemetry, no subprocess crash leaves the ch
 **And** direct `db.write { ... }` on `meetings` or `stage_events` outside `StageRunner` / `Verifier` / `StateStore` is a code-review reject (per AR-PAT-4)
 
 **Given** an active subprocess crashes between Txn A and Txn B
-**When** I run a state machine query `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','published')` on next launch
+**When** I run a state machine query `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','persisting','published')` on next launch
 **Then** the active "_ing" state is the canonical reconciliation signal per AR-PIPE-3
-**And** `Orchestrator/CrashRecovery.swift` re-dispatches the stuck stage (idempotent re-run per NFR-R5)
+**And** `Orchestrator/CrashRecovery.swift` re-dispatches the stuck stage (idempotent re-run per NFR-R5), except for states whose stage runs in-process (`attributing`, `persisting`, `published`), which it logs without dispatching
 **And** orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail
 
 **Given** the Orchestrator's periodic stale-detection sweep runs (every 10s GUI foreground, 60s backgrounded)
-**When** a meeting's `meetings.updated_at` is older than the per-stage wall-clock budget per AR-FAIL-2 (`transcribing` 2× NFR-P3, `reviewing_diarization` 90s fixed, `summarizing` 2× NFR-P5, `published` 30s)
+**When** a meeting's `meetings.updated_at` is older than the per-stage wall-clock budget per AR-FAIL-2 (`transcribing` 2× NFR-P3, `reviewing_diarization` 90s fixed, `summarizing` 2× NFR-P5, `persisting` 60s fixed, `published` 30s)
 **Then** `StageRunner.synthesizeFailure(meetingID:reason:)` is called per AR-FAIL-2
 **And** for `reviewing_diarization` stale specifically, the synthesized transition is the **benign-timeout passthrough** to `awaiting_attribution` (empty stub `diarization_suggestions.json` written, `stage_events.failed` row with `error_class='ai_reviewer_timeout'`) — NOT a `*_failed` transition (per Decision 4.2)
 **And** for other active states the synthesized transition is to the corresponding `*_failed` state with `error_class='stale_active_state'`
@@ -1269,10 +1269,10 @@ So that the stage produces exactly one new vault note per execution, never edits
 
 **Acceptance Criteria:**
 
-**Given** a meeting in the `summarizing` → `published` transition
+**Given** a meeting in the `persisting` → `published` transition
 **When** `PersistStage.run(meetingId:)` executes
 **Then** the stage reads `summary.json` from cache-dir, fetches the `Meeting` row from SQLite via `StateStore`, constructs a `MeetingForFrontmatter` value, calls `FrontmatterRenderer.render(meeting:)` → markdown, calls `FilenameResolver.resolve(meeting:)` → filename, calls `VaultWriter.write(markdown, to: filename)`, and updates `meetings.vault_note_path` to the canonical absolute path
-**And** the stage transitions `meetings.state` from `summarizing` → `published` via `StageRunner` (Txn A on entry, Txn B on completion) per AR-PIPE-3
+**And** the stage transitions `meetings.state` from `persisting` → `published` via `StageRunner` (Txn A on entry, Txn B on completion) per AR-PIPE-3
 **And** a `stage_events` row is written with `stage='persist'`, `event='completed'`, `metadata_json` containing `{"vault_note_path": "...", "frontmatter_schema_version": 1}` per Decision 4.5
 
 **Given** a meeting passing `auricle run <id> --reattribute` (or any other re-publish path)
@@ -2631,7 +2631,7 @@ So that every state-rendering surface in the app consumes one token table and on
 
 **Given** `StateChip` atomic component
 **When** I render it for any meeting state
-**Then** the chip variant maps to the canonical state name → `FailureCategory` per AR-FAIL-1 + UX-DR10: recording → red filled `record.circle.fill` "Recording"; transcribing/summarizing/published → blue `arrow.triangle.2.circlepath` "Transcribing"/etc; verified/retention_expired → green `checkmark.circle.fill` "Verified"/"Audio deleted"; awaiting_attribution/awaiting_verification → yellow `hand.point.up.left.fill` "Awaiting your input"/"Awaiting your review"; *_failed transient → orange `arrow.clockwise.circle` "Retry needed"; *_failed permanent → red outlined `exclamationmark.triangle.fill` "Failed"; silent/discarded → gray `circle.dashed`/`trash` "Silent"/"Discarded"; published_partial → yellow + secondary tint `hand.point.up.left` + `exclamationmark` "Published, needs review"
+**Then** the chip variant maps to the canonical state name → `FailureCategory` per AR-FAIL-1 + UX-DR10: recording → red filled `record.circle.fill` "Recording"; transcribing/summarizing/persisting/published → blue `arrow.triangle.2.circlepath` "Transcribing"/etc; verified/retention_expired → green `checkmark.circle.fill` "Verified"/"Audio deleted"; awaiting_attribution/awaiting_verification → yellow `hand.point.up.left.fill` "Awaiting your input"/"Awaiting your review"; *_failed transient → orange `arrow.clockwise.circle` "Retry needed"; *_failed permanent → red outlined `exclamationmark.triangle.fill` "Failed"; silent/discarded → gray `circle.dashed`/`trash` "Silent"/"Discarded"; published_partial → yellow + secondary tint `hand.point.up.left` + `exclamationmark` "Published, needs review"
 **And** every chip carries color + glyph + label per NFR-A3 + UX-DR10
 **And** `accessibilityLabel` per variant matches the user-facing label string
 
@@ -2698,7 +2698,7 @@ So that every meeting is legible at a glance and the user can drill into any row
 **Given** `MeetingListView`
 **When** I render it
 **Then** the view is a `LazyVStack` of `MeetingRowView` cells, observing the `meetings` table via `GRDB.ValueObservation` (in-process per AR-DATA-3) AND a file-watch on `db.sqlite3-wal` via `DispatchSource.makeFileSystemObjectSource` for cross-process changes (subprocess writes from Stories 1.5/4.x)
-**And** sort priority per UX-DR3: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing | reviewing_diarization | summarizing > published > verified > retention_expired > silent | discarded`, then by `capture_started_at desc`
+**And** sort priority per UX-DR3: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing | reviewing_diarization | summarizing | persisting > published > verified > retention_expired > silent | discarded`, then by `capture_started_at desc`
 
 **Given** `MeetingRowView` in collapsed state
 **When** I render it
@@ -2935,7 +2935,7 @@ So that I can manually delete a captured-but-unprocessed meeting (e.g., the sile
 
 **Acceptance Criteria:**
 
-**Given** a meeting in any pre-publish state (`captured`, `transcribing`, `awaiting_attribution`, `summarizing`)
+**Given** a meeting in any pre-publish state (`captured`, `transcribing`, `awaiting_attribution`, `summarizing`, `persisting`)
 **When** the user clicks `[Discard]` in the operations console
 **Then** the button transforms in-place to `[Confirm: Discard ›]` with explanatory micro-copy per UX-DR56: *"Removes cached audio + state. Vault notes (if any) are NOT touched."*
 **And** second click commits; click-elsewhere or Esc cancels per UX-DR56

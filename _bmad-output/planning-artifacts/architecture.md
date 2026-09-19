@@ -376,16 +376,18 @@ This boundary keeps memory budgets enforceable (heavy stages die when done), kee
 
 #### Decision 1.2: Pipeline state machine
 
-Canonical state names persisted as strings in SQLite (grep-friendly, version-stable across schema migrations). Active "in-progress" states use the present-participle form (`transcribing`, `summarizing`); these states are also the canonical reconciliation signal for crash recovery (see two-transaction pattern below).
+Canonical state names persisted as strings in SQLite (grep-friendly, version-stable across schema migrations). Active "in-progress" states use the present-participle form (`transcribing`, `summarizing`, `persisting`); these states are also the canonical reconciliation signal for crash recovery (see two-transaction pattern below).
 
 **Linear happy path:**
 ```
 recording → captured → transcribing → reviewing_diarization → awaiting_attribution
-  → attributing → summarizing → published → awaiting_verification
+  → attributing → summarizing → persisting → published → awaiting_verification
   → verified → retention_expired
 ```
 
 (`transcribing` covers the combined transcribe+diarize subprocess from Decision 1.1 — they share a WhisperKit model load and run in one subprocess; one state name reflects one subprocess.)
+
+`persisting` means "summary written, persist pending or in flight." The summarize stage runs under `summarizing` and completes into `persisting`; the persist stage then runs under `persisting` and completes into `published`. Persist runs in-process (AR-PIPE-1), so nothing dispatches it as a subprocess. The separate state keeps a finished summarize from being read as a stuck one: the 720s `summarizing` stale sweep cannot flag it, and crash recovery cannot re-dispatch a paid summarize for a summary already on disk. It also keeps a persist crash from being read as a summarize crash.
 
 **`reviewing_diarization` (UX spec Step 10 lock-in, MVP, flag-controlled):** an AI sub-stage that runs the `DiarizationReviewerStrategy` (Decision Group 5) over `transcript.json` + `diarization.json` and writes `diarization_suggestions.json` to the cache-dir. Spawned as its own short-lived subprocess (per Decision 5.3) immediately after the WhisperKit subprocess terminates — sequencing is "WhisperKit subprocess exits → memory freed → AI reviewer subprocess starts → AI reviewer subprocess exits → state advances to `awaiting_attribution`." When `diarization_review.enabled = false` (MVP default per Path C), the state is still entered but passes through in <100ms (no Claude call; an empty stub `diarization_suggestions.json` is written). Failure is non-blocking: a malformed Claude response or network unreachability transitions through the state with an empty suggestions file and a `stage_events.failed` row tagged `category: 'benign_terminal'`-equivalent at the stage level (the meeting still advances to `awaiting_attribution`; the Attribution sheet renders without AI hints). The wall-clock stale budget is 90s (Decision 4.2 lock-in).
 
@@ -407,12 +409,12 @@ recording → captured → transcribing → reviewing_diarization → awaiting_a
 
 Each stage execution writes SQLite in two small transactions:
 
-1. **Txn A (start):** `INSERT INTO stage_events(stage=X, event='started', occurred_at=now)` AND `UPDATE meetings SET state='<active state>'` (e.g. `transcribing`, `summarizing`). Single transaction.
+1. **Txn A (start):** `INSERT INTO stage_events(stage=X, event='started', occurred_at=now)` AND `UPDATE meetings SET state='<active state>'` (e.g. `transcribing`, `summarizing`, `persisting`). Single transaction.
 2. **Txn B (end):** `INSERT INTO stage_events(stage=X, event='completed' | 'failed', occurred_at=now, duration_ms, error_message)` AND `UPDATE meetings SET state='<target state>'`. Single transaction.
 
 If a subprocess crashes between Txn A and Txn B, the database state is unambiguous: `meetings.state` is stuck in an active "_ing" form, and the most recent `stage_events` row for that meeting has `event='started'` with no matching `completed` or `failed`. The active state itself IS the reconciliation signal — no separate sweep table is needed.
 
-**Crash recovery (NFR-R6, FR62):** on launch (GUI or CLI), the Orchestrator runs `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','published')` (the active states) and re-dispatches the corresponding stage. NFR-R5 idempotency means the second run overwrites the cache artifact and Txn B commits cleanly. Orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail (consistent with the append-only nature of the events log).
+**Crash recovery (NFR-R6, FR62):** on launch (GUI or CLI), the Orchestrator runs `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','persisting','published')` (the active states) and re-dispatches the corresponding stage. States whose stage has no subprocess (`attributing` is user-paced; `persisting` and `published` run in-process per AR-PIPE-1) are logged and not re-dispatched. The stale-detection sweep moves an orphaned `persisting` meeting to `persist_failed`, which `auricle run <id>` resumes. NFR-R5 idempotency means the second run overwrites the cache artifact and Txn B commits cleanly. Orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail (consistent with the append-only nature of the events log).
 
 **`auricle pending` (FR15) gets live visibility for free:** a single `SELECT * FROM meetings WHERE state NOT IN ('verified','discarded','retention_expired',<all *_failed states>)` returns every in-flight meeting including those currently being processed.
 
@@ -1061,6 +1063,7 @@ The retry-policy table above defines retry budgets *within* a stage. A separate,
 | `reviewing_diarization` | **90s fixed** (per-stage override; not 2× typical Haiku response) | Treated as benign timeout, NOT failure: an empty `diarization_suggestions.json` stub is written and the meeting advances to `awaiting_attribution`. A `stage_events.failed` row is recorded with `error_class='ai_reviewer_timeout'` for telemetry. The Attribution sheet renders without AI hints (acoustic warnings only, per UX spec Step 10 "AI review behavior — non-blocking"). Budget rationale: long-tail Anthropic latency (network stall, 503) drives a conservative ceiling; this is the first stage to use a per-stage override (the table previously assumed 2× of the inner-stage retry budget for every stage). |
 | `attributing` | None — user-paced; no auto-failure | n/a |
 | `summarizing` | 2 × NFR-P5 summarize budget (≈ 12 min — covers the 5-min retry budget × 2) | `summarization_failed` (transient — queues for resume) |
+| `persisting` (summary written, persist pending or in flight) | **60s fixed** (per-stage override; persist writes one note file, NFR-P8 budget 500 ms, so 60s is 120× the healthy case) | `persist_failed` (transient — `auricle run <id>` resumes) |
 | `published` (waiting for notify) | 30s | `notify` retry path; if still stuck, log warn and proceed to `awaiting_verification` (notify failure is non-blocking per below) |
 
 **Implementation:** the `Orchestrator` runs a periodic stale-detection sweep (every 10s while the GUI is foreground, every 60s when backgrounded). For each meeting in an active "_ing" state, it computes `now - meetings.updated_at` and compares against the budget for that state. On exceedance, it calls `StageRunner.synthesizeFailure(meetingID:reason: .staleActiveState(budget:))` which writes a `stage_events` row with `event='failed'`, `error_class='stale_active_state'`, and transitions the meeting to the corresponding `*_failed` state. The synthesized transition is just like a normal failure for downstream UX (chip flips to amber, banner surfaces, `auricle list` re-sorts).
@@ -1294,7 +1297,7 @@ Group 4 was nearly silent on how failure states are shown to the user; this deci
 | **Inline "Retry now" button** per failed-state row | Meeting in any transient `*_failed` state | Triggers `auricle run <id>` equivalent; streams progress |
 | **On-launch banner** | App launch when any `awaiting_verification` > 24h OR any `*_failed` exists | Non-modal banner with count + click-through to highlighted meetings |
 | **`auricle doctor`** (per Decision 4.4) | On-demand | Includes failure / pending counts in the summary |
-| **`auricle list` default sort** | On-demand | Non-terminal-stale meetings at top with state annotation. UI sort priority (UX spec Step 9): `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing|reviewing_diarization|summarizing > published > verified > retention_expired > silent|discarded`, then by `capture_started_at desc`. |
+| **`auricle list` default sort** | On-demand | Non-terminal-stale meetings at top with state annotation. UI sort priority (UX spec Step 9): `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing|reviewing_diarization|summarizing|persisting > published > verified > retention_expired > silent|discarded`, then by `capture_started_at desc`. |
 | **Trust-calibration footer in Attribution sheet** (UX spec Step 10 Round-2) | Sheet open, `diarization_review.enabled = true`, telemetry has data | Subtle ambient line: "🤖 Reviewed N segments, flagged M · Accept rate: X/Y this week". Reads from `telemetry.diarization_suggestions_*` columns. Hidden when AI flag is off or no data. |
 | **Rolling 30-day cost widget** (UX spec Step 10 Round-2 Mary) | Always (small footer line beneath meeting list, in `RollingCostFooterView.swift`) | Aggregate API cost over rolling 30 days, broken down by stage (`summarize`, `reviewing_diarization`). Catches Opus drift, model-swap surprises, runaway summary-retry costs. **Aggregation contract:** view model issues two sibling queries against `telemetry` joined to `meetings` on `meeting_id`, filtered by `meetings.created_at > datetime('now', '-30 days')` (SQLite UTC-aware) — `SELECT SUM(cost_usd) FROM telemetry t JOIN meetings m ON t.meeting_id=m.id WHERE m.created_at > datetime('now','-30 days')` for summarize spend; `SELECT SUM(diarization_review_cost_usd), summarization_model || '|' || diarization_review_model AS combo FROM telemetry t JOIN meetings m ON t.meeting_id=m.id WHERE m.created_at > datetime('now','-30 days') GROUP BY combo` for the reviewer column with model-swap visibility. **Empty-state rendering:** if both sums are NULL or zero, footer reads *"$0.00 spent in last 30 days"* (NOT hidden — silence is a signal). **Refresh:** view-model recomputes on `meetings.updated_at` change via `GRDB.ValueObservation` (in-process, in-GUI; this is the one file-watch path that legitimately uses ValueObservation since it's GUI-process-local read-only telemetry). **Model-swap surprise display:** if more than one distinct `combo` value appears in the window, footer surfaces a "→" delimiter showing the most recent two (e.g. *"Last 30d: $14.20 — opus-4-7+haiku-4-5 → opus-5-0+haiku-4-5"*). |
 | **Stale-active-state synthesized failure** (Round-2 lock-in) | Active "_ing" state held longer than the per-stage budget (per Decision 4.2 wall-clock budgets table) | `Orchestrator` periodic sweep calls `StageRunner.synthesizeFailure(...)` → `stage_events.failed` row written, meeting transitions to `*_failed`, chip flips blue → amber, on-launch banner picks it up. For `reviewing_diarization` specifically, the "synthesis" is the benign-timeout pass-through to `awaiting_attribution` rather than a `*_failed` transition. **This is the load-bearing fix for the silent-spinner UX failure mode** — the user never sees an "in-flight" chip lying about a dead subprocess for longer than its budget. |
@@ -2826,10 +2829,11 @@ USER: clicks Stop (or `auricle stop`)
     GoogleCalendarSource → calendar.json (if reachable)
     SummarizerOrchestrator(primary: ClaudeSubstring)  # no fallback (Decision 3.6)
     Validator → summary.json
-    StateStore: 'summarizing' → 'published' (after persist)
+    StateStore: 'summarizing' → 'persisting'
   ↓
 [GUI process]
   Persist/PersistStage
+  StateStore: 'persisting' → 'published'
   FrontmatterRenderer → markdown
   VaultWriter → atomic write to <vault>/<filename>.md
   Notifications/Notifier → fires UNUserNotification

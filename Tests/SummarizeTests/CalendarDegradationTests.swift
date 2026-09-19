@@ -83,7 +83,7 @@ private func expectDegradedRun(
         Issue.record("expected .completed outcome, got \(outcome)")
         return
     }
-    #expect(targetState == .summarizing)
+    #expect(targetState == .persisting)
     if let source {
         #expect(await source.authorizeCount == 0)
     }
@@ -173,8 +173,8 @@ private func runExpectingDegradation(_ source: StubCalendarSource?) async throws
     let row = try #require(try await fixture.store.fetchMeeting(id: fixture.meetingID.rawValue))
     #expect(row.title == "Weekly Sync")
     #expect(row.calendarEventID == "google:evt123")
-    #expect(row.state == "summarizing")
-    #expect(try await fixture.state() == "summarizing")
+    #expect(row.state == "persisting")
+    #expect(try await fixture.state() == "persisting")
 }
 
 @Test func aMatchedEventPublishesTheStandardNoteThatTheReaderParses() async throws {

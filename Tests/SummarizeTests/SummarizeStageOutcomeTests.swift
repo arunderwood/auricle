@@ -209,7 +209,7 @@ func anUnresolvablePromptSetFailsTheStageBeforeEitherSummarizerIsCalled(failingM
     let leftover = try AtomicWriter.temporaryURL(for: fixture.summaryURL())
     #expect(!FileManager.default.fileExists(atPath: leftover.path))
     #expect(try await fixture.events().map(\.event) == ["started", "completed", "started", "completed"])
-    #expect(try await fixture.state() == "summarizing")
+    #expect(try await fixture.state() == "persisting")
 }
 
 @Test func aFailedRunCanBeRetriedOnTheSameMeeting() async throws {
@@ -235,13 +235,13 @@ func anUnresolvablePromptSetFailsTheStageBeforeEitherSummarizerIsCalled(failingM
     }
     #expect(try fixture.readSummary().summary == "retried")
     #expect(try await fixture.events().map(\.event) == ["started", "failed", "started", "completed"])
-    #expect(try await fixture.state() == "summarizing")
+    #expect(try await fixture.state() == "persisting")
 }
 
 // MARK: - Exit codes
 
 @Test func exitCodeIsZeroForCompletedAndTwoForFailed() {
-    #expect(SummarizeStage.exitCode(for: .completed(targetState: .summarizing)) == 0)
+    #expect(SummarizeStage.exitCode(for: .completed(targetState: .persisting)) == 0)
     #expect(SummarizeStage.exitCode(for: .failed(targetState: .summarizationFailed, errorClass: "x")) == 2)
 }
 

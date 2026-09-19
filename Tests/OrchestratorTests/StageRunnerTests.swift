@@ -208,6 +208,29 @@ private struct StubWorkError: Error, Equatable {}
     #expect(failedEvent.metadataJSON?.contains("\"error_class\":\"stale_active_state\"") == true)
 }
 
+@Test func synthesizeFailureOnPersistingTransitionsToPersistFailed() async throws {
+    let store = try makeStore()
+    let id = meetingID("PRS1")
+    try await store.insertMeeting(makeMeeting(id: id, state: "persisting"))
+    let runner = makeRunner(store: store)
+    let resolvedID = try #require(MeetingID(ulid: id))
+
+    try await runner.synthesizeFailure(
+        meetingID: resolvedID,
+        stage: .persist,
+        activeState: .persisting,
+        reason: .staleActiveState(budgetSeconds: 60),
+    )
+
+    let meeting = try #require(try await store.fetchMeeting(id: id))
+    #expect(meeting.state == "persist_failed")
+
+    let events = try await store.fetchStageEvents(meetingID: id)
+    let failedEvent = try #require(events.first { $0.event == "failed" })
+    #expect(failedEvent.stage == "persist")
+    #expect(failedEvent.metadataJSON?.contains("\"error_class\":\"stale_active_state\"") == true)
+}
+
 @Test func synthesizeFailureOnAttributingThrowsSinceItHasNoBudget() async throws {
     let store = try makeStore()
     let id = meetingID("ATB2")
@@ -241,6 +264,8 @@ private struct StubWorkError: Error, Equatable {}
     let freshReview = meetingID("RVD5")
     let staleSummarizing = meetingID("SMZ4")
     let freshSummarizing = meetingID("SMZ5")
+    let stalePersisting = meetingID("PRS4")
+    let freshPersisting = meetingID("PRS5")
     let stalePublished = meetingID("PBD4")
     let freshPublished = meetingID("PBD5")
     let staleAttributing = meetingID("ATB3")
@@ -255,6 +280,8 @@ private struct StubWorkError: Error, Equatable {}
     try await seed(freshReview, state: "reviewing_diarization", secondsBeforeNow: 10)
     try await seed(staleSummarizing, state: "summarizing", secondsBeforeNow: 725)
     try await seed(freshSummarizing, state: "summarizing", secondsBeforeNow: 10)
+    try await seed(stalePersisting, state: "persisting", secondsBeforeNow: 65)
+    try await seed(freshPersisting, state: "persisting", secondsBeforeNow: 10)
     try await seed(stalePublished, state: "published", secondsBeforeNow: 35)
     try await seed(freshPublished, state: "published", secondsBeforeNow: 10)
     try await seed(staleAttributing, state: "attributing", secondsBeforeNow: 100_000)
@@ -262,7 +289,7 @@ private struct StubWorkError: Error, Equatable {}
     let transitioned = try await runner.sweepStaleActiveStates(now: fixedNow)
     let transitionedIDs = Set(transitioned.map(\.rawValue))
 
-    #expect(transitionedIDs == Set([staleTranscribing, staleReview, staleSummarizing, stalePublished]))
+    #expect(transitionedIDs == Set([staleTranscribing, staleReview, staleSummarizing, stalePersisting, stalePublished]))
 
     let transcribingMeeting = try #require(try await store.fetchMeeting(id: staleTranscribing))
     #expect(transcribingMeeting.state == "transcription_failed")
@@ -270,12 +297,15 @@ private struct StubWorkError: Error, Equatable {}
     #expect(reviewMeeting.state == "awaiting_attribution")
     let summarizingMeeting = try #require(try await store.fetchMeeting(id: staleSummarizing))
     #expect(summarizingMeeting.state == "summarization_failed")
+    let persistingMeeting = try #require(try await store.fetchMeeting(id: stalePersisting))
+    #expect(persistingMeeting.state == "persist_failed")
     let publishedMeeting = try #require(try await store.fetchMeeting(id: stalePublished))
     #expect(publishedMeeting.state == "awaiting_verification")
 
     #expect(try await store.fetchMeeting(id: freshTranscribing)?.state == "transcribing")
     #expect(try await store.fetchMeeting(id: freshReview)?.state == "reviewing_diarization")
     #expect(try await store.fetchMeeting(id: freshSummarizing)?.state == "summarizing")
+    #expect(try await store.fetchMeeting(id: freshPersisting)?.state == "persisting")
     #expect(try await store.fetchMeeting(id: freshPublished)?.state == "published")
     // `attributing` has no budget entry, so it is never swept no matter how stale.
     #expect(try await store.fetchMeeting(id: staleAttributing)?.state == "attributing")

@@ -48,7 +48,7 @@ func theCeilingFlagIsSetOnlyWhenTheCostPassesIt(ceilingUSD: Double, expectedExce
 
     #expect(SummarizeStage.exitCode(for: outcome) == 0)
     #expect(try fixture.readSummary().summary == "Kept in full.")
-    #expect(try await fixture.state() == "summarizing")
+    #expect(try await fixture.state() == "persisting")
     #expect(try await fixture.events().map(\.event) == ["started", "completed"])
     let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))
     #expect(telemetry.costUSD == 0.32)

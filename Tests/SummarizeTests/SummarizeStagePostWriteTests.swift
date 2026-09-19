@@ -30,7 +30,7 @@ import Testing
         return
     }
     #expect(try fixture.readSummary().summary == "A short summary.")
-    #expect(try await fixture.state() == "summarizing")
+    #expect(try await fixture.state() == "persisting")
     #expect(try await fixture.events().map(\.event) == ["started", "completed"])
     #expect(SummarizeStage.exitCode(for: outcome) == 0)
 }
@@ -61,7 +61,7 @@ import Testing
     #expect(try fixture.readSummary().title == "Weekly Sync")
     let row = try #require(try await fixture.store.fetchMeeting(id: fixture.meetingID.rawValue))
     #expect(row.calendarEventID == nil)
-    #expect(row.state == "summarizing")
+    #expect(row.state == "persisting")
     let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))
     #expect(telemetry.costUSD == 0.32)
 }
