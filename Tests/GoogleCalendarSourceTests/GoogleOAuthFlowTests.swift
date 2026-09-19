@@ -19,6 +19,7 @@ func deliverRedirect(
     for authorizationURL: URL,
     code: String? = "auth-code",
     state: String? = nil,
+    omitState: Bool = false,
     error: String? = nil,
 ) async throws {
     let parameters = queryItems(of: authorizationURL)
@@ -32,7 +33,9 @@ func deliverRedirect(
     if let error {
         items.append(URLQueryItem(name: "error", value: error))
     }
-    items.append(URLQueryItem(name: "state", value: state ?? parameters["state"]))
+    if !omitState {
+        items.append(URLQueryItem(name: "state", value: state ?? parameters["state"]))
+    }
     components.queryItems = items
 
     let session = URLSession(configuration: .ephemeral)
@@ -99,9 +102,13 @@ private func authorizeRecordingSecrets() async throws -> (state: String, verifie
     return (state, verifier)
 }
 
-func grantedTokenResponse(scope: String = eventsScope, refreshToken: String? = "1//new-refresh-token") -> GoogleStub.Responder {
+func grantedTokenResponse(
+    scope: String = eventsScope,
+    refreshToken: String? = "1//new-refresh-token",
+    expiresIn: Int = 3600,
+) -> GoogleStub.Responder {
     { _, _ in
-        var body: [String: Any] = ["access_token": "access-from-code", "expires_in": 3600, "scope": scope, "token_type": "Bearer"]
+        var body: [String: Any] = ["access_token": "access-from-code", "expires_in": expiresIn, "scope": scope, "token_type": "Bearer"]
         if let refreshToken {
             body["refresh_token"] = refreshToken
         }
@@ -359,7 +366,7 @@ private func waitForListenerToClose(port: Int) async {
     #expect(harness.stub.tokenRequests.isEmpty)
 }
 
-@Test func authorizeFailsWhenTheRedirectCarriesNoCode() async throws {
+@Test func authorizeFailsWhenTheRedirectCarriesAnOAuthErrorOtherThanADenial() async throws {
     let harness = try SourceHarness(
         storedRefreshToken: nil,
         openBrowser: { url in try await deliverRedirect(for: url, code: nil, error: "server_error") },
@@ -391,6 +398,19 @@ func authorizeTimesOutAndClosesTheListenerWhenNoRedirectArrives() async throws {
     #expect(harness.stub.tokenRequests.isEmpty)
     let port = try redirectPort(of: recorder.first)
     await waitForListenerToClose(port: port)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func authorizeReturnsWithoutWaitingOutAGenerousRedirectTimeout() async throws {
+    let harness = try SourceHarness(
+        storedRefreshToken: nil,
+        redirectTimeout: .seconds(3600),
+        openBrowser: { url in try await deliverRedirect(for: url) },
+        token: grantedTokenResponse(),
+    )
+    defer { harness.cleanup() }
+
+    _ = try await harness.flow.authorize()
 }
 
 @Test(.timeLimit(.minutes(1)))

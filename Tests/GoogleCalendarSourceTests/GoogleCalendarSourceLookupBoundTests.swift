@@ -59,13 +59,16 @@ func theBoundCoversTheTokenRefresh() async throws {
     #expect(harness.stub.eventRequests.isEmpty)
 }
 
-@Test func aLookupThatAnswersInsideTheBoundIsUnaffectedByIt() async throws {
+@Test(.timeLimit(.minutes(1)))
+func aLookupThatAnswersReturnsWithoutWaitingOutTheBound() async throws {
     let harness = try SourceHarness(
+        lookupTimeout: .seconds(3600),
         events: { _, _ in eventList([eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5))]) },
     )
     defer { harness.cleanup() }
 
     #expect(try await harness.source.fetchActiveEvent(at: testInstant)?.id == "google:evt")
+    #expect(try await harness.source.upcomingEvents(in: 3600).isEmpty)
 }
 
 @Test(.timeLimit(.minutes(2)))

@@ -55,6 +55,21 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(query["fields"] == "items(id,status,summary,start(dateTime),end(dateTime),attendees(email,displayName,self))")
 }
 
+@Test func fetchActiveEventAsksForTheInstantItIsGivenNotTheCurrentTime() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        eventList([eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5))])
+    })
+    defer { harness.cleanup() }
+    harness.clock.advance(by: 86400)
+
+    let event = try await harness.source.fetchActiveEvent(at: testInstant)
+
+    let query = try #require(harness.stub.eventRequests.first).query
+    #expect(query["timeMin"] == iso8601(testInstant.addingTimeInterval(-1)))
+    #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(1)))
+    #expect(event?.id == "google:evt")
+}
+
 @Test func fetchActiveEventRefreshesUsingTheStoredTokenAndTheClientCredentials() async throws {
     let harness = try SourceHarness(
         client: GoogleOAuthClient(clientID: "client-x", clientSecret: "secret-y"),

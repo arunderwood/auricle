@@ -21,6 +21,34 @@ import Testing
     #expect(harness.stub.tokenRequests.isEmpty)
 }
 
+@Test func theFlowReportsARedirectWithoutAStateAsAnAuthorizationFailure() async throws {
+    let harness = try SourceHarness(
+        storedRefreshToken: nil,
+        openBrowser: { url in try await deliverRedirect(for: url, omitState: true) },
+        token: grantedTokenResponse(),
+    )
+    defer { harness.cleanup() }
+
+    await #expect(throws: GoogleCalendarFailure.authorizationFailed(reason: "the authorization response did not match this request")) {
+        try await harness.flow.authorize()
+    }
+    #expect(harness.stub.tokenRequests.isEmpty)
+}
+
+@Test func theFlowReportsARedirectWithAnEmptyCodeAsAnAuthorizationFailure() async throws {
+    let harness = try SourceHarness(
+        storedRefreshToken: nil,
+        openBrowser: { url in try await deliverRedirect(for: url, code: "") },
+        token: grantedTokenResponse(),
+    )
+    defer { harness.cleanup() }
+
+    await #expect(throws: GoogleCalendarFailure.authorizationFailed(reason: "the authorization response carried no code")) {
+        try await harness.flow.authorize()
+    }
+    #expect(harness.stub.tokenRequests.isEmpty)
+}
+
 @Test func theFlowReportsADeniedConsentAsAnAuthorizationFailure() async throws {
     let harness = try SourceHarness(
         storedRefreshToken: nil,
