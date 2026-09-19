@@ -22,15 +22,18 @@ actor StageStubStrategy: SummarizerStrategy {
     private let onSummarize: (@Sendable () async throws -> Void)?
     private(set) var callCount = 0
     private(set) var lastConfig: SummarizerConfig?
+    /// The glossary of the most recent call: what the stage decided to hand the summarizer.
+    private(set) var receivedGlossary: Glossary?
 
     init(_ result: Result<SummaryWithGrounding, any Error>, onSummarize: (@Sendable () async throws -> Void)? = nil) {
         self.result = result
         self.onSummarize = onSummarize
     }
 
-    func summarize(transcript _: CanonicalTranscript, glossary _: Glossary, config: SummarizerConfig) async throws -> SummaryWithGrounding {
+    func summarize(transcript _: CanonicalTranscript, glossary: Glossary, config: SummarizerConfig) async throws -> SummaryWithGrounding {
         callCount += 1
         lastConfig = config
+        receivedGlossary = glossary
         try await onSummarize?()
         return try result.get()
     }
@@ -168,6 +171,10 @@ struct StageFixture {
         )
     }
 
+    func glossaryURL() throws -> URL {
+        try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("glossary.json")
+    }
+
     func summaryURL() throws -> URL {
         try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("summary.json")
     }
@@ -181,6 +188,7 @@ struct StageFixture {
     func run(
         primary: StageStubStrategy,
         fallback: StageStubStrategy? = nil,
+        glossary: Glossary = Glossary(),
         config: SummarizerConfig = SummarizerConfig(),
         calendarSource: (any CalendarSource)? = nil,
         promptSetHash: (@Sendable (SummarizationMode) throws -> String)? = nil,
@@ -196,7 +204,7 @@ struct StageFixture {
                 stageRunner: runner,
                 telemetryRecorder: recorder,
                 orchestrator: orchestrator,
-                glossary: Glossary(),
+                glossary: glossary,
                 config: config,
                 timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
                 calendarSource: calendarSource,
@@ -209,7 +217,7 @@ struct StageFixture {
             stageRunner: runner,
             telemetryRecorder: recorder,
             orchestrator: orchestrator,
-            glossary: Glossary(),
+            glossary: glossary,
             config: config,
             timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
             calendarSource: calendarSource,
