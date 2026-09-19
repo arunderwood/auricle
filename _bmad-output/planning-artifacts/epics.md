@@ -1846,6 +1846,7 @@ So that the rest of the pipeline can consume canonical transcript text without e
 **When** the transcript is written
 **Then** the text is NFC-normalized Unicode, LF line endings, no leading/trailing whitespace per line, speaker labels prefixed `<Speaker_N>: ` at utterance start per AR-SUM-4
 **And** the file carries `schema_version: 1` per AR-PIPE-4
+**And** each utterance's `[start, end)` range includes its own leading `<Speaker_N>: ` prefix, so a range slice reads `Speaker_1: text`; the summarize stage strips that one prefix when it renders an utterance under its speaker label, and a range that omits the prefix is rendered unchanged
 
 **Given** the stage execution
 **When** transcription succeeds

@@ -148,3 +148,35 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-strategy-comparison-rig-scaffold.md`
   summary: Spot-check the hand scores (recall, false-keeps, quote quality) in `Tests/fixtures/strategy-comparison-results.md`.
   evidence: The comparison ran and its outcome is recorded, so the entry "Score recall, precision (false-keeps) and quote quality per transcript by hand" is answered in substance. The results file says the maintainer has not spot-checked the recall and false-keep scores. The default flip rests on the computed metrics (Citations returned no items on 5 of 6 transcripts), not on the hand scores (Epic 3 retro SR-6).
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-9-eval-harness-frozen-transcripts-regression-tests.md`, "Tie the eval harness's default-wiring arm to the real composition root"
+  resolution: `Sources/ClaudeSummarizer/ShippedSummarization.swift` holds the shipped orchestrator. `InternalStageWorker` and the eval harness both build it, and a test fails if the definition gains a fallback. `SummarizerConfig()` is still built separately in the worker and the harness. Nothing checks that the worker itself calls the factory, because `App/` has no test target.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrategy.md`, "Pass `--vault-path` (and the meetings subdirectory) to the summarize worker"
+  resolution: `SubprocessDispatcher.makeProcess` appends `--vault-path` from `Core/Config` (`vault_path` in `~/.auricle/config.toml`). `meetings_subdir` is read by `Config` but not passed, because the summarize worker does not use it. No default `vault_path` exists, so an unset key still gives an empty glossary.
+
+- closes: `_bmad-output/implementation-artifacts/1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config.md`, "Implement `Core/Config.swift`"
+  resolution: `Sources/Core/Config.swift` loads `~/.auricle/config.toml` with an injectable location. It covers `vault_path`, `meetings_subdir` and the Google Calendar client keys only. The other FR58 keys are not read yet, and symlink normalization is not done.
+
+- closes: `_bmad-output/implementation-artifacts/1-2-core-primitives-atomicwriter-ids-canonicaltranscript-dialects-config.md`, "Implement `CanonicalTranscript`"
+  resolution: `Sources/Core/CanonicalTranscript.swift` landed with Story 3.1.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
+  summary: Confirm that the real transcribe stage writes utterance ranges that include the `Speaker_N: ` prefix.
+  evidence: The earlier entry "Whether an utterance's `[start,end)` range includes the `<Speaker_N>: ` prefix is undefined" is decided: ranges include the prefix (doc comment on `CanonicalTranscript.Utterance.start`, and the Story 4.1 acceptance criterion in `epics.md`). `SummaryArtifactMapper` strips one leading label and leaves a range without one unchanged, so a note prints each label once either way. Story 4.1 still has to write ranges that way; nothing has produced a real transcript yet.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-claudesubstringsummarizer-substringgroundingvalidator.md`
+  summary: Raise `max_tokens` or stream for `xhigh` and `max` effort.
+  evidence: `ClaudeSubstringSummarizer` sends `max_tokens` 16384. The API documentation recommends about 64k at `xhigh` and `max`, so those levels can end as `summarizer_response_truncated` on a long transcript. Found while mapping the effort level to the request.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
+  summary: The `StageRunner` completion write can still fail after a paid call and mark the meeting `summarization_failed`.
+  evidence: The summarize stage's own post-write bookkeeping (telemetry, meeting row) no longer fails the stage. The completion write inside `StageRunner.run` is outside the stage's control. A retry pays again. Found while fixing RV-3 of the Epic 3 retro.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-6-summarizerorchestrator-primary-fallback-wiring.md`
+  summary: A fallback outcome carries only the answering strategy's cost.
+  evidence: Already recorded against Story 3.7. Restated here because the cost-ceiling check compares the answering call's cost to the ceiling, so a failed primary call's spend is invisible to it. No fallback is wired today.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-google-calendar-source-oauth-pkce-event-matcher.md`
+  summary: Nothing signs the maintainer in to Google, so a wired calendar source stays degraded.
+  evidence: `InternalStageWorker` builds `GoogleCalendarSource.headless(...)` when `google_calendar.client_id` is set. Its browser opener throws, so an unauthorized run degrades to `needs-calendar-enrichment` instead of hanging. The only planned sign-in trigger is the Story 9.1 Settings button. Whether a Keychain prompt appears inside the headless worker (RV-4) and whether the `fields` mask and the `eventType` and `transparency` values match the real Calendar API are untested.
