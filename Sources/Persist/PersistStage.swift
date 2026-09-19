@@ -5,7 +5,7 @@ import State
 import Telemetry
 
 /// The `persist` stage entry point: composes `FrontmatterRenderer` (2.1) +
-/// `FilenameResolver` (2.2) + `VaultWriter` (2.3) into the `summarizing` →
+/// `FilenameResolver` (2.2) + `VaultWriter` (2.3) into the `persisting` →
 /// `published` transition, plus re-publish (`--reattribute`) semantics
 /// (Decision 2.3/2.4). The whole body runs inside `StageRunner.run`'s `work`
 /// closure — this type never writes `stage_events`/`meetings.state` itself.
@@ -83,7 +83,7 @@ public enum PersistStage {
 
     /// Reads `summary.json` from `cacheDirectory`, fetches `meetingID`'s row,
     /// publishes the rendered note, updates `meetings.vault_note_path`, and
-    /// returns through `stageRunner.run` so the `summarizing` →
+    /// returns through `stageRunner.run` so the `persisting` →
     /// `published`/`persist_failed` transition and its `stage_events` rows are
     /// always the two-transaction pattern's own writes, never this stage's.
     ///
