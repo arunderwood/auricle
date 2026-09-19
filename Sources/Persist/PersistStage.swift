@@ -220,9 +220,6 @@ public enum PersistStage {
             actionItems: resolved.artifact.actionItems.map { QuotedItem(text: $0.text, quote: $0.quote) },
             decisions: resolved.artifact.decisions.map { QuotedItem(text: $0.text, quote: $0.quote) },
             transcriptSegments: resolved.artifact.transcriptSegments.map { TranscriptSegment(speaker: $0.speaker, text: $0.text) },
-            audioPath: resolved.meeting.audioCachePath,
-            calendarEventID: resolved.meeting.calendarEventID,
-            retentionPolicy: resolved.meeting.retentionPolicy,
         )
     }
 

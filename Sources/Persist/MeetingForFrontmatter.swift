@@ -20,12 +20,6 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
     public let actionItems: [QuotedItem]
     public let decisions: [QuotedItem]
     public let transcriptSegments: [TranscriptSegment]
-    // Carried for callers that need them, but never rendered: cross-cutting
-    // concern #11 reserves audio/cache paths, calendar event IDs, and
-    // retention state for SQLite, not the vault.
-    public let audioPath: String?
-    public let calendarEventID: String?
-    public let retentionPolicy: String?
 
     public init(
         meetingID: MeetingID,
@@ -40,9 +34,6 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
         actionItems: [QuotedItem],
         decisions: [QuotedItem],
         transcriptSegments: [TranscriptSegment],
-        audioPath: String?,
-        calendarEventID: String?,
-        retentionPolicy: String?,
     ) {
         self.meetingID = meetingID
         self.title = title
@@ -56,9 +47,6 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
         self.actionItems = actionItems
         self.decisions = decisions
         self.transcriptSegments = transcriptSegments
-        self.audioPath = audioPath
-        self.calendarEventID = calendarEventID
-        self.retentionPolicy = retentionPolicy
     }
 }
 

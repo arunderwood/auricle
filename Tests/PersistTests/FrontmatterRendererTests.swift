@@ -32,9 +32,6 @@ func makeMeeting(
     transcriptSegments: [TranscriptSegment] = [
         TranscriptSegment(speaker: "[[Ben]]", text: "I'll take a first pass at the brief by Friday."),
     ],
-    audioPath: String? = nil,
-    calendarEventID: String? = nil,
-    retentionPolicy: String? = nil,
 ) -> MeetingForFrontmatter {
     MeetingForFrontmatter(
         meetingID: meetingID,
@@ -49,9 +46,6 @@ func makeMeeting(
         actionItems: actionItems,
         decisions: decisions,
         transcriptSegments: transcriptSegments,
-        audioPath: audioPath,
-        calendarEventID: calendarEventID,
-        retentionPolicy: retentionPolicy,
     )
 }
 
@@ -306,22 +300,6 @@ func makeMeeting(
 
     """
     #expect(FrontmatterRenderer.render(meeting: meeting) == expected)
-}
-
-@Test func operationalFieldsNeverAppearInTheRenderedOutput() {
-    let meeting = makeMeeting(
-        audioPath: "/Users/someone/Library/Caches/com.auricle.app/01HJK3PQXY7N8M3FT4QHNWVZRP/audio.wav",
-        calendarEventID: "google:abc123",
-        retentionPolicy: "custom:30",
-    )
-    let rendered = FrontmatterRenderer.render(meeting: meeting)
-
-    #expect(!rendered.contains("audio.wav"))
-    #expect(!rendered.contains("google:abc123"))
-    #expect(!rendered.contains("custom:30"))
-    #expect(!rendered.contains("audioPath"))
-    #expect(!rendered.contains("calendarEventID"))
-    #expect(!rendered.contains("retentionPolicy"))
 }
 
 @Test func everyVariantAndTheCombinationPassMarkdownDiscipline() {
