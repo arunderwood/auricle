@@ -79,11 +79,7 @@ struct InternalStageWorker: AsyncParsableCommand {
             throw ExitCode(2)
         }
 
-        // Substring only, no fallback: Decision 3.6's flip rule chose it (see
-        // Tests/fixtures/smoke-test-results.md). Citations returned no real
-        // citation objects on any transcript that had items, so a fallback to
-        // it would add a paid call that fails.
-        let orchestrator = SummarizerOrchestrator(primary: ClaudeSubstringSummarizer())
+        let orchestrator = ShippedSummarization.orchestrator()
 
         let outcome: StageRunner.StageOutcome
         do {

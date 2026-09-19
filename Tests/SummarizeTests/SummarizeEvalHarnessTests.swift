@@ -19,24 +19,53 @@ struct SummarizeEvalHarness {
     }
 
     @Test(arguments: EvalFixtures.names)
-    func defaultWiringKeepsEveryExpectedItem(name: String) async throws {
+    func shippedCompositionKeepsEveryExpectedItemAndDropsEveryDecoy(name: String) async throws {
         let fixture = try EvalFixtures.load(name)
         let decoys = try EvalStubResponses.decoys(for: fixture.transcript)
-        let citationsStub = try EvalStub(response: EvalStubResponses.citations(for: fixture))
-        let substringStub = try EvalStub(response: EvalStubResponses.substring(for: fixture, decoys: decoys))
-        defer {
-            citationsStub.release()
-            substringStub.release()
-        }
+        let stub = try EvalStub(response: EvalStubResponses.substring(for: fixture, decoys: decoys))
+        defer { stub.release() }
 
-        let orchestrator = EvalDefaultWiring.orchestrator(citations: citationsStub.client, substring: substringStub.client)
-        let outcome = try await orchestrator.summarize(transcript: fixture.transcript, glossary: Glossary(), config: SummarizerConfig())
+        let outcome = try await summarizeAsShipped(fixture.transcript, client: stub.client)
 
         #expect(!outcome.fallbackTriggered)
         #expect(outcome.primaryError == nil)
-        #expect(outcome.summary.groundingMethod == EvalDefaultWiring.primaryMethod)
+        #expect(outcome.summary.groundingMethod == .substring)
+        #expect(outcome.summary.quoteValidationDropCount == decoys.count)
+        #expect(stub.requestCount == 1)
 
         let score = try scoreRun(fixture, summary: outcome.summary, decoys: decoys)
+        #expect(score.keptCount == score.expectedCount)
+        #expect(score.survivedCount == score.expectedCount)
+    }
+
+    /// A malformed answer is a fallback-eligible failure. With no fallback
+    /// it must surface after one call; a second call means the composition
+    /// grew a fallback the harness's other runs would never exercise.
+    @Test func shippedCompositionSurfacesAFallbackEligibleFailureAfterOneCall() async throws {
+        let fixture = try EvalFixtures.load(#require(EvalFixtures.names.first))
+        let stub = EvalStub(response: Data("not a messages response".utf8))
+        defer { stub.release() }
+
+        let error = await #expect(throws: SummarizerError.self) {
+            try await summarizeAsShipped(fixture.transcript, client: stub.client)
+        }
+
+        #expect(error?.isFallbackEligible == true)
+        #expect(stub.requestCount == 1)
+    }
+
+    @Test(arguments: EvalFixtures.names)
+    func citationsStrategyKeepsEveryExpectedItem(name: String) async throws {
+        let fixture = try EvalFixtures.load(name)
+        let stub = try EvalStub(response: EvalStubResponses.citations(for: fixture))
+        defer { stub.release() }
+
+        let summary = try await ClaudeCitationsSummarizer(httpClient: stub.client)
+            .summarize(transcript: fixture.transcript, glossary: Glossary(), config: SummarizerConfig())
+
+        #expect(summary.groundingMethod == .citations)
+
+        let score = try scoreRun(fixture, summary: summary, decoys: [])
         #expect(score.keptCount == score.expectedCount)
         #expect(score.survivedCount == score.expectedCount)
     }
@@ -60,20 +89,16 @@ struct SummarizeEvalHarness {
     }
 }
 
-// MARK: - Default wiring
+// MARK: - Shipped wiring
 
-/// The primary/fallback pairing the harness treats as the default. Mirrors the
-/// provisional wiring in `InternalStageWorker`; when the default strategy is
-/// locked, this enum is the one place the harness changes.
-private enum EvalDefaultWiring {
-    static let primaryMethod = GroundingMethod.citations
-
-    static func orchestrator(citations: AnthropicHTTPClient, substring: AnthropicHTTPClient) -> SummarizerOrchestrator {
-        SummarizerOrchestrator(
-            primary: ClaudeCitationsSummarizer(httpClient: citations),
-            fallback: ClaudeSubstringSummarizer(httpClient: substring),
-        )
-    }
+/// The only way the harness builds an orchestrator: `ShippedSummarization` is
+/// what `InternalStageWorker` runs, so every result here describes what ships.
+private func summarizeAsShipped(
+    _ transcript: CanonicalTranscript,
+    client: AnthropicHTTPClient,
+) async throws -> SummarizerOrchestrator.Outcome {
+    try await ShippedSummarization.orchestrator(httpClient: client)
+        .summarize(transcript: transcript, glossary: Glossary(), config: SummarizerConfig())
 }
 
 // MARK: - Run pipeline
