@@ -224,3 +224,41 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - closes: `_bmad-output/implementation-artifacts/spec-2-4-persist-stage-entry-point-compose-renderer-writer-re-publish-semantics.md`, "A vault write that `meetings.vault_note_path` does not record makes the next publish write"
   resolution: `PersistStage.run` no longer takes `isRepublish`. A run is a re-publish exactly when `vaultNotePath` names an existing file. Output identical to a file already in the vault is reused, not duplicated. `republish` writes nothing when the stored note already holds the rendering, `nextRerunTarget` reuses a re-run candidate with the same bytes, and `VaultWriter.write` returns an existing candidate with the same bytes instead of taking the next ordinal (`Sources/Persist/PersistStage.swift`, `Sources/Persist/VaultWriter.swift`). A note the user edited never matches, so it gets a re-run sibling. Known limit: a retry on a later day names a new re-run date, so it does not reuse an earlier day's orphaned re-run.
+
+- closes: `_bmad-output/implementation-artifacts/spec-2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variants.md`, "Emoji and other code points above U+FFFF in a title are written as `\U0001F389`-style escapes"
+  resolution: Accepted as a libyaml limit, and now tested. `aTitleWithCodePointsAboveTheBasicMultilingualPlaneRoundTripsAsAYAMLValue` (`Tests/PersistTests/FrontmatterRoundTripTests.swift`) renders `🎉 Launch é 北京` and asserts the parsed YAML value equals the input. The raw file text differs from the input and the value does not. The renderer is unchanged.
+
+- closes: `_bmad-output/implementation-artifacts/spec-2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variants.md`, "`FrontmatterRenderer` has no input for the `auricle/needs-summary` conditional tag"
+  resolution: The ownership and behavior questions are answered. Story 4.7 owns the renderer change (`epics.md`, the `published_partial` criterion), and a `published_partial` note omits the Action Items and Decisions sections entirely (`architecture.md`, Decision 4.1). The renderer input itself is not built yet and is Story 4.7's work.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: Nothing specifies where persist gets its input for a `published_partial` note when summarize failed and no `summary.json` exists.
+  evidence: `PersistStage.readSummaryArtifact` throws `summaryArtifactUnreadable` when `summary.json` is missing (`Sources/Persist/PersistStage.swift`). A `published_partial` note exists exactly when summarize produced no usable output (`architecture.md`, Decision 4.1), so the stage cannot publish it as built. Two options: summarize writes an empty stub artifact on failure, as the reviewing stage does for a timeout, or persist renders from the transcript and attribution when the artifact is absent. Story 4.7 must settle this before it is built. Severity medium.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: A re-run ignores the configured `vault_path` and `meetings_subdir`, and a note the user renamed or moved in Obsidian falls back to a fresh publish with no `supersedes`.
+  evidence: The re-publish path takes its directory from the stored `vault_note_path` and writes through `VaultWriter.writeExact`, which skips vault validation (`Sources/Persist/PersistStage.swift` `republish`, `Sources/Persist/VaultWriter.swift`). A `vault_path` or `meetings_subdir` change after the first publish sends re-runs to the old folder. A stored path that no longer exists is treated as a deleted original, so a renamed note gets a second note with the same `meeting_id` and no lineage link. Finding by `meeting_id` with `FrontmatterReader` is one option. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: The note date and the `meeting-at-<HHMM>` slug use the time zone at persist time, and no capture-time zone is stored.
+  evidence: `PersistStage.localDateAndTime` formats the capture instant in the injected zone, which defaults to `TimeZone.current` (`Sources/Persist/PersistStage.swift`). `MeetingForFilename` and `epics.md` (Story 2.2) say "local time at capture". No column in `Sources/State` stores a zone, so a capture before travel, or a retried persist in another zone, can shift the date by a day and disagree with the summarizer's `Meeting at ... <zone>` title. The zone is now injectable, so a stored zone can be passed in without a signature change. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: Task cancellation inside persist is recorded as a terminal `persist_failed` instead of leaving the meeting for crash recovery.
+  evidence: The blanket `catch` in `PersistStage.run` also catches `CancellationError` and returns `.failed(targetState: .persistFailed, errorClass: "persist_unexpected_error")`. `StageRunner.run` leaves a meeting in its active state only when `work` throws. This follows Story 2.4's rule that nothing propagates past `work`. Decide once Story 4.7's SIGINT handling exists. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: Small `FilenameResolver` edge cases.
+  evidence: `truncate` drops the last word that fits when the character after the cap is a hyphen. `attendeeSlug` gives `with-ben-and-ben` for a duplicate attendee, matches `selfWikilink` by exact case although Obsidian links are case-insensitive, and normalizes alias and path syntax (`[[Ben Smith|Ben]]`) as plain text. The `meeting-at-` slug interpolates `captureTime24h` without normalizing it, which is safe only because its one caller formats it numerically (`Sources/Persist/FilenameResolver.swift`). Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: `FrontmatterReader` rejects input an editor can produce.
+  evidence: A note with no frontmatter throws `malformedFrontmatter`, not `notAnAuricleNote` (`extractFrontmatterYAML`), and a non-integer `schema_version` throws `notAnAuricleNote` (`read`). A UTF-8 BOM or trailing space on a fence line fails. An empty `attendees:` or `supersedes:` key fails or decodes as `""` (`decodeAttendees`, `decodeSupersedes`). The last two are unverified: whether Obsidian writes an empty key was not checked. `epics.md` says a missing `schema_version` is "not an auricle note". Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: `FrontmatterRenderer.render` calls `fatalError` if Yams fails, while `PersistStage` refuses `fatalError` on a comparable path.
+  evidence: `Sources/Persist/FrontmatterRenderer.swift` calls `fatalError` for a failure the code argues cannot happen. `PersistStage.encodeMetadataJSON` falls back to a literal instead and says why. No input that reaches the renderer is known to make Yams fail. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
+  summary: `SummaryArtifact` has no `meeting_id` or version field and does not declare `Sendable`, and the schema version is written in three places.
+  evidence: `Sources/Core/SummaryArtifact.swift` decodes whatever `summary.json` holds, with no check that it belongs to the meeting. The frontmatter schema version is `PersistStage.frontmatterSchemaVersion`, the renderer's caller-supplied `schemaVersion`, and `FrontmatterReader`'s two bounds, so a writer bump without a reader bump would make the app's own reader reject its notes as too new. One shared constant, or a test that reads back a note rendered with `PersistStage`'s version, would prevent it. Severity low.
