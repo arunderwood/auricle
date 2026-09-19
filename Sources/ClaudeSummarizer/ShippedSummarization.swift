@@ -5,7 +5,7 @@ import Summarize
 /// pass on a composition nobody runs.
 public enum ShippedSummarization {
     /// Substring only, no fallback: Decision 3.6's flip rule chose it (see
-    /// Tests/fixtures/smoke-test-results.md). Citations returned no real
+    /// Tests/fixtures/strategy-comparison-results.md). Citations returned no real
     /// citation objects on any transcript that had items, so a fallback to it
     /// would add a paid call that fails.
     ///
