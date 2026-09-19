@@ -169,4 +169,33 @@ struct StrategyComparisonReportTests {
         let contents = try FileManager.default.contentsOfDirectory(atPath: output.path).sorted()
         #expect(contents == ["detail.md", "results.md"])
     }
+
+    @Test func writerCreatesBothReportsOwnerOnly() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("strategy-comparison-writer-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let paths = try StrategyComparisonReportWriter.write(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5", to: root)
+
+        for url in [paths.metrics, paths.detail] {
+            let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+            #expect(mode == 0o600, "\(url.lastPathComponent) mode was \(String(describing: mode))")
+        }
+    }
+
+    @Test func writerTightensReportsLeftWorldReadableByAnEarlierRun() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("strategy-comparison-writer-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        for name in [StrategyComparisonReportWriter.metricsFileName, StrategyComparisonReportWriter.detailFileName] {
+            let url = root.appendingPathComponent(name)
+            try AtomicWriter.write(Data("old".utf8), to: url, permissions: 0o644)
+        }
+
+        let paths = try StrategyComparisonReportWriter.write(rows: makeRows(), generatedAt: now, modelIdentifier: "claude-opus-5", to: root)
+
+        for url in [paths.metrics, paths.detail] {
+            let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+            #expect(mode == 0o600, "\(url.lastPathComponent) mode was \(String(describing: mode))")
+        }
+    }
 }
