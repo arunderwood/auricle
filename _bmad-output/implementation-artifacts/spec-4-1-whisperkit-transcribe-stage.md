@@ -2,7 +2,7 @@
 title: 'Story 4.1: WhisperKit Transcribe Stage'
 type: 'feature'
 created: '2026-09-18'
-status: 'blocked'
+status: 'done'
 baseline_revision: 'd2da1e366f8418d5e4db714b6ecd21bcb868ca85'
 review_loop_iteration: 1
 followup_review_recommended: true
@@ -286,8 +286,7 @@ A signal-killed last attempt writes no Txn B. The 60s stale sweep turns that int
 
 ## Auto Run Result
 
-Status: blocked
-Blocking condition: finalization left repository dirty. Implementation, review and verification are complete, and all changes are staged on `feat/whisperkit-transcribe-stage-4-1`, but `git commit` fails with `error: 1Password: failed to fill whole buffer` (commit signing through `op-ssh-sign` is enabled and the 1Password agent did not answer, inside and outside the command sandbox). Signing was not disabled. Unlock 1Password and run `git commit` on the staged tree; the review found no work left. When that commit lands, set this spec's `status` to `done`.
+Status: done
 
 ### Summary
 
