@@ -60,7 +60,10 @@ enum PKCE {
 struct GoogleOAuthFlow: Sendable {
     typealias BrowserOpener = @Sendable (URL) async throws -> Void
 
-    static let calendarReadonlyScope = "https://www.googleapis.com/auth/calendar.readonly"
+    /// Read-only access to events on the user's own calendars, which is all
+    /// `events.list` on `calendars/primary` needs; `calendar.readonly` would
+    /// also expose calendar lists, ACLs and settings.
+    static let eventsOwnedReadonlyScope = "https://www.googleapis.com/auth/calendar.events.owned.readonly"
 
     let client: GoogleOAuthClient
     let endpoints: GoogleEndpoints
@@ -127,7 +130,7 @@ struct GoogleOAuthFlow: Sendable {
             ("client_id", clientID),
             ("redirect_uri", redirectURI),
             ("response_type", "code"),
-            ("scope", calendarReadonlyScope),
+            ("scope", eventsOwnedReadonlyScope),
             ("code_challenge", codeChallenge),
             ("code_challenge_method", "S256"),
             ("state", state),
@@ -198,7 +201,7 @@ struct GoogleOAuthFlow: Sendable {
             throw GoogleCalendarFailure.malformedResponse
         }
         let grantedScopes = (token.scope ?? "").split(separator: " ").map(String.init)
-        guard grantedScopes.contains(Self.calendarReadonlyScope) else {
+        guard grantedScopes.contains(Self.eventsOwnedReadonlyScope) else {
             throw GoogleCalendarFailure.authorizationFailed(reason: "Google did not grant read-only calendar access")
         }
         guard let refreshToken = token.refreshToken, !refreshToken.isEmpty else {

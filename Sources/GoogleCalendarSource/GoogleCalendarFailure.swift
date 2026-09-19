@@ -35,7 +35,7 @@ enum GoogleCalendarFailure: Error, Sendable, Equatable {
     }
 
     /// A fixed string per case, safe to log verbatim: it never includes the
-    /// `authorizationFailed` reason.
+    /// `authorizationFailed` reason, which `logReason` carries.
     var caseName: String {
         switch self {
         case .notAuthorized: "notAuthorized"
@@ -44,6 +44,14 @@ enum GoogleCalendarFailure: Error, Sendable, Equatable {
         case .unreachable: "unreachable"
         case .rateLimited: "rateLimited"
         case .malformedResponse: "malformedResponse"
+        }
+    }
+
+    /// The `authorizationFailed` reason, the only failure with one to log.
+    var logReason: String? {
+        switch self {
+        case let .authorizationFailed(reason): reason
+        case .notAuthorized, .authorizationExpired, .unreachable, .rateLimited, .malformedResponse: nil
         }
     }
 }

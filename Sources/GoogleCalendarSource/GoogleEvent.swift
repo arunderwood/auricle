@@ -3,8 +3,9 @@ import Core
 import Foundation
 
 /// One entry of a Calendar API `events.list` response, reduced to what the
-/// source needs. `start`/`end` are `nil` for an all-day event, which Google
-/// reports as a bare `date` rather than a `dateTime`.
+/// source needs. `start`/`end` are `nil` for an all-day event: Google reports
+/// it as a bare `date`, which the source does not request, so no `dateTime`
+/// arrives.
 struct GoogleEvent: Equatable, Sendable {
     let id: String
     let status: String?

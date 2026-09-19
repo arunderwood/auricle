@@ -74,7 +74,7 @@ func theFlowGivesAnyOtherOAuthErrorTheSameFixedReason(providerError: String) asy
 
 // MARK: - authorize(): the token exchange
 
-@Test(arguments: [readonlyScope + ".extra", "openid email", ""])
+@Test(arguments: [eventsScope + ".extra", "openid email", "", "https://www.googleapis.com/auth/calendar.readonly"])
 func theFlowReportsAnUngrantedCalendarScopeAsAnAuthorizationFailure(grantedScope: String) async throws {
     let harness = try SourceHarness(
         storedRefreshToken: nil,

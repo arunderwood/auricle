@@ -29,8 +29,9 @@ public actor GoogleCalendarSource: CalendarSource {
     private static let listPageSize = 250
 
     /// Limited to what `CalendarEvent` carries, plus `status`, which the
-    /// matcher needs to skip cancelled events.
-    private static let fieldsMask = "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName,self))"
+    /// matcher needs to skip cancelled events. Times ask for `dateTime` only;
+    /// an all-day event's bare `date` is never used.
+    private static let fieldsMask = "items(id,status,summary,start(dateTime),end(dateTime),attendees(email,displayName,self))"
 
     /// Google's `403` reasons that mean "slow down" rather than "not allowed".
     private static let rateLimitReasons: Set<String> = [
@@ -147,7 +148,11 @@ public actor GoogleCalendarSource: CalendarSource {
         do {
             return try await operation()
         } catch let failure as GoogleCalendarFailure {
-            log.warn("google calendar call failed", ["failure": .publicSafe(failure.caseName)])
+            var fields: [String: LogSensitivity] = ["failure": .publicSafe(failure.caseName)]
+            if let reason = failure.logReason {
+                fields["reason"] = .publicSafe(reason)
+            }
+            log.warn("google calendar call failed", fields)
             throw failure.calendarError
         }
     }

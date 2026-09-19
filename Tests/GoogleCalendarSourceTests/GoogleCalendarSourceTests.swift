@@ -52,7 +52,7 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     #expect(query["singleEvents"] == "true")
     #expect(query["timeMin"] == iso8601(testInstant.addingTimeInterval(-1)))
     #expect(query["timeMax"] == iso8601(testInstant.addingTimeInterval(1)))
-    #expect(query["fields"] == "items(id,status,summary,start(dateTime,date),end(dateTime,date),attendees(email,displayName,self))")
+    #expect(query["fields"] == "items(id,status,summary,start(dateTime),end(dateTime),attendees(email,displayName,self))")
 }
 
 @Test func fetchActiveEventRefreshesUsingTheStoredTokenAndTheClientCredentials() async throws {
@@ -146,6 +146,18 @@ private func rateLimitBody(reason: String) -> [String: Any] {
     defer { harness.cleanup() }
 
     #expect(try await harness.source.fetchActiveEvent(at: testInstant) == nil)
+}
+
+@Test func anAllDayEventWithoutADateTimeIsSkippedWhateverShapeGoogleGivesItsTimes() async throws {
+    let harness = try SourceHarness(events: { _, _ in
+        let emptyTimes: [String: Any] = ["id": "empty-times", "status": "confirmed", "summary": "All day", "start": [String: Any](), "end": [String: Any]()]
+        let missingTimes: [String: Any] = ["id": "missing-times", "status": "confirmed", "summary": "All day"]
+        return eventList([emptyTimes, missingTimes])
+    })
+    defer { harness.cleanup() }
+
+    #expect(try await harness.source.fetchActiveEvent(at: testInstant) == nil)
+    #expect(try await harness.source.upcomingEvents(in: 3600).isEmpty)
 }
 
 @Test func fetchActiveEventAcceptsUTCOffsetsAndFractionalSecondsInEventTimes() async throws {

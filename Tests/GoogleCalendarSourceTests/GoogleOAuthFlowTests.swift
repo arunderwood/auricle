@@ -3,7 +3,7 @@ import Foundation
 @testable import GoogleCalendarSource
 import Testing
 
-let readonlyScope = "https://www.googleapis.com/auth/calendar.readonly"
+let eventsScope = "https://www.googleapis.com/auth/calendar.events.owned.readonly"
 
 // MARK: - Loopback browser stand-in
 
@@ -99,7 +99,7 @@ private func authorizeRecordingSecrets() async throws -> (state: String, verifie
     return (state, verifier)
 }
 
-func grantedTokenResponse(scope: String = readonlyScope, refreshToken: String? = "1//new-refresh-token") -> GoogleStub.Responder {
+func grantedTokenResponse(scope: String = eventsScope, refreshToken: String? = "1//new-refresh-token") -> GoogleStub.Responder {
     { _, _ in
         var body: [String: Any] = ["access_token": "access-from-code", "expires_in": 3600, "scope": scope, "token_type": "Bearer"]
         if let refreshToken {
@@ -180,7 +180,7 @@ private func waitForListenerToClose(port: Int) async {
     #expect(parameters["client_id"] == "client-123.apps.googleusercontent.com")
     #expect(parameters["redirect_uri"] == "http://127.0.0.1:54321")
     #expect(parameters["response_type"] == "code")
-    #expect(parameters["scope"] == readonlyScope)
+    #expect(parameters["scope"] == eventsScope)
     #expect(parameters["code_challenge"] == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
     #expect(parameters["code_challenge_method"] == "S256")
     #expect(parameters["state"] == "state-value")
@@ -211,7 +211,7 @@ private func waitForListenerToClose(port: Int) async {
     let url = try #require(recorder.first)
     let parameters = queryItems(of: url)
     #expect(url.scheme == "https")
-    #expect(parameters["scope"] == readonlyScope)
+    #expect(parameters["scope"] == eventsScope)
     #expect(parameters["code_challenge_method"] == "S256")
     #expect(!(parameters["state"] ?? "").isEmpty)
 
@@ -441,7 +441,7 @@ func authorizeClosesTheListenerAfterASuccessfulRedirect() async throws {
     let harness = try SourceHarness(
         storedRefreshToken: nil,
         openBrowser: { url in try await deliverRedirect(for: url) },
-        token: grantedTokenResponse(scope: readonlyScope + ".extra"),
+        token: grantedTokenResponse(scope: eventsScope + ".extra"),
     )
     defer { harness.cleanup() }
 

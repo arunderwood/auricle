@@ -38,6 +38,15 @@ private func aFailureIsLoggedByItsFixedCaseName(expectation: FailureExpectation)
     #expect(failure.caseName == "authorizationFailed")
 }
 
+@Test func onlyAnAuthorizationFailureHasAReasonToLog() {
+    #expect(GoogleCalendarFailure.authorizationFailed(reason: "the browser could not be opened").logReason == "the browser could not be opened")
+    #expect(GoogleCalendarFailure.notAuthorized.logReason == nil)
+    #expect(GoogleCalendarFailure.authorizationExpired.logReason == nil)
+    #expect(GoogleCalendarFailure.unreachable.logReason == nil)
+    #expect(GoogleCalendarFailure.rateLimited.logReason == nil)
+    #expect(GoogleCalendarFailure.malformedResponse.logReason == nil)
+}
+
 @Test func failuresWithDifferentReasonsAreNotEqual() {
     #expect(GoogleCalendarFailure.authorizationFailed(reason: "a") != GoogleCalendarFailure.authorizationFailed(reason: "b"))
     #expect(GoogleCalendarFailure.authorizationFailed(reason: "a") == GoogleCalendarFailure.authorizationFailed(reason: "a"))
