@@ -24,6 +24,12 @@ public struct CanonicalTranscript: Codable, Sendable, Equatable {
         public let speakerLabel: String
         /// UTF-8 byte offset into `CanonicalTranscript.text`, inclusive —
         /// the same convention `GroundingPointer` uses.
+        ///
+        /// The `[start, end)` range covers the whole line, including the
+        /// leading `<speakerLabel>: ` prefix, so `start` is the offset of the
+        /// label's first byte and the range slices the utterance exactly as
+        /// the summarizer reads it. Consumers that show the speaker
+        /// separately drop that one prefix themselves.
         public let start: Int
         /// UTF-8 byte offset into `CanonicalTranscript.text`, exclusive.
         public let end: Int

@@ -50,8 +50,10 @@ struct StageLeakyError: Error, CustomStringConvertible {
 
 // MARK: - Transcript fixture
 
-let stageFirstLine = "Speaker_1: we should follow up with Ben about the café."
-let stageSecondLine = "Speaker_2: lets ship it 🚀 on Friday."
+let stageFirstText = "we should follow up with Ben about the café."
+let stageSecondText = "lets ship it 🚀 on Friday."
+let stageFirstLine = "Speaker_1: " + stageFirstText
+let stageSecondLine = "Speaker_2: " + stageSecondText
 let stageTranscriptText = stageFirstLine + "\n" + stageSecondLine
 
 /// UTF-8 byte range of `needle` — the convention every pointer and utterance
