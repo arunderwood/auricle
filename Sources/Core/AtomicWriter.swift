@@ -8,6 +8,7 @@ public enum AtomicWriter {
     public enum WriteError: Error {
         case createTemporaryFileFailed(path: String, errno: Int32)
         case openTemporaryFileFailed(path: String, underlying: Error)
+        case permissionsFailed(path: String, underlying: Error)
         case writeFailed(path: String, underlying: Error)
         case syncFailed(path: String, underlying: Error)
         case closeFailed(path: String, underlying: Error)
@@ -26,11 +27,24 @@ public enum AtomicWriter {
     /// share one temp file and race on it — the second call's write can
     /// truncate the first call's in-flight data. Callers are responsible for
     /// serializing writes to a given path.
-    public static func write(_ data: Data, to path: URL) throws {
+    ///
+    /// `permissions`, when given, is applied to the temp file while it is
+    /// still empty, so the renamed target never exists with looser access
+    /// than requested. It is an exact mode, not subject to the umask. When
+    /// `nil` the file keeps the umask-derived default.
+    public static func write(_ data: Data, to path: URL, permissions: Int? = nil) throws {
         let tempURL = temporaryURL(for: path)
 
         guard FileManager.default.createFile(atPath: tempURL.path, contents: nil) else {
             throw WriteError.createTemporaryFileFailed(path: tempURL.path, errno: errno)
+        }
+
+        if let permissions {
+            do {
+                try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: tempURL.path)
+            } catch {
+                throw WriteError.permissionsFailed(path: tempURL.path, underlying: error)
+            }
         }
 
         let handle: FileHandle

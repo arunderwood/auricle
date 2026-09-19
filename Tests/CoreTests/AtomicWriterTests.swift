@@ -21,6 +21,17 @@ private func makeTestDirectory() -> URL {
     #expect(!FileManager.default.fileExists(atPath: AtomicWriter.temporaryURL(for: target).path))
 }
 
+@Test func writeAppliesRequestedPermissionsExactly() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let target = directory.appendingPathComponent("private.md")
+
+    try AtomicWriter.write(Data("secret".utf8), to: target, permissions: 0o600)
+
+    let mode = try FileManager.default.attributesOfItem(atPath: target.path)[.posixPermissions] as? Int
+    #expect(mode == 0o600)
+}
+
 @Test func killedBeforeRenameLeavesTempFileAndNoPartialTarget() throws {
     let directory = makeTestDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
