@@ -196,8 +196,8 @@ private func errorEnvelopeJSON(message: String) throws -> Data {
     #expect(response.usage.cacheCreationInputTokens == 7)
     #expect(response.usage.cacheReadInputTokens == 3)
     #expect(response.stopReason == "end_turn")
-    // 100 input / 50 output tokens at claude-opus-5's $15/$75 per-MTok rate.
-    #expect(abs(response.costUSD - 0.00525) < 0.0000001)
+    // 100 input / 50 output tokens at claude-opus-5's $5/$25 per-MTok rate.
+    #expect(abs(response.costUSD - 0.00175) < 0.0000001)
     #expect(StubURLProtocol.attemptCount(for: token) == 1)
     #expect(await spy.recordedDelays.isEmpty)
 
@@ -215,7 +215,7 @@ private func errorEnvelopeJSON(message: String) throws -> Data {
     let response = try await client.send(makeRequest(token: token))
 
     #expect(response.model == "claude-some-future-model")
-    #expect(abs(response.costUSD - 0.00525) < 0.0000001)
+    #expect(abs(response.costUSD - 0.00175) < 0.0000001)
 }
 
 // MARK: - Transient rate limit
