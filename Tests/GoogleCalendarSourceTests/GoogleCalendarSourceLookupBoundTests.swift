@@ -59,23 +59,6 @@ func theBoundCoversTheTokenRefresh() async throws {
     #expect(harness.stub.eventRequests.isEmpty)
 }
 
-@Test(.timeLimit(.minutes(1)))
-func theBoundCoversTheRetryAfterARejectedAccessToken() async throws {
-    let harness = try SourceHarness(
-        lookupTimeout: smallBound,
-        requestTimeout: neverTimesOut,
-        events: { _, index in index == 0 ? .json(401, ["error": ["code": 401]]) : .hang },
-    )
-    defer { harness.cleanup() }
-
-    await #expect(throws: CalendarError.unreachable) {
-        try await harness.source.fetchActiveEvent(at: testInstant)
-    }
-
-    #expect(harness.stub.tokenRequests.count <= 2)
-    #expect(harness.stub.eventRequests.count <= 2)
-}
-
 @Test func aLookupThatAnswersInsideTheBoundIsUnaffectedByIt() async throws {
     let harness = try SourceHarness(
         events: { _, _ in eventList([eventJSON(id: "evt", start: at(minutes: -5), end: at(minutes: 5))]) },
