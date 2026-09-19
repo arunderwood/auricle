@@ -21,6 +21,11 @@
 # Tests/fixtures/smoke-test-results.md, the path Story 3.8 fixes. detail.md is
 # real meeting content and is never committed.
 #
+# Extra arguments go to the verb. `--arm substring --arm substring:<dir>`
+# compares two prompt sets on the same transcripts: <dir> holds the prompt
+# files to override (system.md, substring.md); any file it lacks falls back to
+# the bundled one.
+#
 # An empty transcripts directory makes the verb refuse before any API call,
 # so this script exits non-zero having spent nothing.
 set -euo pipefail
@@ -73,4 +78,4 @@ if [ -z "$built_products_dir" ] || [ ! -x "$built_products_dir/auricle-cli" ]; t
 fi
 
 echo "==> auricle-cli __compare-strategies" >&2
-exec "$built_products_dir/auricle-cli" __compare-strategies --transcripts "$transcripts" --output "$output"
+exec "$built_products_dir/auricle-cli" __compare-strategies --transcripts "$transcripts" --output "$output" "$@"
