@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-18-2026 22:36
+last_updated: 09-19-2026 09:47
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -44,7 +44,7 @@ development_status:
   1-6-telemetry-recorder-stageeventlogger-and-stagemetadata: done
   1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidd: done
   1-8-lint-format-and-ci-enforcement-layer: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: done
   2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variant: done
@@ -227,3 +227,102 @@ action_items:
     owner: "the maintainer"
     status: done
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-11-guard-state-writes-with-an-expected-stat"
+    epic: 1
+    action: "Guard state writes with an expected state in recordStageTransition and
+      synthesizeFailure, and replace updateMeeting with column-scoped writers so only
+      recordStageTransition writes meetings.state (DR-1)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-12-add-to-the-epic-6-lifecycle-story-run-cr"
+    epic: 1
+    action: "Add to the Epic 6 lifecycle story: run CrashRecovery at launch, run the
+      stale sweep at 10s/60s, start RetentionScheduler, checkpoint the WAL on every
+      transition. Give reconcile and the sweep one shared stuck test with a liveness
+      check, and scale the transcribing budget with audio length (SR-3, SR-4, DR-3)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-13-make-non-gui-opens-read-only-and-fail-fa"
+    epic: 1
+    action: "Make non-GUI opens read-only and fail-fast: StateStore.subprocess checks
+      applied migrations, and bare auricle stops calling production() (VG-6, DR-8)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-14-add-the-print-lint-rule-story-1-3-requir"
+    epic: 1
+    action: "Add the print lint rule Story 1.3 requires, with a BareInvocation exclusion
+      and a fixture line, and mark the os_log alternative of log_facade_bypass in
+      the fixture (VG-1, VG-2)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-15-test-subprocessdispatcher-argv-against-i"
+    epic: 1
+    action: "Test SubprocessDispatcher argv against InternalStageWorker parsing, and
+      make CrashRecovery observe the worker exit status (VG-9, RV-2)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-16-add-an-as-built-note-for-story-1-2-to-ep"
+    epic: 1
+    action: "Add an As-built note for Story 1.2 to epics.md, epic-1-context.md and
+      the sprint key, and name the owner of the remaining FR58 keys and symlink normalization
+      (SR-2)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-17-append-the-15-spec-only-deferred-entries"
+    epic: 1
+    action: "Append the 15 spec-only deferred entries of Stories 1.4 to 1.7 to deferred-work.md,
+      with closes entries for the four sprint-status ones (PL-3)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-18-set-duration_ms-on-stage-events-log-each"
+    epic: 1
+    action: "Set duration_ms on stage events, log each stage transition at info and
+      each move into a failed state at error, and tag the rejected-payload log field
+      sensitive (VG-7, DR-7, VG-8)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-19-pin-the-stale-budget-table-by-value-add"
+    epic: 1
+    action: "Pin the stale-budget table by value, add an AtomicWriter fault-injection
+      seam, set SWIFT_VERSION 6.0 for App targets, make ULIDFormat.isValid test ASCII
+      bytes, and fix the bare status hints (VG-3, VG-4, DR-9, DR-13, DR-14)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-20-decide-nfr-r10-reading-who-builds-failur"
+    epic: 1
+    action: "Decide NFR-R10 reading, who builds FailureCategory (AR-FAIL-1) and whether
+      StageRunner validates transitions, and whether telemetry writer partitioning
+      is enforced by types (SR-3, DR-6, VG-5)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-21-build-failurecategory-ar-fail-1-in-core"
+    epic: 1
+    action: "Build FailureCategory (AR-FAIL-1) in Core and validate activeState and
+      targetState against a successor table in StageRunner.run (DR-6)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-22-replace-telemetryrecorder-s-full-record"
+    epic: 1
+    action: "Replace TelemetryRecorder's full-record patch with per-writer patch types
+      that each hold only that writer's columns (VG-5)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-1-retro-item-23-reword-nfr-r10-in-prd-md-and-epics-md-to"
+    epic: 1
+    action: "Reword NFR-R10 in prd.md and epics.md to checkpoint on quit plus SQLite's
+      automatic checkpoint, and cut the Epic 6 lifecycle AC to match (SR-3)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
