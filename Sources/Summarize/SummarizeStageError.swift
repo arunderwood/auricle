@@ -14,6 +14,9 @@ enum SummarizeStageError: Error, Equatable {
     /// The meeting row has no `capture_started_at`, or it is not an ISO8601
     /// timestamp, so the unenriched title has nothing to be built from.
     case captureStartedAtMissing
+    /// A prompt file the summarizer strategies build their prompts from cannot
+    /// be resolved, so the stage stops before the call that would spend money.
+    case promptSetUnavailable
     /// A grounded item's pointer does not name a slice of the transcript.
     case quoteExtractionFailed
     /// An utterance's range does not name a slice of the transcript.
@@ -27,6 +30,7 @@ enum SummarizeStageError: Error, Equatable {
         case .transcriptUndecodable: "transcript_undecodable"
         case .attributionUndecodable: "attribution_undecodable"
         case .captureStartedAtMissing: "capture_started_at_missing"
+        case .promptSetUnavailable: "prompt_set_unavailable"
         case .quoteExtractionFailed: "quote_extraction_failed"
         case .segmentExtractionFailed: "segment_extraction_failed"
         case .summaryWriteFailed: "summary_write_failed"

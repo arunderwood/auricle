@@ -97,9 +97,22 @@ public enum FrontmatterRenderer {
     private static func renderQuotedItemSection(heading: String, items: [QuotedItem]) -> String {
         guard !items.isEmpty else { return "## \(heading)" }
         let bullets = items
-            .map { "- \($0.text)\n  > \($0.quote)" }
+            .map { "- \($0.text)\n\(renderBlockquote($0.quote))" }
             .joined(separator: "\n")
         return "## \(heading)\n\n\(bullets)"
+    }
+
+    /// Every line of the quote carries its own `>`: a grounded quote can span
+    /// several utterances, and a line without the prefix ends the blockquote
+    /// and renders as loose text under the bullet. An empty line is a bare
+    /// `>` so the blockquote stays unbroken without trailing whitespace.
+    /// `\r\n` and `\r` count as line breaks because Markdown does, even though
+    /// the canonical transcript only ever contains `\n`.
+    private static func renderBlockquote(_ quote: String) -> String {
+        quote
+            .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" })
+            .map { $0.isEmpty ? "  >" : "  > \($0)" }
+            .joined(separator: "\n")
     }
 
     private static func renderTranscriptSection(_ segments: [TranscriptSegment]) -> String {

@@ -87,6 +87,79 @@ import Testing
     #expect(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue) == nil)
 }
 
+// MARK: - Grounding method and prompt-set hash in telemetry
+
+@Test func primaryAnsweringRecordsCitationsAndTheCitationsPromptSetHash() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+    let fallback = StageStubStrategy(.success(makeStageGrounded(method: .substring)))
+
+    _ = try await fixture.run(primary: StageStubStrategy(.success(makeStageGrounded(method: .citations))), fallback: fallback)
+
+    let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))
+    let citationsHash = try SummarizationPromptBuilder.promptSetHash(mode: .citations, promptDir: nil)
+    #expect(telemetry.groundingMethod == "citations")
+    #expect(telemetry.summarizationPromptSetHash == citationsHash)
+    #expect(await fallback.callCount == 0)
+}
+
+@Test func fallbackAnsweringRecordsSubstringAndTheSubstringPromptSetHash() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+
+    _ = try await fixture.run(
+        primary: StageStubStrategy(.failure(SummarizerError.citationsUnavailable)),
+        fallback: StageStubStrategy(.success(makeStageGrounded(method: .substring))),
+    )
+
+    let telemetry = try #require(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue))
+    let substringHash = try SummarizationPromptBuilder.promptSetHash(mode: .substring, promptDir: nil)
+    let citationsHash = try SummarizationPromptBuilder.promptSetHash(mode: .citations, promptDir: nil)
+    #expect(telemetry.groundingMethod == "substring")
+    #expect(telemetry.summarizationPromptSetHash == substringHash)
+    #expect(telemetry.summarizationPromptSetHash != citationsHash)
+}
+
+@Test func aFailedRunLeavesNoGroundingMethodOrPromptSetHash() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+
+    _ = try await fixture.run(primary: StageStubStrategy(.failure(SummarizerError.networkTimeout)))
+
+    #expect(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue) == nil)
+}
+
+// MARK: - Prompt-set resolution happens before the paid call
+
+/// The resolver fails for one mode only, so this also proves both modes are
+/// resolved up front: the fallback's hash is needed only if the primary fails,
+/// yet a broken fallback prompt must still stop the stage before the primary is paid for.
+@Test(arguments: SummarizationMode.allCases)
+func anUnresolvablePromptSetFailsTheStageBeforeEitherSummarizerIsCalled(failingMode: SummarizationMode) async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+    let primary = StageStubStrategy(.success(makeStageGrounded()))
+    let fallback = StageStubStrategy(.success(makeStageGrounded(method: .substring)))
+
+    let outcome = try await fixture.run(primary: primary, fallback: fallback) { mode in
+        if mode == failingMode {
+            throw StageLeakyError(secret: "/private/prompt/path")
+        }
+        return "hash-\(mode.rawValue)"
+    }
+
+    try await expectStageFailure(outcome, fixture: fixture, errorClass: "prompt_set_unavailable")
+    guard case let .failed(_, _, errorMessage, _) = outcome else { return }
+    #expect(errorMessage == "promptSetUnavailable")
+    #expect(await primary.callCount == 0)
+    #expect(await fallback.callCount == 0)
+    #expect(try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue) == nil)
+}
+
 // MARK: - Re-run
 
 @Test func rerunReplacesSummaryAtomicallyAndRecordsASecondEventPair() async throws {

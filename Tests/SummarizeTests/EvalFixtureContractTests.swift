@@ -2,9 +2,9 @@ import Core
 import Foundation
 import Testing
 
-// MARK: - Fixture model
+// MARK: - Fixture model, shared with SummarizeToPersistTests
 
-private struct ExpectedSource: Decodable {
+struct ExpectedSource: Decodable {
     let kind: String
     let title: String
     let origin: String
@@ -12,7 +12,7 @@ private struct ExpectedSource: Decodable {
     let attribution: String
 }
 
-private struct ExpectedItem: Decodable {
+struct ExpectedItem: Decodable {
     let text: String
     let quote: String
     let transcriptStart: Int
@@ -26,7 +26,7 @@ private struct ExpectedItem: Decodable {
     }
 }
 
-private struct ExpectedTargets: Decodable {
+struct ExpectedTargets: Decodable {
     let minRecall: Double
     let maxFalseKeeps: Int
 
@@ -36,7 +36,7 @@ private struct ExpectedTargets: Decodable {
     }
 }
 
-private struct ExpectedFixture: Decodable {
+struct ExpectedFixture: Decodable {
     let schemaVersion: Int
     let source: ExpectedSource
     let speakers: [String: String]
@@ -56,12 +56,12 @@ private struct ExpectedFixture: Decodable {
     }
 }
 
-private struct EvalFixture {
+struct EvalFixture {
     let transcript: CanonicalTranscript
     let expected: ExpectedFixture
 }
 
-private enum EvalFixtures {
+enum EvalFixtures {
     static var directory: URL? {
         Bundle.module.resourceURL?.appendingPathComponent("Fixtures/eval", isDirectory: true)
     }

@@ -39,6 +39,33 @@ public enum SummarizeStage {
         config: SummarizerConfig,
         timeZone: TimeZone = .current,
     ) async throws -> StageRunner.StageOutcome {
+        try await run(
+            meetingID: meetingID,
+            stateStore: stateStore,
+            stageRunner: stageRunner,
+            telemetryRecorder: telemetryRecorder,
+            orchestrator: orchestrator,
+            glossary: glossary,
+            config: config,
+            timeZone: timeZone,
+            promptSetHash: bundledPromptSetHash,
+        )
+    }
+
+    /// The public `run` with the prompt-set hash resolution injectable, so a
+    /// test can make it throw and prove the stage stops before the summarizer
+    /// call.
+    static func run(
+        meetingID: MeetingID,
+        stateStore: StateStore,
+        stageRunner: StageRunner,
+        telemetryRecorder: TelemetryRecorder,
+        orchestrator: SummarizerOrchestrator,
+        glossary: Glossary,
+        config: SummarizerConfig,
+        timeZone: TimeZone = .current,
+        promptSetHash: @escaping @Sendable (SummarizationMode) throws -> String = bundledPromptSetHash,
+    ) async throws -> StageRunner.StageOutcome {
         guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
             throw StateStoreError.meetingNotFound(id: meetingID.rawValue)
         }
@@ -47,12 +74,11 @@ public enum SummarizeStage {
             do {
                 return try await summarize(
                     meetingID: meetingID,
-                    captureStartedAt: captureStartedAt,
+                    context: RunContext(captureStartedAt: captureStartedAt, timeZone: timeZone, promptSetHash: promptSetHash),
                     telemetryRecorder: telemetryRecorder,
                     orchestrator: orchestrator,
                     glossary: glossary,
                     config: config,
-                    timeZone: timeZone,
                 )
             } catch {
                 let classified = failure(for: error)
@@ -74,6 +100,20 @@ public enum SummarizeStage {
         }
     }
 
+    /// What `summarize` reads besides the meeting id, the collaborators and the
+    /// summarizer inputs, bundled to keep its parameter list short.
+    private struct RunContext: Sendable {
+        let captureStartedAt: String?
+        let timeZone: TimeZone
+        let promptSetHash: @Sendable (SummarizationMode) throws -> String
+    }
+
+    /// `promptDir: nil` is what both strategies pass to the prompt builder.
+    @Sendable
+    private static func bundledPromptSetHash(_ mode: SummarizationMode) throws -> String {
+        try SummarizationPromptBuilder.promptSetHash(mode: mode, promptDir: nil)
+    }
+
     // MARK: - Stage body
 
     /// Everything that can fail cheaply — reading and validating the inputs,
@@ -81,17 +121,16 @@ public enum SummarizeStage {
     /// call, so a bad input never costs an API call.
     private static func summarize(
         meetingID: MeetingID,
-        captureStartedAt: String?,
+        context: RunContext,
         telemetryRecorder: TelemetryRecorder,
         orchestrator: SummarizerOrchestrator,
         glossary: Glossary,
         config: SummarizerConfig,
-        timeZone: TimeZone,
     ) async throws -> StageRunner.StageOutcome {
         let cacheDirectory = try resolveCacheDirectory(for: meetingID)
         let transcript = try readTranscript(in: cacheDirectory)
         let speakers = try AttributionSpeakers.read(in: cacheDirectory)
-        let captureStartedAtDate = try parseCaptureStartedAt(captureStartedAt)
+        let captureStartedAtDate = try parseCaptureStartedAt(context.captureStartedAt)
 
         let transcriptBytes = Array(transcript.text.utf8)
         let segments = try SummaryArtifactMapper.transcriptSegments(
@@ -100,10 +139,12 @@ public enum SummarizeStage {
             speakers: speakers,
         )
 
+        let promptSetHashes = try resolvePromptSetHashes(using: context.promptSetHash)
+
         let outcome = try await orchestrator.summarize(transcript: transcript, glossary: glossary, config: config)
 
         let artifact = try SummaryArtifactMapper.artifact(
-            title: UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: timeZone),
+            title: UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone),
             grounded: outcome.summary,
             transcriptSegments: segments,
             needsAttribution: SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers),
@@ -124,6 +165,8 @@ public enum SummarizeStage {
                 summarizationModel: config.modelIdentifier,
                 summarizationEffortBudget: config.effortLevel.rawValue,
                 costUSD: outcome.summary.cost.costUSD,
+                groundingMethod: outcome.summary.groundingMethod.rawValue,
+                summarizationPromptSetHash: promptSetHashes[outcome.summary.groundingMethod.summarizationMode],
             ),
         )
 
@@ -160,6 +203,27 @@ public enum SummarizeStage {
         } catch {
             throw SummarizeStageError.transcriptMissing
         }
+    }
+
+    /// One hash per mode, computed before the summarizer call because which
+    /// strategy answers is not known until it has been paid for: a prompt
+    /// file that cannot be resolved must fail the stage here rather than
+    /// after the spend. `promptDir: nil` is what both strategies pass to the
+    /// prompt builder, so each hash is the one that strategy's own prompt
+    /// carries; a strategy that starts honoring a prompt directory needs the
+    /// same directory passed here.
+    private static func resolvePromptSetHashes(
+        using resolve: @Sendable (SummarizationMode) throws -> String,
+    ) throws -> [SummarizationMode: String] {
+        var hashes: [SummarizationMode: String] = [:]
+        for mode in SummarizationMode.allCases {
+            do {
+                hashes[mode] = try resolve(mode)
+            } catch {
+                throw SummarizeStageError.promptSetUnavailable
+            }
+        }
+        return hashes
     }
 
     private static func parseCaptureStartedAt(_ captureStartedAt: String?) throws -> Date {
@@ -215,6 +279,18 @@ public enum SummarizeStage {
             (summarizerError.stageErrorClass, String(describing: summarizerError))
         default:
             ("summarize_unexpected_error", String(reflecting: type(of: error)))
+        }
+    }
+}
+
+private extension GroundingMethod {
+    /// The prompt mode a strategy answering with this method built its prompt
+    /// from. Exhaustive rather than a `rawValue` round trip, so a new grounding
+    /// method cannot compile until it names the prompt files it uses.
+    var summarizationMode: SummarizationMode {
+        switch self {
+        case .citations: .citations
+        case .substring: .substring
         }
     }
 }

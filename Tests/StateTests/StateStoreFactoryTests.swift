@@ -92,3 +92,30 @@ private func makeTestDatabasePath() -> (directory: URL, path: String) {
     let fetched = try await subprocessStore.fetchMeeting(id: "01SHAREDPATHMEETINGID00000")
     #expect(fetched?.id == "01SHAREDPATHMEETINGID00000")
 }
+
+/// A subprocess never migrates, so the GUI's production opener is what adds
+/// migration #4's telemetry columns; the subprocess then writes and reads them
+/// through its own connection.
+@Test func theProductionOpenerAddsTheSummarizeTelemetryColumnsThatASubprocessThenWrites() async throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let meetingID = "01FACTORYFOURMEETINGID000"
+    let hash = String(repeating: "0a", count: 32)
+
+    let production = try StateStore.production(path: path)
+    try await production.insertMeeting(Meeting(
+        id: meetingID,
+        state: "summarizing",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+    ))
+
+    let subprocess = try StateStore.subprocess(path: path)
+    try await subprocess.upsertTelemetry(
+        Telemetry(meetingID: meetingID, groundingMethod: "citations", summarizationPromptSetHash: hash),
+    )
+
+    let fetched = try #require(try await production.fetchTelemetry(meetingID: meetingID))
+    #expect(fetched.groundingMethod == "citations")
+    #expect(fetched.summarizationPromptSetHash == hash)
+}
