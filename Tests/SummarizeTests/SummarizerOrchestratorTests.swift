@@ -143,3 +143,25 @@ private func makeSummary(groundingMethod: GroundingMethod) -> SummaryWithGroundi
     #expect(await primary.callCount == 1)
     #expect(await fallback.callCount == 0)
 }
+
+@Test func noFallbackReturnsThePrimaryOutcome() async throws {
+    let primary = StubSummarizerStrategy(behavior: .succeed(makeSummary(groundingMethod: .substring)))
+    let orchestrator = SummarizerOrchestrator(primary: primary)
+
+    let outcome = try await orchestrator.summarize(transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig())
+
+    #expect(outcome.fallbackTriggered == false)
+    #expect(outcome.primaryError == nil)
+    #expect(outcome.summary.groundingMethod == .substring)
+    #expect(await primary.callCount == 1)
+}
+
+@Test func noFallbackRethrowsAFallbackEligiblePrimaryErrorUnchanged() async throws {
+    let primary = StubSummarizerStrategy(behavior: .fail(.malformedResponse))
+    let orchestrator = SummarizerOrchestrator(primary: primary)
+
+    await #expect(throws: SummarizerError.malformedResponse) {
+        try await orchestrator.summarize(transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig())
+    }
+    #expect(await primary.callCount == 1)
+}
