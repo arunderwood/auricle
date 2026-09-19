@@ -369,7 +369,7 @@ These decisions are organized into four thematic groups. Each group resolves a c
 Per-stage execution model:
 
 - **Subprocess (spawned by GUI; also independently invocable by CLI):** `transcribe`+`diarize` (combined; share WhisperKit model state in one subprocess), `summarize`. Rationale: WhisperKit ~4GB peak (NFR-P10) must die when work completes; Claude network call may hang and must not freeze the GUI; both satisfy NFR-R4 crash isolation cleanly.
-- **In-GUI process:** `capture` (long-running ScreenCaptureKit handle, SwiftUI-controlled), `attribute` (SwiftUI window with audio playback), `persist` (small, latency-sensitive), `notify` (UNUserNotificationCenter delegate must live in app process), `verify`, `discard`.
+- **In-GUI process:** `capture` (long-running ScreenCaptureKit handle, SwiftUI-controlled), `attribute` (SwiftUI window with audio playback), `persist` (small, latency-sensitive), `notify` (UNUserNotificationCenter delegate must live in app process), `verify`, `discard`. In Epic 4, `auricle run` runs `attribute`, `persist` and the notify stage in-process (AR-PIPE-1), with the CLI composition root's `Notifier`; only the GUI composition root posts `UNUserNotificationCenter` notifications.
 - **CLI exposes every stage as an independently-runnable subprocess** regardless of how the GUI dispatches it (FR12 binding contract). The CLI binary is the same Swift code path; any stage can be re-run from the terminal for failure recovery, debugging, or scripted use.
 
 This boundary keeps memory budgets enforceable (heavy stages die when done), keeps interactive surfaces responsive (UI state stays in one process), and keeps the CLI surface fully general (no stage is GUI-only at the binary level).
@@ -461,7 +461,7 @@ Mic + system audio are mixed during capture (single ScreenCaptureKit + AVAudioEn
 
 The CLI is both a developer tool AND a user-facing failure-recovery surface. Per NFR-I7, every verb name and flag in this surface is a binding product contract; renaming or removing post-1.0 is a major version bump (additions are not). This decision was refined through two rounds of multi-agent roundtable review (architect / developer / tech-writer in Round 1; analyst / UX-designer / PM as contrarians in Round 3). Substantive findings folded in:
 
-- The MVP binding surface was deliberately tightened from ~17 verbs to **10 verbs**. Verbs that don't have a clear MVP user job were either deferred to v1.1 (`pending`, `retain`, `attribute --emit-snippets/--speakers`, `doctor --fix`, `logs`, `--generate-completion-script`) or cut entirely (`transcribe`/`summarize`/`persist` standalone — reachable via `run --only <stage>`; `export` — the vault note IS the export; `config show` — same as `config get` with no key; `notify` — pipeline side-effect, not a user verb; `diarize` — combined into `transcribe` in MVP).
+- The MVP binding surface was deliberately tightened from ~17 verbs to **10 verbs**. Verbs that don't have a clear MVP user job were either deferred to v1.1 (`pending`, `retain`, `attribute --emit-snippets`, `doctor --fix`, `logs`, `--generate-completion-script`) or cut entirely (`transcribe`/`summarize`/`persist` standalone — reachable via `run --only <stage>`; `export` — the vault note IS the export; `config show` — same as `config get` with no key; `notify` — pipeline side-effect, not a user verb; `diarize` — combined into `transcribe` in MVP). The `attribute --speakers` batch path ships before 1.0 in Epic 4 Story 4.6; additions are not contract breaks, and FR27's documented surface stays v1.1.
 - `process` → `run` with `--from / --to / --only <stage>` for orthogonal stage control that survives v2+ stage additions.
 - `attribute` defaults to **interactive** (the failure-recovery scenario most needs the GUI; scripts pass `--batch`).
 - `mark-verified` → **`keep`** (warmer name; the soft "I confirm this meeting" companion to `retain`'s harder "explicitly override retention").
@@ -492,7 +492,7 @@ Verbs are grouped logically (the `auricle help` output surfaces these groups); t
 
 `run` composes naturally with future pipeline stages added in v2+ without changing the contract surface — `--from` / `--to` / `--only` take stage names as string arguments, surviving the addition of new stages.
 
-Individual-stage verbs (`auricle transcribe <id>`, `summarize <id>`, etc.) are intentionally NOT exposed at the top level — they're reachable via `run --only <stage>`. This keeps the surface user-shaped (one verb for "make my meeting into a note") rather than engineer-shaped (one verb per pipeline phase). `notify` is a pipeline side-effect, not a user verb — internal to the `Notifier` module only.
+Individual-stage verbs (`auricle transcribe <id>`, `summarize <id>`, etc.) are intentionally NOT exposed at the top level — they're reachable via `run --only <stage>`. This keeps the surface user-shaped (one verb for "make my meeting into a note") rather than engineer-shaped (one verb per pipeline phase). `notify` is a pipeline side-effect, not a user verb — internal to the `Notifier` module only. Hidden builder-mode verbs (`__internal-stage`, `__internal-import`) sit outside the 10-verb binding contract.
 
 **Attribution (the one stage that has its own verb because it's interactive):**
 
@@ -1752,7 +1752,7 @@ public func renderTranscript(
 
 Pure function; no I/O; deterministic. **Resolution order per segment:** (1) check `splits[]` for a split replacing this `original_segment_id` — emit the sub-segments; (2) check `overrides[]` for a per-segment speaker override; (3) fall back to `speakers[Speaker_N]` mapping; (4) fall back to `Speaker_N` literal placeholder. Lives in `Sources/Attribute/AttributionRenderer.swift`. Golden fixtures at `Tests/AttributeTests/Fixtures/renderer/` covering every combination of `(no overrides, overrides only, splits only, both)` × `(all speakers attributed, partial, none)` × `(splits referencing valid segment ids, dangling split with no matching diarization segment — must be ignored not crash)`.
 
-**Atomic-write discipline:** writes are debounced 500ms via `Task.debounce` (or equivalent: cancellation-safe accumulation pattern; the wiring lands in **Story 8** as part of `MainWindow/AttributionViewModel.swift`) inside the `AttributionViewModel`, routed through `AtomicWriter` (Cross-Cutting Concern #3). Per-row `@State` never directly writes; the view model owns the durable state. `Task.debounce` semantics differ from typical Combine debounce — implementation uses a per-write `Task` with `Task.sleep(for: .milliseconds(500))` and cancels the prior pending Task on each user mutation; the live Task awakens, reads the latest in-memory draft, and atomic-writes once.
+**Atomic-write discipline:** writes are debounced 500ms via `Task.debounce` (or equivalent: cancellation-safe accumulation pattern; the wiring lands in **Story 8** as part of `Attribute/AttributionViewModel.swift`) inside the `AttributionViewModel`, routed through `AtomicWriter` (Cross-Cutting Concern #3). Per-row `@State` never directly writes; the view model owns the durable state. `Task.debounce` semantics differ from typical Combine debounce — implementation uses a per-write `Task` with `Task.sleep(for: .milliseconds(500))` and cancels the prior pending Task on each user mutation; the live Task awakens, reads the latest in-memory draft, and atomic-writes once.
 
 **Cancellation preservation:** `Save for later` / Esc / Cmd-W dismisses the sheet; the most-recent debounced write completes before SwiftUI tears down the view (the dismiss handler `await`s the in-flight write Task). Stale-active-state recovery (Decision 4.2) reopens the sheet with partial state pre-populated if the GUI crashes mid-attribution.
 
@@ -2359,6 +2359,7 @@ auricle/
 │   ├── Attribute/                         # FR21–FR27
 │   │   ├── AttributionMapping.swift       # speaker_N → name; the cache-artifact reader/writer
 │   │   ├── AttributionStage.swift         # reads attribution.json; writes refined identities
+│   │   ├── AttributionViewModel.swift     # @Observable; owns attribution.json + diarization_suggestions.json state; shared by CLI batch and GUI sheet (Epic 4 Story 4.6)
 │   │   └── AttributionMetadata.swift
 │   │
 │   ├── Summarize/                         # FR28–FR34
@@ -2497,7 +2498,6 @@ auricle/
 │   │   │   ├── UpcomingEventStripView.swift # calendar-attendee strip (J0, J1)
 │   │   │   ├── RollingCostFooterView.swift # 30-day cost widget (Dec 4.6 + UX Step 10 Round-2)
 │   │   │   ├── AttributionSheet.swift      # .sheet(item: $attributingMeetingID) — replaces former AttributionWindow
-│   │   │   ├── AttributionViewModel.swift  # @Observable; owns attribution.json + diarization_suggestions.json state
 │   │   │   ├── AttributionTranscriptPane.swift # disclosure-collapsed transcript pane (UX spec Step 10 Round-2)
 │   │   │   ├── TranscriptParagraph.swift   # per-paragraph row: speaker label + ParagraphPlayButton + reassign + AI hint
 │   │   │   ├── SpeakerRow.swift            # speaker row: SnippetPlayer + ThisIsMeButton + autocomplete + optional AIHintChip (over-segmentation case)
@@ -2591,7 +2591,7 @@ Transcribe     → Core, State, Telemetry, TranscriberInterface, DiarizerInterfa
 Diarize        → Core, State, Telemetry, DiarizerInterface
 ReviewDiarization → Core, State, Telemetry, AIReviewerInterface  # the reviewing_diarization stage (Dec 5.3)
 Capture        → Core, State, Telemetry, Permissions
-Attribute      → Core, State, Telemetry, AIReviewerInterface  # consumes diarization_suggestions.json schema for sheet rendering
+Attribute      → Core, State, Telemetry, DiarizerInterface, AIReviewerInterface  # consumes the diarization.json and diarization_suggestions.json schemas; hosts AttributionViewModel for CLI and GUI
 Summarize      → Core, State, Telemetry, Orchestrator, SummarizerInterface, AIReviewerInterface, CalendarInterface, VaultGlossary  # Orchestrator: StageRunner; AIReviewerInterface: GlossaryJargonCorrector
 Persist        → Core, State, Telemetry
 Verify         → Core, State, Telemetry, Notifications

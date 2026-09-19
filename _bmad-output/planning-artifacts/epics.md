@@ -574,7 +574,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 | NFR-M2 (subprocess isolation per stage) | Epic 1 (contract) + Epic 4 (heavy-stage isolation) | Per Decision 1.1 |
 | NFR-M3 (structured os_log per stage category) | Epic 1 | `Log` facade |
 | NFR-M4 (unit tests for primitives) | Epic 1 + Epic 2 + Epic 3 + every subsequent epic | Per-target test target convention |
-| NFR-M5 (CI-runnable end-to-end smoke test) | Epic 4 (exit-criteria smoke test = the canonical NFR-M5 satisfaction) | Plus Epic 1 scaffold |
+| NFR-M5 (CI-runnable end-to-end smoke test) | Epic 4 (Story 4.10 Part A pipeline test = the canonical NFR-M5 satisfaction) | Plus Epic 1 scaffold |
 | NFR-M6 (config takes effect on next pipeline invocation) | Epic 9 (full config surface) + Epic 1 (config persistence layer) | Per Decision 4.5 |
 | NFR-M7 (reproducible builds) | Epic 9 (release script) + Epic 1 (build determinism) | Same git SHA + same toolchain → identical .app |
 | NFR-M8 (PRD/brainstorm-anchored code comments) | Every epic | Authoring convention |
@@ -644,35 +644,36 @@ Given a `CanonicalTranscript` + glossary + calendar event, auricle produces a va
 
 > **Renamed from "On-Device Audio → Vault Note (CLI-Dogfoodable Milestone)" per John's review** — this is a *Pipeline Validation* checkpoint for the maintainer-as-builder, not a user-shippable milestone for the maintainer-as-meeting-haver. Pre-existing audio + CLI is not a meeting workflow. The cohesive-MVP commitment lives at Epic 9.
 
-User (in builder mode) has a meeting audio file on disk → runs `auricle run <id> --publish-anyway` (or `--speakers "1=Ben,..."` via batch attribution) from terminal → gets a complete Obsidian note. WhisperKit transcribe + diarize subprocess, `ReviewDiarization` stage as dedicated subprocess (with `ClaudeDiarizationReviewer` Haiku-default flag-controlled per Path C), AI-correction `AIReviewerStrategy` family + concrete `ClaudeDiarizationReviewer`, `attribution.json` schema (`segment_overrides`, `segment_splits`), attribution stage with batch CLI mode, basic notification + Obsidian URL-open path, primary CLI verb surface (`record`, `stop`, `discard`, `run`, `attribute --batch`, `keep`, `list`, `status`).
+User (in builder mode) has a meeting audio file on disk → registers it with the hidden `auricle __internal-import <audio-file>` (Story 4.8), which prints a meeting id → runs `auricle run <id> --publish-anyway` (or `--speakers "1=Ben,..."` via batch attribution) from terminal → gets a complete Obsidian note. WhisperKit transcribe + diarize subprocess, `ReviewDiarization` stage as dedicated subprocess (with `ClaudeDiarizationReviewer` Haiku-default flag-controlled per Path C), AI-correction `AIReviewerStrategy` family + concrete `ClaudeDiarizationReviewer`, `attribution.json` schema (`segment_overrides`, `segment_splits`), attribution stage with batch CLI mode, basic notification + Obsidian URL-open path, primary CLI verb surface (`record`, `stop`, `discard`, `run`, `attribute --batch`, `keep`, `list`, `status`).
 
-**`AttributionViewModel` lives in `Core/`** (per Amelia's mitigation for Sally's CLI/GUI divergence concern): the same view-model is consumed by CLI batch attribution (this epic) AND the Epic 7 GUI sheet. The type system is the parity contract — no need for a separate parity-contract document, no risk of "two products sharing one FR number."
+**`AttributionViewModel` lives in `Attribute/`** (per Amelia's mitigation for Sally's CLI/GUI divergence concern): the same view-model is consumed by CLI batch attribution (this epic) AND the Epic 7 GUI sheet. The type system is the parity contract — no need for a separate parity-contract document, no risk of "two products sharing one FR number."
 
 **Explicit exit criteria (per John + Amelia):**
-- Story `4.9` is the named exit-criteria smoke test (`Tests/IntegrationTests/Epic4ExitCriteria.swift`).
-- Concrete invocation: `auricle run <id> --publish-anyway` against ≥5 of the user's existing meeting recordings (the same fixture set used in Epic 3's smoke-test).
-- Quote-grounding pass-rate target: ≥80% on action items + decisions across the fixture set (validates wedge — adjustable based on Epic 3 eval-harness baseline).
-- Cost ceiling held: ≤NFR-C1 default tier per meeting in aggregate over the fixture set; ≤NFR-C1 v1.1+ tier when `diarization_review.enabled = true`.
+- Story `4.10` is the named exit gate, in two parts: a CI pipeline test (`Tests/IntegrationTests/PipelineEndToEndTests.swift`) and a manual live run (`Tests/scripts/run-epic4-exit-criteria.sh`).
+- Concrete live invocation: `auricle __internal-import <audio-file>`, then `auricle run <id> --publish-anyway`, against ≥5 of the user's existing meeting recordings (path-referenced by environment variable, never checked in).
+- Quote-grounding pass-rate target, measured by the live run: ≥80% on action items + decisions across the fixture set (validates wedge — adjustable based on Epic 3 eval-harness baseline).
+- Cost ceiling held, measured by the live run: ≤NFR-C1 default tier per meeting; ≤NFR-C1 v1.1+ tier per meeting when `diarization_review.enabled = true`.
 - Each fixture produces a vault note at the configured path with schema-valid frontmatter; every action item / decision rendered as a `> source quote` blockquote that survives literal substring match.
-- `auricle status <id>` returns `verified_at: null` on each fixture (verification is human action, not automatic on `auricle run` — per Decision 4.3).
-- The fixture set is checked in (or path-referenced via env var per NFR-M5); CI runs the smoke test on every PR touching Epic 4 stories.
+- `meetings.verified_at` is NULL on each fixture, read from the state store because `auricle status <id>` is a stub until Story 9.6 (verification is human action, not automatic on `auricle run` — per Decision 4.3).
+- The CI pipeline test runs on every PR under `swift test` with stub strategies and one small checked-in WAV (NFR-M5); the live run uses real WhisperKit and live Anthropic calls on recordings that stay outside the repository.
 
 **Out of scope (architectural slot ≠ FR satisfaction):** FR76 (`ClaudeTranscriptionReviewer` concrete impl) is *not* claimed by this epic. AR-AI-1 ships the `TranscriptionReviewerStrategy` protocol declaration as part of slot-laying so v1.1's Phase 3 Path C activation is a concrete-impl story not a refactor — but the *requirement* FR76 is owned by Epic 10.
 
-**Story sequence (Amelia's 9-story breakdown — sequencing matters; 4.8 cannot land before 4.1–4.7):**
+**Story sequence (10 stories — sequencing matters; 4.9 cannot land before 4.1–4.8):**
 1. `4.1` WhisperKit transcribe stage (FR17, FR19, FR20)
 2. `4.2` Diarize stage + snippet extraction (FR18)
 3. `4.3` `ReviewDiarization` stage + state machine entry (FR74 with flag default-off path validated in <100ms)
 4. `4.4` `AIReviewerInterface` protocol family + null `TranscriptionReviewerStrategy` (FR73; AR-AI-1)
 5. `4.5` `ClaudeDiarizationReviewer` concrete impl behind flag (FR74 with flag-on path)
-6. `4.6` `AttributionViewModel` in `Core/` + attribution batch CLI (FR23 data-side, FR25 CLI publish-anyway)
+6. `4.6` `AttributionViewModel` in `Attribute/` + attribution batch CLI (FR23 data-side, FR25 CLI publish-anyway)
 7. `4.7` `auricle run` verb skeleton + `__internal-stage` worker dispatch wiring
-8. `4.8` Basic notification stub + Obsidian URL-open (FR42 minimal, FR43 minimal — the Verifier+timer wiring lands in Epic 8)
-9. `4.9` Exit-criteria smoke test (per criteria above)
+8. `4.8` Builder-mode audio import (`auricle __internal-import`)
+9. `4.9` Basic notification stub + Obsidian URL-open (FR42 minimal, FR43 minimal — the Verifier+timer wiring lands in Epic 8)
+10. `4.10` Exit-criteria gate (CI pipeline test + live run, per criteria above)
 
 **Standalone value:** auricle works end-to-end via CLI on pre-existing audio recordings — the architecture's risk-front-loaded validation checkpoint. Validates Claude summarization quality on real transcripts, validates WhisperKit diarization quality, validates the AI-correction wedge thesis, validates the entire pipeline before any GUI investment. **This is a gate, not a ship.**
 
-**FRs covered:** FR17, FR18, FR19, FR20, FR23 (data-side / CLI batch path), FR25 (CLI publish-anyway), FR42 (basic notification stub), FR43 (basic Obsidian URL open), FR73, FR74
+**FRs covered:** FR17, FR18, FR19, FR20, FR23 (data-side / CLI batch path), FR25 (CLI publish-anyway), FR27 (mechanism only: the `--speakers` batch path; the documented fallback surface stays [v1.1]), FR42 (basic notification stub), FR43 (basic Obsidian URL open), FR73, FR74
 
 **NFRs primarily addressed:** NFR-P3, NFR-P4, NFR-P10 (peak memory for WhisperKit), NFR-Pr1 (transcribe local), NFR-Pr4, NFR-C1 v1.1+ tier (when diarization review enabled — empirically validated by exit-criteria smoke test), NFR-I8 (local LLM v1.1+ protocol slot).
 
@@ -720,7 +721,7 @@ User opens auricle, sees the single main window with meeting list, can see per-m
 
 When a meeting reaches `awaiting_attribution`, user opens the Attribution sheet (rises from main window — never a separate window — single-window principle), names speakers via calendar-marked autocomplete + "this is me" pre-select + recurring-meeting auto-prefill, reviews AI-suggested diarization corrections inline (per-paragraph 🤖 chips with Apply/Reject), or escapes via Publish unattributed. Three rename mechanics (default global / per-paragraph reassign / AI splits). Asymmetric bottom-button hierarchy. Sheet queue for multi-meeting concurrency. Trust-calibration footer + per-Apply Cmd-Z + persistent revert.
 
-**Same `AttributionViewModel` as Epic 4** (lives in `Core/`, not in the GUI target): the type system is the parity contract between CLI batch attribution and the GUI sheet — the rename mechanics and `attribution.json` schema invariants apply to both surfaces by construction.
+**Same `AttributionViewModel` as Epic 4** (lives in `Attribute/`, not in the GUI target): the type system is the parity contract between CLI batch attribution and the GUI sheet — the rename mechanics and `attribution.json` schema invariants apply to both surfaces by construction.
 
 **On Sally's Epic 7.5 (AI-hint UX as separate flag-gated epic) concern:** AI-hint UX (`AIHintChip`, `TrustCalibrationFooter`, `AttributionTranscriptPane`, paragraph-level Apply/Reject) ships in this epic *behind the `diarization_review.enabled` flag* per Path C. The flag-gating already isolates the AI-correction work — when the flag is off, the entire AI-hint surface code is dead-but-loaded; when on (Phase 2 v1.1), it activates without code changes. Splitting into a separate epic would be process theater without a QA org demanding a separate gate (Amelia's call). Mitigation: stories within Epic 7 explicitly tag AI-hint UX stories as `[flag-gated]` so reviewers can identify what activates only on Phase 2 flip — and the same fixture set used in Epic 3 + Epic 4 exit-criteria flows through the AI-hint UX with `diarization_review.enabled = true` to validate Phase 2 activation criteria when the time comes.
 
@@ -1327,7 +1328,7 @@ So that future readers can correctly interpret older notes (FR41 `auricle:` bloc
 - **5 stories** sized for single dev-agent completion
 - **All FRs covered:** FR26 (Story 2.4 — auricle never re-edits), FR35 (Story 2.4), FR36 (Story 2.3 — atomic write), FR37 (Story 2.1), FR38 (Story 2.1), FR39 (Story 2.1), FR40 (Story 2.2), FR41 (Story 2.1)
 - **NFRs primarily verified:** NFR-R1 (Story 2.3), NFR-R2 (Story 2.3 + 2.4), NFR-R7 persist-side hard gate (consumed downstream by Epic 3), NFR-P8 (Story 2.3), NFR-S4 (Story 2.3), NFR-I3 (frontmatter compatible with Obsidian URL scheme), NFR-I4 (Story 2.5)
-- **All architectural commitments addressed:** AR-DATA-6 (Stories 2.1, 2.5; the `auricle/needs-summary` tag is Story 4.7), AR-DATA-7 (Story 2.4 re-publish; the re-publish notification text is Story 4.8), AR-DATA-8 (Story 2.2), AR-DATA-9 (Story 2.3 vault path validation), AR-PAT-9 (Story 2.1 markdown discipline)
+- **All architectural commitments addressed:** AR-DATA-6 (Stories 2.1, 2.5; the `auricle/needs-summary` tag is Story 4.7), AR-DATA-7 (Story 2.4 re-publish; the re-publish notification text is Story 4.9), AR-DATA-8 (Story 2.2), AR-DATA-9 (Story 2.3 vault path validation), AR-PAT-9 (Story 2.1 markdown discipline)
 - **No future-story dependencies:** every story is independently completable in sequence
 
 ---
@@ -1813,7 +1814,7 @@ So that the glossary is injected as context into the summarization prompt for te
 
 > Renamed per John's review — this is a *Pipeline Validation* checkpoint for the maintainer-as-builder, not a user-shippable milestone for the maintainer-as-meeting-haver. **This is a gate, not a ship.** The cohesive-MVP commitment lives at Epic 9.
 
-User (in builder mode) has a meeting audio file on disk → runs `auricle run <id> --publish-anyway` from terminal → gets a complete Obsidian note. Validates Claude summarization quality on real transcripts, validates WhisperKit diarization quality, validates the AI-correction wedge thesis, validates the entire pipeline before any GUI investment.
+User (in builder mode) has a meeting audio file on disk → registers it with the hidden `auricle __internal-import <audio-file>` (Story 4.8), which prints a meeting id → runs `auricle run <id> --publish-anyway` from terminal → gets a complete Obsidian note. Validates Claude summarization quality on real transcripts, validates WhisperKit diarization quality, validates the AI-correction wedge thesis, validates the entire pipeline before any GUI investment.
 
 ### Story 4.1: WhisperKit Transcribe Stage
 
@@ -1851,6 +1852,7 @@ So that the rest of the pipeline can consume canonical transcript text without e
 **When** transcription succeeds
 **Then** a `stage_events` row is written via `StageEventLogger.record(...)` (Story 1.6) with `stage='transcribe'`, `event='completed'`, `metadata_json` containing `{model_id: "whisper-large-v3-turbo", audio_duration_s, transcript_chars}` per Decision 4.5
 **And** `telemetry.transcription_wer_estimate` may be NULL (filled in v1.1 by post-summarize divergence calc) — the column is reserved per Story 1.4
+**And** this row is the single `completed` row for the combined transcribe and diarize subprocess; Story 4.2 adds a `diarize` object to its `metadata_json`
 
 **Given** WhisperKit transcription failure (OOM, model load failure)
 **When** the stage retries per Decision 4.2 (1 retry after fresh subprocess restart)
@@ -1892,7 +1894,10 @@ So that the diarization JSON is canonical and the snippet files are pre-computed
 
 **Given** the stage execution
 **When** diarization succeeds
-**Then** a `stage_events` row is written with `stage='diarize'`, `event='completed'`, `metadata_json` containing `{model_id, segment_count, speaker_count, snippet_count}` per Decision 4.5
+**Then** no separate `stage_events` row is written: `PipelineStage` has no `diarize` case, and the combined subprocess runs under the `transcribe` stage per Decision 1.1 and the architecture's "no separate diarize stage" rule
+**And** the diarize step's `{model_id, segment_count, speaker_count, snippet_count}` is added to the same `stage='transcribe'`, `event='completed'` row's `metadata_json` under a `diarize` key (snake_case per the `stage_events` dialect)
+**And** the composition root merges the two metadata blocks, because `Transcribe` and `Diarize` do not import each other
+**And** `PipelineStage` stays at nine cases and `__internal-stage diarize` stays invalid
 
 ---
 
@@ -1948,11 +1953,12 @@ So that all architectural slots for the AI-correction product category are in pl
 **When** I declare them
 **Then** `DiarizationReviewerStrategy` has `Input = (CanonicalTranscript, DiarizationArtifact)`, `Output = DiarizationSuggestion` (with `kind: .underSegmentation | .overSegmentation`, `segmentId`, `proposedSplits[]`); cache artifact `diarization_suggestions.json` per Decision 5.1
 **And** `TranscriptionReviewerStrategy` has `Input = (CanonicalTranscript, AudioFingerprint)`, `Output = TranscriptionSuggestion` (with `charRange`, `proposedReplacement`); cache artifact `transcription_suggestions.json` is declared as a schema but NOT WRITTEN in MVP per Decision 5.5 Phase 3
-**And** `JargonCorrectionStrategy` has `Input = (SummaryDraft, Glossary)`, `Output = JargonCorrection` (with `charRange`, `originalSpan`, `correctedSpan`); MVP impl wraps the existing `GlossaryInjector` from Story 3.12 per Decision 5.1
+**And** `JargonCorrectionStrategy` already ships from Story 3.12 in `Sources/AIReviewerInterface/JargonCorrectionStrategy.swift` as `correct(summary: SummaryDraft, glossary: Glossary) async throws -> [JargonCorrection]`; this story keeps that signature and makes `JargonCorrection` conform to `Suggestion` (it already carries `suggestionId` and `reasoning`)
+**And** it does not force the glossary path through `AIReviewerStrategy.review(input:config:)`, because that shape serves reviewers that call a model and FR73 does not require it
 
-**Given** Story 3.12's `JargonCorrectionStrategy` (already implemented)
+**Given** `GlossaryJargonCorrector` (`Sources/Summarize/GlossaryJargonCorrector.swift`, from Story 3.12)
 **When** Story 4.4 lands
-**Then** the implementation in `Sources/Summarize/GlossaryInjector.swift` (or wherever Story 3.12 placed it) is wrapped/conformed to the `JargonCorrectionStrategy` protocol — adapter, not rewrite
+**Then** it is unchanged
 **And** the existing behavior (FR55–FR57) is unchanged
 
 **Given** the null `TranscriptionReviewerStrategy` declaration
@@ -1979,6 +1985,7 @@ So that Path C Phase 1 ships its slot (flag-default-off in MVP, flag-on in Phase
 **When** I declare `ClaudeDiarizationReviewer`
 **Then** the concrete strategy uses `claude-haiku-4-5` by default (configurable via `diarization_review.model` per FR58)
 **And** the prompt skeleton is structured to ask Claude to flag segments where: (a) acoustic similarity hints two speakers labeled as one (under-segmentation) → propose splits; (b) acoustic similarity hints one speaker labeled as two (over-segmentation) → propose merge
+**And** this story adds the `ClaudeSummarizer` dependency to the `ClaudeAIReviewers` target in `Package.swift`, which the architecture's dependency graph already lists (the shared `AnthropicHTTPClient` and `KeychainAPIKey` live in `ClaudeSummarizer`)
 
 **Given** prompt caching per AR-AI-2 + Decision 5.6
 **When** the prompt is constructed
@@ -1992,9 +1999,9 @@ So that Path C Phase 1 ships its slot (flag-default-off in MVP, flag-on in Phase
 **And** the response is one-shot (NOT streaming — per Amelia's MVP scoping; Haiku response for ~80 segments is ~3s, render when complete; streaming UI is Phase 2+ refinement)
 
 **Given** NFR-C1 v1.1+ tier ceiling (≤$0.60 per 30-min meeting when `diarization_review.enabled = true`)
-**When** Story 4.9's exit-criteria smoke test runs the fixture set with flag on
+**When** Story 4.10's live gate runs the fixture set with flag on
 **Then** aggregate per-meeting cost across `summarize` (Opus) + `reviewing_diarization` (Haiku) is ≤$0.60 per Decision 5.6
-**And** if exceeded, the smoke test fails with a clear "cost ceiling exceeded" error
+**And** if exceeded, the live gate fails with a clear "cost ceiling exceeded" error
 
 **Given** future local-LLM impl per Decision 5.6 telemetry contract
 **When** a v1.1+ local-LLM diarization reviewer ships
@@ -2007,24 +2014,34 @@ So that Path C Phase 1 ships its slot (flag-default-off in MVP, flag-on in Phase
 
 ---
 
-### Story 4.6: AttributionViewModel in Core/ + Attribution Batch CLI
+### Story 4.6: AttributionViewModel in Attribute/ + Attribution Batch CLI
 
 As the maintainer (in builder mode),
-I want `AttributionViewModel` to live in the `Core` target (NOT in the GUI target), and `Attribute/AttributionStage.swift` to support batch CLI mode via `--speakers "1=Ben,2=Sara,..."` + `--publish-anyway`,
+I want `AttributionViewModel` to live in the `Attribute` target (NOT in the GUI target), and `Attribute/AttributionStage.swift` to support batch CLI mode via `--speakers "1=Ben,2=Sara,..."` + `--publish-anyway`,
 So that the **type system is the parity contract** between Epic 4's CLI batch attribution and Epic 7's GUI sheet — eliminating Sally's CLI/GUI divergence concern per Amelia's mitigation.
 
 **Acceptance Criteria:**
 
-**Given** the `Core` target (NOT `App/Auricle/MainWindow/`)
+**Given** the `Attribute` target (NOT `App/Auricle/MainWindow/`), which both `auricle-cli` and `AuricleApp` link
 **When** I declare `AttributionViewModel` as an `@Observable` Swift type
 **Then** the view model owns: `attribution.json` state (speakers map + segment_overrides[] + segment_splits[] per AR-AI-6), the `diarization_suggestions.json` reading (when present), the autocomplete priority order (calendar → vault wikilinks → previously-labeled per FR23), the heuristic "this is me" pre-select logic (longest-cumulative-speaking row), the recurring-meeting auto-prefill (≥3 prior labelings per UX-DR33)
-**And** the view model is consumed identically by Story 4.7's CLI batch attribution AND Epic 7's `AttributionSheet` GUI per Amelia's parity-contract resolution
+**And** the view model is consumed identically by Story 4.6's CLI batch attribution AND Epic 7's `AttributionSheet` GUI per Amelia's parity-contract resolution
 **And** the view model exposes a debounced atomic-write (500ms via `Task.debounce`) routed through `Core/AtomicWriter` per AR-AI-6
+
+**Given** the view model decodes `DiarizationArtifact` and `DiarizationSuggestion`
+**When** I inspect `Package.swift`
+**Then** `Attribute` depends on `DiarizerInterface` and `AIReviewerInterface` (both depend on `Core`, which is why the view model cannot live in `Core`)
+**And** calendar attendees and vault wikilink targets come from the `Core` types `CalendarArtifact` and `Glossary`
+**And** the "previously labeled" names arrive through an injected protocol defined in `Attribute`, so the view model has no `State` or vault dependency of its own
+**And** the story's Design Notes name the store behind "previously labeled" (FR23 item 3), which no artifact records today
 
 **Given** the `Attribute/AttributionStage.swift`
 **When** `auricle attribute <id> --speakers "1=Ben,2=Jordan Whitfield,3=Priya"` is invoked (CLI batch mode)
 **Then** the stage parses the speaker mapping, resolves each name against the vault (matching wikilink targets, falling back to creating new wikilinks for unknown names), validates the mapping (no duplicates, every Speaker_N referenced in `diarization.json` is mappable or explicitly unmapped), and writes `attribution.json` via `AttributionViewModel`'s atomic-write path per AR-AI-6
 **And** the stage transitions `meetings.state` from `awaiting_attribution → attributing → summarizing` per AR-PIPE-2
+**And** `--speakers` ships here as the batch path; FR27 stays [v1.1] as the documented fallback surface, which adds `--emit-snippets` (Story 10.4), and a pre-1.0 addition is not an NFR-I7 contract break
+**And** `auricle attribute <id> --batch` with no `--speakers` applies the meeting's existing `attribution.json` speakers map if one exists; otherwise it exits 1 with "no speaker mapping; run with --interactive or pass --speakers" per Decision 1.5
+**And** until Epic 7 ships the sheet, `auricle attribute <id>` with no flags behaves as `--batch`
 
 **Given** `auricle run <id> --publish-anyway`
 **When** the user wants to skip attribution entirely (FR25 CLI path)
@@ -2040,8 +2057,9 @@ So that the **type system is the parity contract** between Epic 4's CLI batch at
 
 **Given** Sally's CLI/GUI divergence concern from party-mode review
 **When** Epic 7's `AttributionSheet` lands later
-**Then** the sheet imports `AttributionViewModel` from `Core` and uses it directly — no separate sheet-only view model exists
+**Then** the sheet imports `AttributionViewModel` from `Attribute` and uses it directly — no separate sheet-only view model exists
 **And** the rename mechanics, autocomplete priority, segment_overrides/segment_splits semantics are **identical** between CLI and GUI by construction (LSP per AR-PAT-7)
+**And** applying `segment_overrides` and `segment_splits` to the transcript the summarize stage reads is out of scope here, because both arrays are empty on every Epic 4 path; Story 7.11 owns it
 
 ---
 
@@ -2095,6 +2113,21 @@ So that the entire Epic 4 pipeline is invocable from one user-facing CLI verb (n
 **When** a retry is in flight in a foreground TTY
 **Then** SIGINT (Ctrl-C) cancels the in-flight HTTP request, transitions to `summarization_failed` immediately, exits 130 (standard for SIGINT) per Decision 4.2
 
+**Given** every stage `auricle run` drives
+**When** I run the worker-coverage test
+**Then** `InternalStageWorker` has a case for each subprocess stage: `transcribe` (Stories 4.1 and 4.2), `review-diarization` (Story 4.3) and `summarize` (Story 3.7)
+**And** `auricle run` runs `attribute`, `persist` and `notify` in-process per AR-PIPE-1
+**And** the test enumerates the stages the verb drives, so a stage with neither a worker case nor an in-process path fails the build
+
+**Given** persist has published the note
+**When** the run continues
+**Then** the verb runs the notify stage in-process with the CLI composition root's `Notifier` (Story 4.9), not as a subprocess, and the meeting reaches `awaiting_verification`
+
+**Given** the CLI dispatches workers
+**When** `RunVerb` builds its `SubprocessDispatcher`
+**Then** it passes `resolveExecutablePath` returning the running `auricle-cli`'s own executable URL, because the default resolver is written for the GUI bundle and its behavior from an unbundled CLI is unverified
+**And** a test asserts the CLI-built dispatcher's `makeProcess` executable exists and is the current binary
+
 **Given** the test suite
 **When** I run integration tests against the binary
 **Then** `Tests/CLITests/RunVerbTests.swift` covers: bare `auricle run <id>` resume; `--from`/`--to`/`--only` permutations; `--force` against permanent fail-state; `--reattribute` preserves retention timer; `--publish-anyway` produces `auricle/needs-attribution` tag; flag conflicts rejected at parse time; SIGINT cancels and exits 130; a completed run leaves a note published at the configured vault path; `--reattribute` on a published meeting produces a `--rerun-` sibling whose frontmatter carries `auricle.supersedes`
@@ -2102,19 +2135,64 @@ So that the entire Epic 4 pipeline is invocable from one user-facing CLI verb (n
 
 ---
 
-### Story 4.8: Basic Notification Stub + Obsidian URL Open
+### Story 4.8: Builder-Mode Audio Import (`auricle __internal-import`)
 
 As the maintainer (in builder mode),
-I want the absolute minimum notification + Obsidian URL-open path so that Epic 4's CLI dogfood produces a complete user experience in terminal mode (notification fires; clicking opens the note in Obsidian),
-So that the exit-criteria smoke test (Story 4.9) can validate the *full* loop — but the full Verifier+timer wiring lands in Epic 8.
+I want a hidden `auricle __internal-import <audio-file>` verb that registers an existing recording as a `captured` meeting,
+So that Epic 4's pipeline runs on real recordings before Epic 5's capture exists, and Story 4.10's live gate has a supported entry point.
+
+**Acceptance Criteria:**
+
+**Given** a readable audio file (WAV, or any format AVFoundation reads, such as m4a)
+**When** I run `auricle __internal-import <audio-file> [--started-at <ISO 8601>] [--title <text>]`
+**Then** the audio is converted to the Decision 1.4 format (PCM 16-bit, 16 kHz, mono WAV) and written to `~/Library/Caches/com.auricle.app/<meeting-id>/audio.wav` through `AtomicWriter` at mode 0600 per NFR-S3
+**And** a `meetings` row is inserted through `StateStore` with `state='captured'`, `audio_cache_path`, `duration_seconds`, `capture_started_at` (`--started-at` if given, else the source file's creation date), `capture_ended_at` (start plus duration) and `title` (if given)
+**And** one `stage_events` row is written through `StageEventLogger` with `stage='capture'`, `event='completed'` and `metadata_json` of `{imported: true, source_format, audio_duration_s}`
+**And** stdout carries the new meeting id and nothing else, so `id=$(auricle __internal-import call.m4a)` works
+**And** the source path is never logged at a public log level
+
+**Given** an unreadable, empty or zero-length audio file, or a malformed `--started-at`
+**When** the verb runs
+**Then** it exits 1 with an actionable message, inserts no row, and leaves no cache directory behind (audio is finalized before the row is written)
+
+**Given** the hidden-verb contract
+**When** I run `auricle help` or generate shell completions
+**Then** the verb is absent (`shouldDisplay: false`) and is exempt from the NFR-I7 binding contract, like `__internal-stage`
+**And** promoting it to a public `import` verb is a separate PRD decision and is not part of this story
+
+**Given** the AGENTS.md rule that logic lives in `Sources/`
+**When** I inspect the implementation
+**Then** conversion and registration live in `Sources/Capture/AudioImporter.swift`, and `App/auricle-cli/Verbs/ImportVerb.swift` is a thin wrapper
+
+**Given** the test suite
+**When** I run `Tests/CaptureTests/AudioImporterTests.swift`
+**Then** tests cover: a 16 kHz mono WAV passes through; a 48 kHz stereo input is converted to 16 kHz mono; file mode 0600; row fields and the `capture` event; `--started-at` and file-date fallback; unreadable input leaves no row and no directory; two imports of one file produce two ids
+**And** test audio is generated in the test, not checked in
+
+---
+
+### Story 4.9: Basic Notification Stub + Obsidian URL Open
+
+As the maintainer (in builder mode),
+I want the absolute minimum notification + Obsidian URL-open path so that Epic 4's CLI dogfood ends with the note path and its Obsidian URL printed to the terminal, and the `published → awaiting_verification` transition has an owner,
+So that the exit gate (Story 4.10) can validate the *full* loop — but the full Verifier+timer wiring lands in Epic 8.
 
 **Acceptance Criteria:**
 
 **Given** the `Notifications` target
-**When** the persist stage completes (Epic 2 Story 2.4)
-**Then** `Notifier.fire(meetingID:, title:, vaultPath:)` posts a `UNNotificationRequest` to `UNUserNotificationCenter` per FR42
-**And** the notification body shows the meeting title (e.g., *"auricle: meeting ready — Tuesday sync with Ben"*)
-**And** the notification's `userInfo` payload carries `{meeting_id, schema_version, payload_version}` per AR-FAIL-5
+**When** I declare the `Notifier` protocol (`func fire(meetingID:, title:, vaultPath:) async`)
+**Then** two conformers exist
+**And** `UserNotificationNotifier` posts a `UNNotificationRequest` through an injectable notification center per FR42, with body *"auricle: meeting ready — <title>"* (e.g., *"auricle: meeting ready — Tuesday sync with Ben"*) and a `userInfo` payload of `{meeting_id, schema_version, payload_version}` per AR-FAIL-5
+**And** `StdoutNotifier` prints the vault note path and the `obsidian://open?vault=...&file=...` URL to stdout, one per line
+
+**Given** one composition root per binary (`architecture.md`, DIP)
+**When** the CLI and the GUI are wired
+**Then** `auricle-cli` wires `StdoutNotifier` and `AuricleApp` wires `UserNotificationNotifier` (the notification delegate must live in the app process per Decision 1.1)
+**And** Epic 4 posts no system notification from the CLI; whether a bundled `auricle-cli` can post one is not settled here and is left to the GUI dispatch in Epic 6
+
+**Given** the notify stage runs after persist (in-process under `auricle run`, per Story 4.7)
+**When** the notifier returns or fails (notify failure is non-blocking per NFR-R8)
+**Then** the meeting transitions `published → awaiting_verification` in the same run
 
 **Given** notification permission has been granted
 **When** the user clicks the notification
@@ -2125,79 +2203,74 @@ So that the exit-criteria smoke test (Story 4.9) can validate the *full* loop �
 **When** the click happens
 **Then** the verification + retention-timer arming side of the click is **stubbed** in this story — the click opens Obsidian only; `Verifier.markVerified(...)` is NOT called
 **And** the meeting state stays at `awaiting_verification` (visible in `auricle list` from Epic 9 Story; in Epic 4 the state is observable only via direct SQLite inspection)
-**And** Story 4.8 is explicitly tagged as an **incomplete-but-shippable stub for FR42/FR43**; the full verification path (FR44 + retention arming) lands in Epic 8
+**And** Story 4.9 is explicitly tagged as an **incomplete-but-shippable stub for FR42/FR43**: `UserNotificationNotifier` is unit-tested only and is not exercised end-to-end until the GUI dispatches in Epic 6; the full verification path (FR44 + retention arming) lands in Epic 8
 
 **Given** a persist stage that completes as a re-publish (a `--rerun-<YYYY-MM-DD>[-N]` sibling was written per AR-DATA-7)
-**When** `Notifier.fire(...)` posts the notification
+**When** `UserNotificationNotifier` posts the notification
 **Then** the body distinguishes the re-publish: *"auricle: re-published Tuesday Sync with Ben (rerun 2026-05-15)"* per AR-DATA-7, with the rerun date taken from the sibling's `--rerun-` suffix
 **And** a persist that fell back to a fresh publish (the original note was deleted, so no `--rerun-` sibling exists) uses the standard *"meeting ready"* body
 **And** the `userInfo` payload keeps the same shape as the standard notification
 
-**Given** notification permission has been revoked
-**When** the persist stage completes
+**Given** `UserNotificationNotifier` and notification permission has been revoked
+**When** the notify stage runs
 **Then** `Notifier.fire(...)` logs at `warn` level and proceeds; the meeting still transitions to `awaiting_verification` per NFR-R8
 **And** the user can manually verify via `auricle keep <id>` (Epic 8 Story); in Epic 4 there's no manual-verify path yet — meeting just sits in `awaiting_verification`
 
 **Given** the test suite
 **When** I run `Tests/NotificationsTests/NotifierStubTests.swift`
-**Then** tests cover: `UNNotificationRequest` constructed with correct payload format; `URL(string: "obsidian://open?vault=...&file=...")` constructed correctly; re-publish → body reads *"auricle: re-published <title> (rerun <YYYY-MM-DD>)"* while fresh publish and fresh-publish fallback → standard *"meeting ready"* body; notification permission revoked → graceful degradation
+**Then** tests cover: `UNNotificationRequest` constructed with correct payload format; `URL(string: "obsidian://open?vault=...&file=...")` constructed correctly; re-publish → body reads *"auricle: re-published <title> (rerun <YYYY-MM-DD>)"* while fresh publish and fresh-publish fallback → standard *"meeting ready"* body; notification permission revoked → graceful degradation; `StdoutNotifier` prints the path and URL; the notify stage moves `published → awaiting_verification` whether the notifier succeeds or fails
 
 ---
 
-### Story 4.9: Exit-Criteria Smoke Test
+### Story 4.10: Exit-Criteria Gate (CI Pipeline Test + Live Run)
 
 As the maintainer (in builder mode),
-I want `Tests/IntegrationTests/Epic4ExitCriteria.swift` to be the canonical exit-criteria smoke test that validates Epic 4 is **a real gate, not "and then we kept going"** per John's review,
-So that scope creep doesn't dilute the Pipeline Validation milestone and the CLI dogfood claim is empirically defensible.
+I want Epic 4's exit criteria in two parts — a CI pipeline test and a manual live run — that together validate Epic 4 is **a real gate, not "and then we kept going"** per John's review,
+So that scope creep doesn't dilute the Pipeline Validation milestone, CI guards the plumbing on every PR, and the CLI dogfood claim is measured on real recordings.
 
 **Acceptance Criteria:**
 
-**Given** the smoke-test fixture set (≥5 of the user's existing meeting recordings, overlapping with Story 3.8's smoke-test set is fine)
-**When** the test runs against the built `auricle-cli` binary
-**Then** for each fixture, the test:
-1. Copies the fixture WAV to `~/Library/Caches/com.auricle.app/<test-id>/audio.wav`
-2. Inserts a corresponding `meetings` row via `StateStore` with state `captured`
-3. Invokes `auricle run <test-id> --publish-anyway` (or `--speakers "1=...,2=..."` per fixture's expected mapping)
-4. Asserts the exit code is 0
-5. Asserts a vault note appears at the expected path (per `FilenameResolver` rules from Story 2.2) with schema-valid frontmatter
-6. Asserts every action item / decision in the rendered note is followed by a `> source quote` blockquote that survives literal substring match against the transcript
-7. Asserts `auricle status <test-id>` returns `verified_at: null` (verification is human action, not automatic on `auricle run` per Decision 4.3)
+**Given** Part A, the CI pipeline test
+**When** I run `swift test`
+**Then** `Tests/IntegrationTests/PipelineEndToEndTests.swift` runs the stages through the library entry points (not the binary) with a stub `TranscriberStrategy`, a stub `DiarizerStrategy`, stubbed Anthropic responses, a temp vault and a temp state database
+**And** the story adds an `IntegrationTests` test target to `Package.swift` that passes `--explicit-target-dependency-import-check error`
+**And** it uses one small checked-in reference WAV (NFR-M5, at most 1 MB, synthetic or public-domain) so the audio path is exercised
+**And** for each fixture it asserts: import through `AudioImporter` (Story 4.8); state reaches `awaiting_verification`; a vault note exists at the `FilenameResolver` path (Story 2.2) with schema-valid frontmatter; every action item and decision is followed by a `> source quote` that survives literal substring match against the transcript; `meetings.verified_at` is NULL (verification is human action per Decision 4.3)
+**And** it runs on every PR through the existing `swift` job, with no path filter
+**And** it does not run WhisperKit (model download, no ANE on hosted runners); WhisperKit correctness belongs to Stories 4.1 and 4.2
 
-**Given** the per-fixture quote-grounding pass-rate target
-**When** I aggregate across the fixture set
-**Then** ≥80% of expected action items + decisions across the fixture set survive grounding validation (adjustable based on Epic 3 Story 3.9 eval-harness baseline)
-**And** if the rate falls below 80%, the test fails with a clear "Epic 4 exit criteria not met: <metric> = <value>" error
+**Given** Part B, the live run
+**When** the maintainer runs `Tests/scripts/run-epic4-exit-criteria.sh` against `$AURICLE_EXIT_FIXTURES`
+**Then** the directory holds at least 5 recordings (at least one 1:1, at least two with 4 or more attendees) plus each recording's expected speaker mapping and expected item list
+**And** for each recording the script runs `auricle __internal-import`, then `auricle run <id> --publish-anyway` (or `--speakers` per the mapping), and asserts exit 0, a vault note at the expected path with schema-valid frontmatter, and grounded quotes as in Part A
+**And** it asserts `meetings.verified_at` is NULL by reading the `meetings` table with `sqlite3`, because `auricle status <id>` is a stub until Story 9.6
+**And** across the set at least 80% of expected action items and decisions survive grounding, or the script fails with "Epic 4 exit criteria not met: <metric> = <value>"
+**And** per-meeting cost, summed from the `telemetry` table, is at most $0.50 with `diarization_review.enabled = false` and at most $0.60 with it `true`, per NFR-C1 read as a per-meeting ceiling
+**And** it uses real WhisperKit and live Anthropic calls
 
-**Given** NFR-C1 cost ceiling (≤$0.50 default tier or ≤$0.60 with diarization review enabled)
-**When** the smoke test runs with `diarization_review.enabled = false`
-**Then** aggregate cost across the fixture set is ≤$0.50 × N meetings ± reasonable variance
-**And** with `diarization_review.enabled = true` (Phase 2 v1.1 simulation), aggregate cost is ≤$0.60 × N meetings
+**Given** the recordings are private and the repository is public
+**When** results are recorded
+**Then** recordings are never checked in and the fixture path comes from the environment variable
+**And** `Tests/fixtures/epic4-exit-results.md` records aggregates only: pass rate, total cost, per-fixture counts under opaque labels (`fixture-1` …), no transcript text and no titles
+**And** the AMI meeting audio (CC BY 4.0) behind the Epic 3 fixtures is an allowed public source for repeatable runs
+**And** changing the fixture set needs a rationale in the PR description
 
-**Given** CI integration
-**When** any PR touches `Sources/Capture/`, `Sources/Transcribe/`, `Sources/Diarize/`, `Sources/ReviewDiarization/`, `Sources/Attribute/`, or `Sources/auricle-cli/Verbs/RunVerb.swift`
-**Then** `Tests/IntegrationTests/Epic4ExitCriteria.swift` runs in `ci.yml` per Story 1.8
-**And** the test uses **stubbed Anthropic responses** (deterministic — same fixture → same response shape, NOT live API calls in CI per NFR-M5 + budget hygiene); a separate manual `tests/scripts/run-epic4-exit-criteria-live.sh` exists for live-API validation when the smoke-test set is updated
-
-**Given** the fixture set
-**When** the fixtures are checked in (or path-referenced via env var per NFR-M5 if too large)
-**Then** the fixture set is the same one the user used in Story 3.8 (smoke-test default selection) and Story 3.9 (eval harness regression) — single source of truth for "the user's real meetings the validators have been measured against"
-**And** updates to the fixture set require an explicit rationale in the PR description (not silent regeneration)
-
-**Given** Story 4.9 passes
-**When** the user reviews the test output
-**Then** the per-fixture summary line reads: *"Fixture <name>: vault note written → <path> · grounding_method=<citations|substring> · kept N items (M expected) · drop count K · cost $X"*
-**And** the aggregate summary at the end states: *"Epic 4 exit criteria met: pass rate Y%, total cost $Z over <N> fixtures"*
+**Given** Story 4.10 passes
+**When** the maintainer reads the output
+**Then** each per-fixture line reads: *"fixture-N: vault note written · grounding_method=substring · kept N items (M expected) · drop count K · cost $X"*
+**And** the last line reads: *"Epic 4 exit criteria met: pass rate Y%, total cost $Z over <N> fixtures"*
+**And** Epic 4 exits when `Tests/fixtures/epic4-exit-results.md` records that line and Part A is green
 
 ---
 
 **Epic 4 summary:**
-- **9 stories** sized for single dev-agent completion (Amelia's locked breakdown)
-- **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 (4.8 cannot land before 4.1–4.7; 4.9 is the explicit gate)
-- **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR42 stub (Story 4.8 — full path in Epic 8), FR43 stub (Story 4.8 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
-- **NFRs primarily verified:** NFR-P3 (Story 4.1 perf test), NFR-P4 (Story 4.2 perf test), NFR-P10 peak memory (Stories 4.1 + 4.2 — WhisperKit subprocess constraint), NFR-Pr1 transcribe local (Story 4.1), NFR-Pr4 first-name speakers + email scrubbing (consumed in Story 4.6 + Epic 3 Story 3.10), NFR-C1 v1.1+ tier (Story 4.5 + Story 4.9 empirical validation), NFR-I8 local-LLM v1.1+ slot (Story 4.4 + Story 4.5 telemetry contract)
-- **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7), AR-PIPE-1 in-process persist wiring (Story 4.7), AR-DATA-6 `auricle/needs-summary` tag (Story 4.7), AR-DATA-7 re-publish notification text (Story 4.8)
-- **Explicit exit-criteria gate (John + Amelia):** Story 4.9 is the named gate, not a fiction; ≥80% quote-grounding pass-rate + NFR-C1 cost ceiling + CI integration
-- **Type-system parity contract (Sally + Amelia):** Story 4.6 places `AttributionViewModel` in `Core/` — Epic 7's GUI sheet imports the same type; FR23/FR25 splits across epics carry no divergence risk
+- **10 stories** sized for single dev-agent completion
+- **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 → 4.10 (4.9 cannot land before 4.1–4.8; 4.10 is the explicit gate)
+- **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR27 mechanism (Story 4.6 — the `--speakers` batch path; the documented fallback surface stays [v1.1], Story 10.4), FR42 stub (Story 4.9 — full path in Epic 8), FR43 stub (Story 4.9 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
+- **NFRs primarily verified:** NFR-P3 (Story 4.1 perf test), NFR-P4 (Story 4.2 perf test), NFR-P10 peak memory (Stories 4.1 + 4.2 — WhisperKit subprocess constraint), NFR-Pr1 transcribe local (Story 4.1), NFR-Pr4 first-name speakers + email scrubbing (consumed in Story 4.6 + Epic 3 Story 3.10), NFR-C1 v1.1+ tier (Story 4.5 + Story 4.10 live-run validation), NFR-I8 local-LLM v1.1+ slot (Story 4.4 + Story 4.5 telemetry contract)
+- **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7), AR-PIPE-1 in-process persist wiring (Story 4.7), AR-DATA-6 `auricle/needs-summary` tag (Story 4.7), AR-DATA-7 re-publish notification text (Story 4.9)
+- **Explicit exit-criteria gate (John + Amelia):** Story 4.10 is the named gate, not a fiction; the ≥80% quote-grounding pass-rate and the NFR-C1 cost ceiling are measured by the live run, and the CI pipeline test guards the plumbing on every PR
+- **Type-system parity contract (Sally + Amelia):** Story 4.6 places `AttributionViewModel` in `Attribute/` — Epic 7's GUI sheet imports the same type; FR23/FR25 splits across epics carry no divergence risk
 - **No future-story dependencies within the epic:** every story is independently completable in sequence
 
 ---
@@ -2942,14 +3015,14 @@ So that attribution is a sheet attached to the main window — never auto-foregr
 ### Story 7.2: AttributionViewModel @Observable Wiring + Incremental Atomic-Write Debouncing
 
 As the single user,
-I want the GUI binding layer for the `AttributionViewModel` from Epic 4 Story 4.6 (which lives in `Core/`) — the `@Observable` lifecycle, the file-watch on `diarization_suggestions.json`, the SQLite ValueObservation for state transitions per AR-AI-5,
+I want the GUI binding layer for the `AttributionViewModel` from Epic 4 Story 4.6 (which lives in `Attribute/`) — the `@Observable` lifecycle, the file-watch on `diarization_suggestions.json`, the SQLite ValueObservation for state transitions per AR-AI-5,
 So that the same view-model that drives Epic 4's CLI batch attribution drives Epic 7's GUI sheet — the type system is the parity contract.
 
 **Acceptance Criteria:**
 
 **Given** `AttributionSheet` from Story 7.1
 **When** the sheet's view model is initialized
-**Then** the sheet imports `AttributionViewModel` from `Core` (NOT a separate sheet-only view model) per Story 4.6 parity contract
+**Then** the sheet imports `AttributionViewModel` from `Attribute` (NOT a separate sheet-only view model) per Story 4.6 parity contract
 **And** the view model is bound to the sheet via SwiftUI `@Observable` macro per UX-DR39
 
 **Given** the sheet is opened
@@ -3289,6 +3362,12 @@ So that AI-suggested diarization corrections (FR75) are inspectable by the user 
 **When** I run `Tests/AppTests/AIHintChipTests.swift`
 **Then** tests cover: collapsed-state render; expanded-state render with reasoning + per-segment Apply; [Apply] writes correct `segment_split`; [Reject] hides chip without writing split; auto-collapse triggered when accept rate < 40%; auto-collapse NOT triggered when suggestions_count == 0; flag-off path renders the transcript pane but no chips
 
+**Given** non-empty `segment_overrides` or `segment_splits` in `attribution.json`
+**When** the summarize stage runs
+**Then** it reads the Decision 5.4 `RenderedTranscript`, not the raw speaker labels in `transcript.json`
+**And** `diarization.json` segment ids map to utterance indices through `DiarizationArtifact` (Story 4.2)
+**And** Story 4.6 leaves this to this story because both arrays are empty on every Epic 4 path
+
 ---
 
 ### Story 7.12: [Flag-Gated] TrustCalibrationFooter
@@ -3361,7 +3440,7 @@ So that every Apply action is reversible — the AI is a hint, not autonomous; e
 - **All UX-DRs primarily addressed:** UX-DR12-16, UX-DR18-19, UX-DR21, UX-DR28-40, UX-DR55, UX-DR59
 - **Sally's Epic 7.5 carve-out concern resolved:** AI-hint stories (7.10, 7.11, 7.12) are tagged `[flag-gated]` so reviewers identify what activates only on Phase 2 flip — Amelia's "flag-gating already isolates" call wins for solo-dev context
 - **Sally's "second meeting" / J9 trust-compounding:** Story 7.8 has explicit AC for the 1-keystroke Cmd-Enter completion on recurring meetings
-- **Type-system parity contract:** Story 7.2 imports `AttributionViewModel` from `Core/` (Story 4.6) — CLI batch + GUI sheet share the same view-model; FR23/FR25 splits across Epic 4/7 carry zero divergence risk
+- **Type-system parity contract:** Story 7.2 imports `AttributionViewModel` from `Attribute/` (Story 4.6) — CLI batch + GUI sheet share the same view-model; FR23/FR25 splits across Epic 4/7 carry zero divergence risk
 - **No future-story dependencies within the epic:** sequencing 7.1 (shell) → 7.2 (view-model GUI binding) → 7.4-7.7 (atomic components) → 7.3 (SpeakerRow composes atoms) → 7.5 (heuristic) → 7.6 (coverage strip) → 7.8 (recurring prefill) → 7.9 (bottom buttons + keyboard) → 7.10-7.12 (flag-gated transcript + AI hint + trust footer) → 7.13 (undo + revert)
 
 ---
@@ -3572,7 +3651,7 @@ So that the cache-dir doesn't leak orphan directories and `meetings.audio_cache_
 
 **Epic 8 summary:**
 - **7 stories** sized for single dev-agent completion
-- **All FRs covered:** FR42 full path (Story 8.1 — Notifier; Story 4.8 was the Epic 4 stub), FR43 full path (Story 8.2 — Obsidian URL open in click handler; Story 4.8 was the Epic 4 stub), FR44 (Story 8.2 + 8.3 — click as verification trigger via Verifier actor), FR45 (Story 8.5 — hold audio indefinitely until verification click), FR46 (Story 8.5 — 7-day grace timer post-click), FR47 (Story 8.6 — 7d/14d reminders)
+- **All FRs covered:** FR42 full path (Story 8.1 — Notifier; Story 4.9 was the Epic 4 stub), FR43 full path (Story 8.2 — Obsidian URL open in click handler; Story 4.9 was the Epic 4 stub), FR44 (Story 8.2 + 8.3 — click as verification trigger via Verifier actor), FR45 (Story 8.5 — hold audio indefinitely until verification click), FR46 (Story 8.5 — 7-day grace timer post-click), FR47 (Story 8.6 — 7d/14d reminders)
 - **NFRs primarily verified:** NFR-R3 zero unverified-audio-deletion (Story 8.5 — conservative-by-default), NFR-R8 Notification permission revoked → graceful degradation (Story 8.1), NFR-Pr6 conservative retention defaults (Story 8.5)
 - **All architectural commitments addressed:** AR-FAIL-4 (Story 8.3 — Verifier actor with idempotent SQL), AR-FAIL-5 (Story 8.2 — notification payload format binding contract), AR-PAT-4 (Story 8.3 — Verifier helper-discipline primitive)
 - **All UX-DRs primarily addressed:** UX-DR49 (Story 8.1 — notification → user-initiated engagement), UX-DR50 (Story 8.2 — notification = verification single click both effects), UX-DR51 (Story 8.4 — manual Verify path)
@@ -3937,7 +4016,7 @@ So that operability scales as meeting volume grows; nothing silently expires.
 ### Story 10.4: CLI Attribution Fallback `--emit-snippets` + `--speakers` (FR27)
 
 As the single user,
-I want `auricle attribute <id> --emit-snippets` + `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` per FR27 — the CLI fallback path for J4 when the GUI sheet is unavailable,
+I want `auricle attribute <id> --emit-snippets` and the documented FR27 surface for `auricle attribute <id> --speakers "1=Ben,2=Sara,..."` (the batch path itself ships in Epic 4 Story 4.6) — the CLI fallback path for J4 when the GUI sheet is unavailable,
 So that the broken-UI degenerate case has a documented recovery surface.
 
 **Acceptance Criteria:**
@@ -3949,7 +4028,7 @@ So that the broken-UI degenerate case has a documented recovery surface.
 
 **Given** `--speakers "1=Ben,2=Jordan Whitfield,3=Priya"`
 **When** invoked
-**Then** parses the mapping; resolves names against the vault (matching wikilinks, falling back to creating new wikilinks for unknown names per Epic 4 Story 4.6); validates the mapping; writes `attribution.json` and resumes the pipeline
+**Then** behaves as Epic 4 Story 4.6 built it (parses the mapping, resolves names against the vault, validates, writes `attribution.json`, resumes the pipeline); this story adds no new parsing
 **And** mutually exclusive with `--emit-snippets` per Decision 1.5
 
 **Given** the test suite

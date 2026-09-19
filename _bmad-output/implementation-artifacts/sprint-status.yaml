@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-19-2026 09:47
+last_updated: 09-19-2026 10:01
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -75,10 +75,11 @@ development_status:
   4-3-reviewdiarization-stage-state-machine-entry: backlog
   4-4-aireviewerinterface-protocol-family-null-transcriptionreview: backlog
   4-5-claudediarizationreviewer-concrete-impl-behind-flag: backlog
-  4-6-attributionviewmodel-in-core-attribution-batch-cli: backlog
+  4-6-attributionviewmodel-in-attribute-attribution-batch-cli: backlog
   4-7-auricle-run-verb-skeleton-__internal-stage-worker-dispatch: backlog
-  4-8-basic-notification-stub-obsidian-url-open: backlog
-  4-9-exit-criteria-smoke-test: backlog
+  4-8-builder-mode-audio-import-auricle-__internal-import: backlog
+  4-9-basic-notification-stub-obsidian-url-open: backlog
+  4-10-exit-criteria-gate-ci-pipeline-test-live-run: backlog
   epic-4-retrospective: optional
 
   epic-5: backlog
