@@ -82,10 +82,13 @@ private func insertMeetingSQL(id: String) -> String {
     lockAcquired.wait()
 
     // Release the GUI's write lock ~0.3s in, well inside the 2s busy
-    // timeout the subprocess is configured with.
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+    // timeout the subprocess is configured with. A dedicated thread, not a
+    // global dispatch queue: when the rest of the suite saturates the queue's
+    // workers, a queued release can slip past the busy timeout.
+    Thread {
+        Thread.sleep(forTimeInterval: 0.3)
         releaseLock.signal()
-    }
+    }.start()
 
     // This write blocks behind the GUI's held lock; the busy timeout
     // absorbs the wait rather than surfacing SQLITE_BUSY.
