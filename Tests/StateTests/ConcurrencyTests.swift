@@ -13,11 +13,36 @@ private func makeTestDatabasePath() -> (directory: URL, path: String) {
 /// but with a caller-supplied busy timeout, so contention tests can use a
 /// short timeout instead of production's 5s and stay fast.
 private func makeConfiguration(busyTimeoutSeconds: TimeInterval) -> Configuration {
+    makeConfiguration(busyMode: .timeout(busyTimeoutSeconds))
+}
+
+private func makeConfiguration(busyMode: Database.BusyMode) -> Configuration {
     var configuration = Configuration()
-    configuration.busyMode = .timeout(busyTimeoutSeconds)
+    configuration.busyMode = busyMode
     configuration.foreignKeysEnabled = true
     configuration.journalMode = .wal
     return configuration
+}
+
+/// A `Configuration` whose busy handler retries a blocked write every 5 ms for
+/// up to 30 s, like a generous `.timeout`, and calls `onBlocked` with the
+/// retry number each time it runs. SQLite only invokes a busy handler when it
+/// cannot get the lock, so `onBlocked` fires only while the caller is really
+/// waiting. That lets a test release the lock at the moment of contention,
+/// with no timer whose delay a starved process could stretch.
+///
+/// The budget is a retry count, not a clock reading. A starved process sleeps
+/// longer per retry, so load stretches the wait but cannot make it give up
+/// early.
+private func makeConfiguration(onBlocked: @escaping @Sendable (_ numberOfTries: Int) -> Void) -> Configuration {
+    let retryInterval: TimeInterval = 0.005
+    let maxRetries = 6000
+    return makeConfiguration(busyMode: .callback { numberOfTries in
+        onBlocked(numberOfTries)
+        guard numberOfTries < maxRetries else { return false }
+        Thread.sleep(forTimeInterval: retryInterval)
+        return true
+    })
 }
 
 private func insertMeetingSQL(id: String) -> String {
@@ -52,6 +77,11 @@ private func insertMeetingSQL(id: String) -> String {
 /// rather than two OS processes — SQLite's own locking doesn't distinguish
 /// same-process from cross-process connections, so this exercises the exact
 /// mechanism the architecture depends on.
+///
+/// The hold ends when the second writer's busy handler first runs — proof that
+/// it is blocked — so the hold's length never depends on timer or wake-up
+/// latency in a starved process. The handler's budget (30 s) is far above any
+/// scheduling delay.
 @Test func writeContentionWithinBusyTimeoutSucceedsWithoutError() throws {
     let (directory, path) = makeTestDatabasePath()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -59,11 +89,18 @@ private func insertMeetingSQL(id: String) -> String {
     // Seed the schema before the contending connections open.
     try MigrationRegistrar.migrator.migrate(DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
 
-    let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5))
-    let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5))
-
     let lockAcquired = DispatchSemaphore(value: 0)
     let releaseLock = DispatchSemaphore(value: 0)
+    // Signalled once, on first contention. It doubles as a flag: consuming the
+    // signal after the write proves the second writer really did have to wait.
+    let contentionObserved = DispatchSemaphore(value: 0)
+
+    let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5))
+    let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration { numberOfTries in
+        guard numberOfTries == 0 else { return }
+        contentionObserved.signal()
+        releaseLock.signal()
+    })
 
     let holderThread = Thread {
         try? guiPool.write { db in
@@ -80,21 +117,18 @@ private func insertMeetingSQL(id: String) -> String {
     }
     holderThread.start()
     lockAcquired.wait()
+    // Frees the holder even if the second writer never contends, so the
+    // holder thread cannot outlive the test blocked on `releaseLock`.
+    defer { releaseLock.signal() }
 
-    // Release the GUI's write lock ~0.3s in, well inside the 5s busy
-    // timeout the subprocess is configured with. The wide margin is for a
-    // loaded machine: the release runs on a global dispatch queue that
-    // parallel tests can starve past a shorter timeout.
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
-        releaseLock.signal()
-    }
-
-    // This write blocks behind the GUI's held lock; the busy timeout
-    // absorbs the wait rather than surfacing SQLITE_BUSY.
+    // This write blocks behind the GUI's held lock. The busy handler releases
+    // that lock on its first run and keeps retrying, so the wait is absorbed
+    // rather than surfacing SQLITE_BUSY.
     try subprocessQueue.write { db in
         try db.execute(sql: insertMeetingSQL(id: "01SUBPROCESSMEETINGID00000"))
     }
 
+    #expect(contentionObserved.wait(timeout: .now()) == .success, "the second writer never hit the held lock")
     let count = try subprocessQueue.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM meetings") }
     #expect(count == 2)
 }
