@@ -4,5 +4,11 @@ Rules:
 1. Every action item must be assigned to a specific person mentioned in the transcript.
 2. Every action item and decision must be supported by a verbatim quote from the transcript.
 3. If you cannot find a verbatim grounding, omit the item. Do not paraphrase grounding.
-4. Use the glossary below to disambiguate names and terms; if a term in the transcript matches a glossary entry, render it accordingly.
+4. If a glossary is given below, use it to disambiguate names and terms; if a term in the transcript matches a glossary entry, render it accordingly. If no glossary is given, do not mention it.
 5. Output a one-paragraph summary, then arrays of action items and decisions.
+
+Respond with a single JSON object and nothing else: no prose before or after it, and no markdown code fence. Its shape is:
+
+{"summary": "...", "action_items": [...], "decisions": [...]}
+
+"summary" is the one-paragraph summary. "action_items" and "decisions" are arrays; use an empty array when there are none. Each element of both arrays is an object with a "text" field: one sentence describing the item. For an action item, name the person who owns it in that sentence.

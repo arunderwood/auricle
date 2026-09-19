@@ -111,7 +111,7 @@ private func loadGolden(_ fileName: String) throws -> String {
 
 @Test func sharedBlocksAreByteIdenticalAcrossModesAndOnlyTheAddendumDiffers() throws {
     let citationsAddendum = """
-    Use Anthropic Citations to ground each item.
+    Use Anthropic Citations to ground each item. Cite the document for each item.
 
     Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.
     """
@@ -174,7 +174,7 @@ private func loadGolden(_ fileName: String) throws -> String {
     )
 
     #expect(prompt.system.text.hasPrefix(overriddenSystem))
-    #expect(prompt.system.text.contains("Use Anthropic Citations to ground each item."))
+    #expect(prompt.system.text.contains("Use Anthropic Citations to ground each item. Cite the document for each item."))
     #expect(prompt.system.text.hasSuffix(
         "Each action item and decision must also include a `source_block_index` field: the zero-indexed transcript content block that grounds it.",
     ))

@@ -47,8 +47,9 @@ public struct ClaudeCitationsSummarizer: SummarizerStrategy {
     /// decision fixes a value for this call shape yet, so this is a
     /// documented stand-in until a real token-budget story lands — the same
     /// posture Story 3.3's rate table and `ClaudeSubstringSummarizer`'s own
-    /// `maxTokens` already established.
-    private static let maxTokens = 4096
+    /// `maxTokens` already established. The budget is shared with the model's
+    /// thinking tokens, and 4096 cut a long meeting's JSON off mid-string.
+    private static let maxTokens = 16384
     /// Anthropic requires a `title` on every document content block; no AC
     /// fixes this value, so it is a fixed, documented stand-in.
     private static let documentTitle = "Meeting transcript"

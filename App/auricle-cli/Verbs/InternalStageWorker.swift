@@ -73,13 +73,11 @@ struct InternalStageWorker: AsyncParsableCommand {
             throw ExitCode(2)
         }
 
-        // Provisional: Citations as primary with substring as fallback is
-        // Decision 3.6's stated MVP default, pending the Story 3.8 strategy comparison
-        // that locks or flips it.
-        let orchestrator = SummarizerOrchestrator(
-            primary: ClaudeCitationsSummarizer(),
-            fallback: ClaudeSubstringSummarizer(),
-        )
+        // Substring only, no fallback: Decision 3.6's flip rule chose it (see
+        // Tests/fixtures/smoke-test-results.md). Citations returned no real
+        // citation objects on any transcript that had items, so a fallback to
+        // it would add a paid call that fails.
+        let orchestrator = SummarizerOrchestrator(primary: ClaudeSubstringSummarizer())
 
         let outcome: StageRunner.StageOutcome
         do {
