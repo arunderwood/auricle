@@ -16,6 +16,10 @@ enum MigrationRegistrar {
             Migration003RenameAudioRetentionStatusColumn.identifier,
             migrate: Migration003RenameAudioRetentionStatusColumn.migrate,
         )
+        migrator.registerMigration(
+            Migration004TelemetryGroundingAndPromptSetHash.identifier,
+            migrate: Migration004TelemetryGroundingAndPromptSetHash.migrate,
+        )
         return migrator
     }
 }

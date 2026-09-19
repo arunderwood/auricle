@@ -119,12 +119,19 @@ struct StageFixture {
     let recorder: TelemetryRecorder
 
     /// `insertMeetingRow: false` leaves the store without a row for `meetingID`.
-    init(captureStartedAt: String? = stageDefaultCaptureStartedAt, insertMeetingRow: Bool = true) async throws {
-        store = try StateStore.forTesting(writer: DatabaseQueue())
-        runner = StageRunner(stateStore: store, stageEventLogger: StageEventLogger(stateStore: store))
-        recorder = TelemetryRecorder(stateStore: store)
+    /// `store` substitutes the default in-memory store, which does not enforce
+    /// foreign keys the way the production openers do.
+    init(
+        captureStartedAt: String? = stageDefaultCaptureStartedAt,
+        insertMeetingRow: Bool = true,
+        store: StateStore? = nil,
+    ) async throws {
+        let resolvedStore = try store ?? StateStore.forTesting(writer: DatabaseQueue())
+        self.store = resolvedStore
+        runner = StageRunner(stateStore: resolvedStore, stageEventLogger: StageEventLogger(stateStore: resolvedStore))
+        recorder = TelemetryRecorder(stateStore: resolvedStore)
         guard insertMeetingRow else { return }
-        try await store.insertMeeting(Meeting(
+        try await resolvedStore.insertMeeting(Meeting(
             id: meetingID.rawValue,
             state: "attributing",
             createdAt: "2026-04-28T09:00:00Z",
@@ -155,15 +162,31 @@ struct StageFixture {
         try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("summary.json")
     }
 
+    /// `promptSetHash` replaces the stage's prompt-file hash resolution; nil
+    /// runs the stage exactly as production does.
     func run(
         primary: StageStubStrategy,
         fallback: StageStubStrategy? = nil,
         config: SummarizerConfig = SummarizerConfig(),
+        promptSetHash: (@Sendable (SummarizationMode) throws -> String)? = nil,
     ) async throws -> StageRunner.StageOutcome {
         let orchestrator = SummarizerOrchestrator(
             primary: primary,
             fallback: fallback ?? StageStubStrategy(.failure(SummarizerError.malformedResponse)),
         )
+        if let promptSetHash {
+            return try await SummarizeStage.run(
+                meetingID: meetingID,
+                stateStore: store,
+                stageRunner: runner,
+                telemetryRecorder: recorder,
+                orchestrator: orchestrator,
+                glossary: Glossary(),
+                config: config,
+                timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
+                promptSetHash: promptSetHash,
+            )
+        }
         return try await SummarizeStage.run(
             meetingID: meetingID,
             stateStore: store,

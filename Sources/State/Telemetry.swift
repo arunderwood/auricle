@@ -44,6 +44,11 @@ public struct Telemetry: Codable, Equatable, Sendable {
     public var transcriptionReviewCostUSD: Double?
     public var transcriptionReviewModel: String?
     public var audioRetentionStatusAtSnapshot: String?
+    /// `citations` or `substring`: the summarization strategy that answered.
+    public var groundingMethod: String?
+    /// Lowercase-hex SHA-256 of the prompt files the answering strategy's
+    /// mode resolved.
+    public var summarizationPromptSetHash: String?
 
     enum CodingKeys: String, CodingKey {
         case meetingID = "meeting_id"
@@ -67,6 +72,8 @@ public struct Telemetry: Codable, Equatable, Sendable {
         case transcriptionReviewCostUSD = "transcription_review_cost_usd"
         case transcriptionReviewModel = "transcription_review_model"
         case audioRetentionStatusAtSnapshot = "audio_retention_status_at_snapshot"
+        case groundingMethod = "grounding_method"
+        case summarizationPromptSetHash = "summarization_prompt_set_hash"
     }
 
     public init(
@@ -91,6 +98,8 @@ public struct Telemetry: Codable, Equatable, Sendable {
         transcriptionReviewCostUSD: Double? = nil,
         transcriptionReviewModel: String? = nil,
         audioRetentionStatusAtSnapshot: String? = nil,
+        groundingMethod: String? = nil,
+        summarizationPromptSetHash: String? = nil,
     ) {
         self.meetingID = meetingID
         self.timeToAttributionReadySeconds = timeToAttributionReadySeconds
@@ -113,6 +122,8 @@ public struct Telemetry: Codable, Equatable, Sendable {
         self.transcriptionReviewCostUSD = transcriptionReviewCostUSD
         self.transcriptionReviewModel = transcriptionReviewModel
         self.audioRetentionStatusAtSnapshot = audioRetentionStatusAtSnapshot
+        self.groundingMethod = groundingMethod
+        self.summarizationPromptSetHash = summarizationPromptSetHash
     }
 }
 

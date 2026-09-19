@@ -374,3 +374,69 @@ func makeMeeting(
     #expect(lines[closingFenceIndex + 1].isEmpty)
     #expect(lines[closingFenceIndex + 2] == "## Action Items")
 }
+
+// MARK: - Multi-line quotes
+
+@Test func aTwoLineQuotePrefixesEveryLineInsideTheBlockquote() {
+    let meeting = makeMeeting(
+        actionItems: [
+            QuotedItem(
+                text: "[[Ben]] will draft the project brief by end of week",
+                quote: "Speaker_1: I'll take a first pass at the brief\nSpeaker_2: by Friday works for me",
+            ),
+        ],
+        decisions: [],
+    )
+
+    let rendered = FrontmatterRenderer.render(meeting: meeting)
+
+    #expect(rendered.contains("""
+    ## Action Items
+
+    - [[Ben]] will draft the project brief by end of week
+      > Speaker_1: I'll take a first pass at the brief
+      > Speaker_2: by Friday works for me
+
+    ## Decisions
+    """))
+    #expect(MarkdownDisciplineChecker.check(rendered).isEmpty)
+}
+
+@Test func anEmptyLineInsideAQuoteRendersAsABareMarkerWithNoTrailingSpace() {
+    let meeting = makeMeeting(
+        actionItems: [],
+        decisions: [QuotedItem(text: "Move the launch date to May 15", quote: "First line\n\nThird line")],
+    )
+
+    let rendered = FrontmatterRenderer.render(meeting: meeting)
+
+    #expect(rendered.contains("- Move the launch date to May 15\n  > First line\n  >\n  > Third line\n\n## Transcript"))
+}
+
+@Test func windowsAndClassicMacLineBreaksInAQuoteAlsoStartNewBlockquoteLines() {
+    let meeting = makeMeeting(
+        actionItems: [QuotedItem(text: "Item", quote: "one\r\ntwo\rthree")],
+        decisions: [],
+    )
+
+    let rendered = FrontmatterRenderer.render(meeting: meeting)
+
+    #expect(rendered.contains("- Item\n  > one\n  > two\n  > three\n\n## Decisions"))
+    // Scalar view: `"\r\n"` is one `Character`, so `String.contains("\r")` cannot see a
+    // carriage return that is half of a CRLF.
+    #expect(!rendered.unicodeScalars.contains("\r"))
+}
+
+@Test func everyItemsQuoteIsRenderedIndependentlyWhenSeveralSpanLines() {
+    let meeting = makeMeeting(
+        actionItems: [
+            QuotedItem(text: "First", quote: "a1\na2"),
+            QuotedItem(text: "Second", quote: "b1"),
+        ],
+        decisions: [],
+    )
+
+    let rendered = FrontmatterRenderer.render(meeting: meeting)
+
+    #expect(rendered.contains("- First\n  > a1\n  > a2\n- Second\n  > b1\n\n## Decisions"))
+}

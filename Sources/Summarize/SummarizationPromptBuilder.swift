@@ -105,6 +105,18 @@ public enum SummarizationPromptBuilder {
         )
     }
 
+    /// The hash `build(...)` would return for `mode` and `promptDir`, without
+    /// composing a prompt. It is a pure function of the two resolved files, so
+    /// a caller that needs the hash but not the prompt (the summarize stage,
+    /// which records it in telemetry while the strategies build the prompts)
+    /// gets exactly the value the strategy's own `build` call produces —
+    /// provided it passes the same `promptDir` the strategy does. Throws the
+    /// same `SummarizationPromptBuilderError` `build` would.
+    public static func promptSetHash(mode: SummarizationMode, promptDir: URL? = nil) throws -> String {
+        let files = try resolvePromptFiles(mode: mode, promptDir: promptDir, bundle: .module)
+        return promptSetHash(of: files)
+    }
+
     /// Bundle-injecting overload, `internal` so only `@testable import`
     /// callers can reach it — exercises the "bundled resource missing"
     /// packaging-defect path through the real `build()` logic, against a
@@ -118,27 +130,42 @@ public enum SummarizationPromptBuilder {
         promptDir: URL?,
         bundle: Bundle,
     ) throws -> SummarizationPrompt {
-        let systemBytes = try resolveFile(named: systemFileName, promptDir: promptDir, bundle: bundle)
-        let modeBytes = try resolveFile(named: mode.fileName, promptDir: promptDir, bundle: bundle)
-
-        let composedSystemText = resolvedText(from: systemBytes) + "\n\n" + resolvedText(from: modeBytes)
-
-        var hasher = SHA256()
-        hasher.update(data: systemBytes)
-        hasher.update(data: Data([0x0A]))
-        hasher.update(data: modeBytes)
-        let promptSetHash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        let files = try resolvePromptFiles(mode: mode, promptDir: promptDir, bundle: bundle)
+        let composedSystemText = resolvedText(from: files.system) + "\n\n" + resolvedText(from: files.mode)
 
         return SummarizationPrompt(
             system: PromptBlock(text: composedSystemText, cacheable: true),
             glossary: PromptBlock(text: renderGlossary(glossary), cacheable: true),
             attendeeContext: PromptBlock(text: renderAttendees(attendees), cacheable: true),
             transcript: PromptBlock(text: transcript.text, cacheable: false),
-            promptSetHash: promptSetHash,
+            promptSetHash: promptSetHash(of: files),
         )
     }
 
     // MARK: - File resolution
+
+    /// The raw bytes of the two files one mode's prompt is built from.
+    private struct PromptFiles {
+        let system: Data
+        let mode: Data
+    }
+
+    private static func resolvePromptFiles(mode: SummarizationMode, promptDir: URL?, bundle: Bundle) throws -> PromptFiles {
+        try PromptFiles(
+            system: resolveFile(named: systemFileName, promptDir: promptDir, bundle: bundle),
+            mode: resolveFile(named: mode.fileName, promptDir: promptDir, bundle: bundle),
+        )
+    }
+
+    /// Hashes the untrimmed raw bytes, `system.md` then a newline separator
+    /// then the mode file, so the hash reflects exactly what was read.
+    private static func promptSetHash(of files: PromptFiles) -> String {
+        var hasher = SHA256()
+        hasher.update(data: files.system)
+        hasher.update(data: Data([0x0A]))
+        hasher.update(data: files.mode)
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
 
     /// `promptDir` is never assumed to hold every file: each of the (at
     /// most two) files this call needs is resolved independently, so a

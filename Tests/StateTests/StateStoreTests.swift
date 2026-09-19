@@ -125,11 +125,36 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
         transcriptionReviewCostUSD: nil,
         transcriptionReviewModel: nil,
         audioRetentionStatusAtSnapshot: "retained",
+        groundingMethod: "citations",
+        summarizationPromptSetHash: String(repeating: "ab", count: 32),
     )
     try await store.insertTelemetry(telemetry)
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: "01STATESTORETESTMEETING00"))
     #expect(fetched == telemetry)
+}
+
+@Test func upsertKeepsGroundingMethodAndPromptSetHashWhenThePatchLeavesThemNilAndReplacesThemWhenSet() async throws {
+    let store = try makeStore()
+    try await store.insertMeeting(makeMeeting())
+    let id = "01STATESTORETESTMEETING00"
+    let hash = String(repeating: "cd", count: 32)
+
+    try await store.upsertTelemetry(Telemetry(meetingID: id, groundingMethod: "substring", summarizationPromptSetHash: hash))
+    try await store.upsertTelemetry(Telemetry(meetingID: id, costUSD: 0.10))
+
+    let afterUnrelatedPatch = try #require(try await store.fetchTelemetry(meetingID: id))
+    #expect(afterUnrelatedPatch.groundingMethod == "substring")
+    #expect(afterUnrelatedPatch.summarizationPromptSetHash == hash)
+    #expect(afterUnrelatedPatch.costUSD == 0.10)
+
+    let replacementHash = String(repeating: "ef", count: 32)
+    try await store.upsertTelemetry(Telemetry(meetingID: id, groundingMethod: "citations", summarizationPromptSetHash: replacementHash))
+
+    let afterReplacement = try #require(try await store.fetchTelemetry(meetingID: id))
+    #expect(afterReplacement.groundingMethod == "citations")
+    #expect(afterReplacement.summarizationPromptSetHash == replacementHash)
+    #expect(afterReplacement.costUSD == 0.10)
 }
 
 private extension Meeting {

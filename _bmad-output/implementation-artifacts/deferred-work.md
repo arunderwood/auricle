@@ -89,3 +89,19 @@ Append-only. Each entry records a finding routed to `defer` during a review pass
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`
   summary: `telemetry.grounding_method` has no column, though Decision 4.5 and the Story 3.7 AC list it as a telemetry field.
   evidence: architecture.md:1533 says the `telemetry` table carries `grounding_method`, but no migration or `State.Telemetry` field defines it. The stage records it only in the `stage_events` completion metadata (`SummarizeMeta.grounding_method`). Adding the column is a migration, which this story's intent excludes.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-close-out-telemetry-blockquote-cross-stage-test.md`
+  summary: architecture.md's telemetry DDL and write-authority matrix do not list `grounding_method`, and its DDL lacks the `summarization_prompt_set_hash` column position that the shipped schema will now use.
+  evidence: `grounding_method` appears only in prose (architecture.md:1238, :1533) and the Story 3.7 AC. This story adds the column from that prose (TEXT holding `citations` or `substring`); the planning doc should be updated to match, but planning docs are outside a build run's edits.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-close-out-telemetry-blockquote-cross-stage-test.md`
+  summary: A live end-to-end run of `__internal-stage summarize` with a real meeting row and a real Claude call has still not been done.
+  evidence: It needs the maintainer's API key, spends real money, and needs a meeting the pipeline produced. This story verifies the same path with stub strategies, a production-configured store, and the eval fixtures; the maintainer's Story 3.8 comparison run is the first live check.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-close-out-telemetry-blockquote-cross-stage-test.md`
+  summary: An item's `text` containing a line break breaks the vault note's bullet.
+  evidence: `FrontmatterRenderer` renders `"- \($0.text)\n..."` assuming one line, and `text` is model output. This is the same class of bug the multi-line quote fix addressed for `quote`, but the change here does not touch `text`, so it predates this story. The fix is to normalize `text` to one line where the summary artifact is built or rendered.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-close-out-telemetry-blockquote-cross-stage-test.md`
+  summary: epics.md:955 and :1128 (Story 1.4) say `summarization_prompt_set_hash` exists from migration #1 and that no later epic needs a column-adding migration.
+  evidence: Migration #1 never declared the column, and this story adds it (with `grounding_method`) in migration #4. The planning text is stale; planning documents are outside a build run's edits.

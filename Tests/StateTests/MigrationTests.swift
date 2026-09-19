@@ -27,6 +27,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         Migration001Initial.identifier,
         Migration002StageEventsMetadataSchemaVersion.identifier,
         Migration003RenameAudioRetentionStatusColumn.identifier,
+        Migration004TelemetryGroundingAndPromptSetHash.identifier,
     ])
 }
 
@@ -113,6 +114,59 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         )
     }
     #expect(preservedValue == "kept_explicit")
+}
+
+/// A database migrated only to #3 and holding a real `telemetry` row, upgraded
+/// in place by migration #4. The row keeps its values and reads NULL in both
+/// added columns.
+@Test func migrationFourAddsGroundingMethodAndPromptSetHashLeavingAnExistingRowIntact() throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let queue = try DatabasePoolFactory.makeQueue(path: path)
+    var migrationsOneToThreeOnly = DatabaseMigrator()
+    migrationsOneToThreeOnly.registerMigration(Migration001Initial.identifier, migrate: Migration001Initial.migrate)
+    migrationsOneToThreeOnly.registerMigration(
+        Migration002StageEventsMetadataSchemaVersion.identifier,
+        migrate: Migration002StageEventsMetadataSchemaVersion.migrate,
+    )
+    migrationsOneToThreeOnly.registerMigration(
+        Migration003RenameAudioRetentionStatusColumn.identifier,
+        migrate: Migration003RenameAudioRetentionStatusColumn.migrate,
+    )
+    try migrationsOneToThreeOnly.migrate(queue)
+
+    let columnsBefore = try queue.read { db in try db.columns(in: "telemetry") }
+    #expect(columnInfo("grounding_method", in: columnsBefore) == nil)
+    #expect(columnInfo("summarization_prompt_set_hash", in: columnsBefore) == nil)
+
+    try queue.write { db in
+        try db.execute(
+            sql: """
+            INSERT INTO meetings (id, state, created_at, updated_at)
+            VALUES ('01PREMIGRATION4MEETINGID0', 'recording', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+            INSERT INTO telemetry (meeting_id, summarization_model, cost_usd)
+            VALUES ('01PREMIGRATION4MEETINGID0', 'claude-opus-5', 0.32);
+            """,
+        )
+    }
+
+    try MigrationRegistrar.migrator.migrate(queue)
+
+    let columns = try queue.read { db in try db.columns(in: "telemetry") }
+    for name in ["grounding_method", "summarization_prompt_set_hash"] {
+        let column = try #require(columnInfo(name, in: columns))
+        #expect(column.type.uppercased() == "TEXT")
+        #expect(!column.isNotNull)
+    }
+
+    let row = try #require(try queue.read { db in
+        try Row.fetchOne(db, sql: "SELECT * FROM telemetry WHERE meeting_id = '01PREMIGRATION4MEETINGID0'")
+    })
+    #expect(row["summarization_model"] as String? == "claude-opus-5")
+    #expect(row["cost_usd"] as Double? == 0.32)
+    #expect(row["grounding_method"] as String? == nil)
+    #expect(row["summarization_prompt_set_hash"] as String? == nil)
 }
 
 @Test func journalModeIsWALForBothOpeners() throws {
@@ -316,7 +370,9 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     // All 20 wedge-validation / trust-calibration counter columns from
     // architecture.md:742-767 (Amelia's Story 1 blocker): every one must
     // exist from migration #1, even the sparse `transcription_*` slots
-    // with no MVP writer.
+    // with no MVP writer. `grounding_method` and
+    // `summarization_prompt_set_hash` are the summarize-stage columns
+    // migration #4 appends after them.
     let expectedColumns = [
         "time_to_attribution_ready_seconds",
         "time_to_vault_note_seconds",
@@ -338,11 +394,13 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         "transcription_review_cost_usd",
         "transcription_review_model",
         "audio_retention_status_at_snapshot",
+        "grounding_method",
+        "summarization_prompt_set_hash",
     ]
     for expectedColumn in expectedColumns {
         #expect(columnInfo(expectedColumn, in: columns) != nil, "expected telemetry column \(expectedColumn) to exist")
     }
-    #expect(columns.count == expectedColumns.count + 1, "expected exactly the 20 counter columns plus meeting_id")
+    #expect(columns.count == expectedColumns.count + 1, "expected exactly the 22 data columns plus meeting_id")
 
     let werEstimate = try #require(columnInfo("transcription_wer_estimate", in: columns))
     #expect(werEstimate.type.uppercased() == "REAL")

@@ -285,6 +285,79 @@ private func loadGolden(_ fileName: String) throws -> String {
     #expect(hashWithoutTrailingBlankLine != hashWithTrailingBlankLine)
 }
 
+// MARK: - Standalone prompt-set hash
+
+@Test(arguments: SummarizationMode.allCases)
+func standalonePromptSetHashEqualsTheHashBuildReturnsForTheBundledSet(mode: SummarizationMode) throws {
+    let built = try SummarizationPromptBuilder.build(
+        transcript: makeTranscript(), glossary: makeGlossary(), attendees: attendees, mode: mode, promptDir: nil,
+    )
+
+    #expect(try SummarizationPromptBuilder.promptSetHash(mode: mode, promptDir: nil) == built.promptSetHash)
+}
+
+@Test(arguments: SummarizationMode.allCases)
+func standalonePromptSetHashEqualsTheHashBuildReturnsForAnOverrideDirectory(mode: SummarizationMode) throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "OVERRIDDEN SYSTEM PROMPT\n".write(to: directory.appendingPathComponent("system.md"), atomically: true, encoding: .utf8)
+    try "OVERRIDDEN MODE ADDENDUM".write(to: directory.appendingPathComponent(mode.fileName), atomically: true, encoding: .utf8)
+
+    let built = try SummarizationPromptBuilder.build(
+        transcript: makeTranscript(), glossary: makeGlossary(), attendees: attendees, mode: mode, promptDir: directory,
+    )
+
+    #expect(try SummarizationPromptBuilder.promptSetHash(mode: mode, promptDir: directory) == built.promptSetHash)
+    #expect(try SummarizationPromptBuilder.promptSetHash(mode: mode, promptDir: nil) != built.promptSetHash)
+}
+
+@Test func standalonePromptSetHashEqualsTheHashBuildReturnsForAPartialOverride() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "ONLY THE SYSTEM PROMPT IS OVERRIDDEN".write(to: directory.appendingPathComponent("system.md"), atomically: true, encoding: .utf8)
+
+    for mode in SummarizationMode.allCases {
+        let built = try SummarizationPromptBuilder.build(
+            transcript: makeTranscript(), glossary: makeGlossary(), attendees: attendees, mode: mode, promptDir: directory,
+        )
+        #expect(try SummarizationPromptBuilder.promptSetHash(mode: mode, promptDir: directory) == built.promptSetHash)
+    }
+}
+
+/// Stored hashes are only comparable across runs while the algorithm is fixed:
+/// SHA-256 over `system.md`, one `\n`, then the mode file, all as raw bytes.
+/// The expected digest is a literal, from `printf 'A\nB' | shasum -a 256`, so
+/// dropping the separator or swapping the order cannot pass by agreeing with itself.
+@Test func promptSetHashIsTheSHA256OfSystemBytesNewlineThenModeBytes() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("A".utf8).write(to: directory.appendingPathComponent("system.md"))
+    try Data("B".utf8).write(to: directory.appendingPathComponent("citations.md"))
+
+    let hash = try SummarizationPromptBuilder.promptSetHash(mode: .citations, promptDir: directory)
+
+    #expect(hash == "23519a43c66b4c342f25b32e09797ec5f3fc0be388cd8243fb3449afbdce4013")
+}
+
+@Test func standalonePromptSetHashDiffersBetweenModes() throws {
+    let citations = try SummarizationPromptBuilder.promptSetHash(mode: .citations, promptDir: nil)
+    let substring = try SummarizationPromptBuilder.promptSetHash(mode: .substring, promptDir: nil)
+
+    #expect(citations.count == 64)
+    #expect(substring.count == 64)
+    #expect(citations != substring)
+}
+
+@Test func standalonePromptSetHashPropagatesTheTypedPromptError() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try "   \n\n  ".write(to: directory.appendingPathComponent("system.md"), atomically: true, encoding: .utf8)
+
+    #expect(throws: SummarizationPromptBuilderError.overridePromptFileUnreadable(file: "system.md")) {
+        try SummarizationPromptBuilder.promptSetHash(mode: .citations, promptDir: directory)
+    }
+}
+
 // MARK: - Glossary rendering
 
 @Test func emptyGlossaryRendersAsEmptyBlock() throws {
