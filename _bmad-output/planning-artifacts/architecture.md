@@ -1028,7 +1028,7 @@ Four categories. Every stage failure or terminal-non-success state maps to one c
 Implementation: `enum FailureCategory { case transient, permanent, userActionable, benignTerminal }` is a property on the canonical state name (not a separate column in SQLite — derived from `meetings.state`). The dispatcher consults it to decide retry vs surface; the GUI consults it to decide which color/affordance to render; the CLI consults it to decide exit code mapping per Decision 1.5.
 
 State machine additions (folded back into Decision 1.2):
-- `published_partial` — published with `Speaker_N` placeholders (because `--publish-anyway` was used) AND summarize had no usable output (it failed or was skipped). User-actionable: user can manually fix in Obsidian and run `auricle run <id> --reattribute` later. Note exists in vault with the action-items / decisions sections empty or omitted; carries `auricle/needs-attribution` AND a new `auricle/needs-summary` tag.
+- `published_partial` — published with `Speaker_N` placeholders (because `--publish-anyway` was used) AND summarize had no usable output (it failed or was skipped). User-actionable: user can manually fix in Obsidian and run `auricle run <id> --reattribute` later. Note exists in vault with the action-items and decisions sections omitted entirely; carries `auricle/needs-attribution` AND a new `auricle/needs-summary` tag.
 
 #### Decision 4.2: Per-stage retry / backoff policy and user agency
 
