@@ -138,6 +138,7 @@ public struct AnthropicHTTPClient: Sendable {
     /// NFR-R9's default total retry-time budget.
     public static let defaultRetryBudget: Duration = .seconds(300)
     public static let defaultEndpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+    private static let truncatedStopReason = "max_tokens"
 
     private enum AttemptOutcome {
         case success(AnthropicResponse)
@@ -191,7 +192,13 @@ public struct AnthropicHTTPClient: Sendable {
     /// `URLError(.cancelled)` from `URLSession`) is never caught here as a
     /// retryable failure — it propagates straight out of this loop.
     public func send(_ request: AnthropicRequest) async throws -> AnthropicResponse {
-        let apiKey = try apiKeyProvider()
+        let apiKey: String
+        do {
+            apiKey = try apiKeyProvider()
+        } catch KeychainError.notFound {
+            log.warn("anthropic api key not found in the keychain", [:])
+            throw SummarizerError.apiKeyMissing
+        }
         let urlRequest = buildURLRequest(request, apiKey: apiKey)
 
         var elapsedRetryTime: Duration = .zero
@@ -240,6 +247,13 @@ public struct AnthropicHTTPClient: Sendable {
         case 200 ..< 300:
             guard let parsed = try? AnthropicResponse.parse(data) else {
                 return .terminal(.malformedResponse)
+            }
+            // The call was paid for either way, so the spend is logged before
+            // the truncation fails it; the body is cut off mid-value and no
+            // strategy can decode it.
+            if parsed.stopReason == Self.truncatedStopReason {
+                log.warn("anthropic response truncated at max_tokens", Self.redactedLogFields(for: parsed, statusCode: statusCode))
+                return .terminal(.responseTruncated)
             }
             log.info("anthropic request succeeded", Self.redactedLogFields(for: parsed, statusCode: statusCode))
             return .success(parsed)

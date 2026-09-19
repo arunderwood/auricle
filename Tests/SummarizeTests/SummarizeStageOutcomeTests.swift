@@ -57,6 +57,36 @@ import Testing
     #expect(await fallback.callCount == 0)
 }
 
+@Test func aMissingAPIKeyFailsWithAMessageNamingTheFixAndNeverCallsTheFallback() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+    let fallback = StageStubStrategy(.success(makeStageGrounded(method: .substring)))
+
+    let outcome = try await fixture.run(primary: StageStubStrategy(.failure(SummarizerError.apiKeyMissing)), fallback: fallback)
+
+    try await expectStageFailure(outcome, fixture: fixture, errorClass: "summarizer_api_key_missing")
+    guard case let .failed(_, _, errorMessage, _) = outcome else { return }
+    #expect(errorMessage?.contains("Keychain") == true)
+    #expect(errorMessage?.contains("com.auricle.app.anthropic-api-key") == true)
+    #expect(errorMessage?.contains("/") == false)
+    #expect(await fallback.callCount == 0)
+}
+
+@Test func aTruncatedResponseFailsInItsOwnClassAndNeverCallsTheFallback() async throws {
+    let fixture = try await StageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantTranscript()
+    let fallback = StageStubStrategy(.success(makeStageGrounded(method: .substring)))
+
+    let outcome = try await fixture.run(primary: StageStubStrategy(.failure(SummarizerError.responseTruncated)), fallback: fallback)
+
+    try await expectStageFailure(outcome, fixture: fixture, errorClass: "summarizer_response_truncated")
+    guard case let .failed(_, _, errorMessage, _) = outcome else { return }
+    #expect(errorMessage == "responseTruncated")
+    #expect(await fallback.callCount == 0)
+}
+
 @Test func aNonSummarizerErrorRecordsTheTypeNameAndNeverItsMessage() async throws {
     let fixture = try await StageFixture()
     defer { fixture.cleanUp() }
@@ -227,6 +257,8 @@ func anUnresolvablePromptSetFailsTheStageBeforeEitherSummarizerIsCalled(failingM
     (SummarizerError.networkTimeout, "summarizer_network_timeout"),
     (SummarizerError.authenticationFailed, "summarizer_authentication_failed"),
     (SummarizerError.quotaExceeded, "summarizer_quota_exceeded"),
+    (SummarizerError.responseTruncated, "summarizer_response_truncated"),
+    (SummarizerError.apiKeyMissing, "summarizer_api_key_missing"),
 ])
 func summarizerErrorClassStringsAreStable(error: SummarizerError, expectedClass: String) {
     #expect(error.stageErrorClass == expectedClass)

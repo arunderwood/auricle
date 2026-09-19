@@ -402,6 +402,44 @@ private func errorEnvelopeJSON(message: String) throws -> Data {
     }
 }
 
+// MARK: - Truncated response
+
+@Test func aResponseThatStoppedAtMaxTokensThrowsResponseTruncatedWithNoRetry() async throws {
+    let token = UUID().uuidString
+    defer { StubURLProtocol.unregister(token: token) }
+    let body = try JSONSerialization.data(withJSONObject: [
+        "model": "claude-opus-5",
+        "content": [["type": "text", "text": "{\"summary\": \"Team discussed the lau"]],
+        "stop_reason": "max_tokens",
+        "usage": ["input_tokens": 100, "output_tokens": 16384],
+    ])
+    StubURLProtocol.register(token: token) { _ in .http(status: 200, body: body) }
+    let client = makeClient()
+
+    await #expect(throws: SummarizerError.responseTruncated) {
+        _ = try await client.send(makeRequest(token: token))
+    }
+    #expect(StubURLProtocol.attemptCount(for: token) == 1)
+}
+
+@Test func otherStopReasonsAreNotTruncation() async throws {
+    for stopReason in ["end_turn", "stop_sequence", "tool_use"] {
+        let token = UUID().uuidString
+        defer { StubURLProtocol.unregister(token: token) }
+        let body = try JSONSerialization.data(withJSONObject: [
+            "model": "claude-opus-5",
+            "content": [["type": "text", "text": "hello"]],
+            "stop_reason": stopReason,
+            "usage": ["input_tokens": 100, "output_tokens": 50],
+        ])
+        StubURLProtocol.register(token: token) { _ in .http(status: 200, body: body) }
+
+        let response = try await makeClient().send(makeRequest(token: token))
+
+        #expect(response.stopReason == stopReason)
+    }
+}
+
 // MARK: - Header precedence
 
 @Test func callerSuppliedHeadersCannotOverrideTheRealAPIKeyHeader() async throws {

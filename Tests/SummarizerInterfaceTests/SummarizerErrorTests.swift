@@ -10,4 +10,6 @@ import Testing
     #expect(!SummarizerError.networkTimeout.isFallbackEligible)
     #expect(!SummarizerError.authenticationFailed.isFallbackEligible)
     #expect(!SummarizerError.quotaExceeded.isFallbackEligible)
+    #expect(!SummarizerError.responseTruncated.isFallbackEligible)
+    #expect(!SummarizerError.apiKeyMissing.isFallbackEligible)
 }

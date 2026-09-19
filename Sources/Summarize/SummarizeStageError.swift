@@ -53,6 +53,26 @@ extension SummarizerError {
         case .networkTimeout: "summarizer_network_timeout"
         case .authenticationFailed: "summarizer_authentication_failed"
         case .quotaExceeded: "summarizer_quota_exceeded"
+        case .responseTruncated: "summarizer_response_truncated"
+        case .apiKeyMissing: "summarizer_api_key_missing"
         }
     }
+
+    /// What `stage_events.error_message` records: the case name for every
+    /// failure a reader can diagnose from the class, and a sentence naming the
+    /// fix for the one a first run hits before anything else has happened.
+    /// Never a key, a path or a response body.
+    var stageErrorMessage: String {
+        switch self {
+        case .apiKeyMissing:
+            "No Anthropic API key in the Keychain. Store it under service \(Self.keychainServiceIdentifier), account api-key, then retry."
+        default:
+            String(describing: self)
+        }
+    }
+
+    /// The Keychain service `KeychainAPIKey` reads. `Summarize` cannot import
+    /// `ClaudeSummarizer`, so `AnthropicHTTPClientTests` pins this to
+    /// `KeychainAPIKey.productionService`.
+    static let keychainServiceIdentifier = "com.auricle.app.anthropic-api-key"
 }
