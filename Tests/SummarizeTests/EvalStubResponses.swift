@@ -9,17 +9,26 @@ import Foundation
 final class EvalStubURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var bodies: [URL: Data] = [:]
+    private nonisolated(unsafe) static var requestCounts: [URL: Int] = [:]
 
     static func register(url: URL, body: Data) {
         lock.lock()
         bodies[url] = body
+        requestCounts[url] = 0
         lock.unlock()
     }
 
     static func unregister(url: URL) {
         lock.lock()
         bodies.removeValue(forKey: url)
+        requestCounts.removeValue(forKey: url)
         lock.unlock()
+    }
+
+    static func requestCount(for url: URL) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestCounts[url] ?? 0
     }
 
     override static func canInit(with _: URLRequest) -> Bool {
@@ -37,6 +46,7 @@ final class EvalStubURLProtocol: URLProtocol, @unchecked Sendable {
         }
         Self.lock.lock()
         let body = Self.bodies[url]
+        Self.requestCounts[url, default: 0] += 1
         Self.lock.unlock()
 
         guard
@@ -55,8 +65,9 @@ final class EvalStubURLProtocol: URLProtocol, @unchecked Sendable {
 }
 
 /// An `AnthropicHTTPClient` wired to a private endpoint that answers every
-/// request with one fixed body. The endpoint is unique per instance, so tests
-/// running in parallel never read each other's stub.
+/// request with one fixed body and counts the requests it receives. The
+/// endpoint is unique per instance, so tests running in parallel never read
+/// each other's stub.
 struct EvalStub {
     let client: AnthropicHTTPClient
     private let endpoint: URL
@@ -74,6 +85,10 @@ struct EvalStub {
             apiKeyProvider: { "test-key" },
             sleep: { _ in },
         )
+    }
+
+    var requestCount: Int {
+        EvalStubURLProtocol.requestCount(for: endpoint)
     }
 
     func release() {
