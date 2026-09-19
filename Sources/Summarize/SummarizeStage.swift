@@ -1,3 +1,4 @@
+import CalendarInterface
 import Core
 import Foundation
 import Orchestrator
@@ -13,13 +14,19 @@ import Telemetry
 /// failure is folded into a `summarization_failed` outcome rather than
 /// thrown.
 ///
-/// There is no calendar source or glossary builder yet, so the stage always
-/// produces the unenriched-calendar variant of the artifact; the glossary is
-/// whatever the caller injects.
+/// Calendar enrichment is an optional sub-step: a `CalendarSource` that
+/// returns an event supplies the note's title and attendees and the prompt's
+/// attendee names; no source, no match, a blank title or any error from the
+/// source leaves the unenriched variant of the artifact and never fails the
+/// stage. Either way `calendar.json` records which happened. There is no
+/// glossary builder yet; the glossary is whatever the caller injects.
 public enum SummarizeStage {
     private static let summaryArtifactName = "summary.json"
     private static let summarySchemaVersion = 1
+    private static let calendarArtifactName = "calendar.json"
+    private static let calendarSchemaVersion = 1
     private static let transcriptArtifactName = "transcript.json"
+    private static let log = Log(category: "summarize-stage")
 
     /// Completes into `summarizing`, the state persist's own first
     /// transaction re-asserts, because no state sits between the two stages.
@@ -38,6 +45,7 @@ public enum SummarizeStage {
         glossary: Glossary,
         config: SummarizerConfig,
         timeZone: TimeZone = .current,
+        calendarSource: (any CalendarSource)? = nil,
     ) async throws -> StageRunner.StageOutcome {
         try await run(
             meetingID: meetingID,
@@ -48,6 +56,7 @@ public enum SummarizeStage {
             glossary: glossary,
             config: config,
             timeZone: timeZone,
+            calendarSource: calendarSource,
             promptSetHash: bundledPromptSetHash,
         )
     }
@@ -64,6 +73,7 @@ public enum SummarizeStage {
         glossary: Glossary,
         config: SummarizerConfig,
         timeZone: TimeZone = .current,
+        calendarSource: (any CalendarSource)? = nil,
         promptSetHash: @escaping @Sendable (SummarizationMode) throws -> String = bundledPromptSetHash,
     ) async throws -> StageRunner.StageOutcome {
         guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
@@ -74,7 +84,13 @@ public enum SummarizeStage {
             do {
                 return try await summarize(
                     meetingID: meetingID,
-                    context: RunContext(captureStartedAt: captureStartedAt, timeZone: timeZone, promptSetHash: promptSetHash),
+                    context: RunContext(
+                        captureStartedAt: captureStartedAt,
+                        timeZone: timeZone,
+                        calendarSource: calendarSource,
+                        promptSetHash: promptSetHash,
+                    ),
+                    stateStore: stateStore,
                     telemetryRecorder: telemetryRecorder,
                     orchestrator: orchestrator,
                     glossary: glossary,
@@ -105,6 +121,7 @@ public enum SummarizeStage {
     private struct RunContext: Sendable {
         let captureStartedAt: String?
         let timeZone: TimeZone
+        let calendarSource: (any CalendarSource)?
         let promptSetHash: @Sendable (SummarizationMode) throws -> String
     }
 
@@ -117,11 +134,12 @@ public enum SummarizeStage {
     // MARK: - Stage body
 
     /// Everything that can fail cheaply — reading and validating the inputs,
-    /// and building the transcript segments — happens before the summarizer
-    /// call, so a bad input never costs an API call.
+    /// and building the transcript segments — happens before the calendar
+    /// lookup and the summarizer call, so a bad input never costs either.
     private static func summarize(
         meetingID: MeetingID,
         context: RunContext,
+        stateStore: StateStore,
         telemetryRecorder: TelemetryRecorder,
         orchestrator: SummarizerOrchestrator,
         glossary: Glossary,
@@ -141,10 +159,17 @@ public enum SummarizeStage {
 
         let promptSetHashes = try resolvePromptSetHashes(using: context.promptSetHash)
 
-        let outcome = try await orchestrator.summarize(transcript: transcript, glossary: glossary, config: config)
+        let enrichment = try await CalendarEnrichment.resolve(using: context.calendarSource, at: captureStartedAtDate)
+        writeCalendarArtifact(enrichment.artifact, for: meetingID)
+
+        // The stage owns the attendee names: whatever the caller put on the
+        // config would disagree with the note's attendees.
+        let enrichedConfig = config.withAttendeeNames(enrichment.match?.attendeeNames ?? [])
+        let outcome = try await orchestrator.summarize(transcript: transcript, glossary: glossary, config: enrichedConfig)
 
         let artifact = try SummaryArtifactMapper.artifact(
             title: UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone),
+            match: enrichment.match,
             grounded: outcome.summary,
             transcriptSegments: segments,
             needsAttribution: SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers),
@@ -154,6 +179,10 @@ public enum SummarizeStage {
             try CacheArtifactWriter.write(artifact, for: meetingID, named: summaryArtifactName, schemaVersion: summarySchemaVersion)
         } catch {
             throw SummarizeStageError.summaryWriteFailed
+        }
+
+        if let match = enrichment.match {
+            try await refreshMeetingRow(for: meetingID, with: match, in: stateStore)
         }
 
         try await telemetryRecorder.record(
@@ -174,6 +203,31 @@ public enum SummarizeStage {
             targetState: .summarizing,
             metadataJSON: encodeMetadataJSON(outcome: outcome, config: config),
         )
+    }
+
+    // MARK: - Calendar
+
+    /// A cache artifact the note does not depend on, so a write that fails is
+    /// logged and dropped rather than costing the meeting its summary. Only
+    /// the error's type name is logged: `CacheArtifactWriter.WriteError`
+    /// carries paths.
+    private static func writeCalendarArtifact(_ artifact: CalendarArtifact, for meetingID: MeetingID) {
+        do {
+            try CacheArtifactWriter.write(artifact, for: meetingID, named: calendarArtifactName, schemaVersion: calendarSchemaVersion)
+        } catch {
+            log.warn("calendar.json write failed", ["error": .publicSafe(String(reflecting: type(of: error)))])
+        }
+    }
+
+    /// Fetches the row afresh rather than reusing the one read before the
+    /// stage started: `StageRunner` has moved `state` since, and writing the
+    /// old value back would undo that. A row that has vanished is left for
+    /// `StageRunner`'s own completion write to report.
+    private static func refreshMeetingRow(for meetingID: MeetingID, with match: CalendarEnrichment.Match, in stateStore: StateStore) async throws {
+        guard var meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else { return }
+        meeting.title = match.title
+        meeting.calendarEventID = match.eventID
+        try await stateStore.updateMeeting(meeting)
     }
 
     // MARK: - Inputs
