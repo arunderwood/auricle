@@ -15,14 +15,27 @@ private func corrupting(
     FrontmatterRenderer.render(meeting: meeting).replacingOccurrences(of: target, with: replacement)
 }
 
-private func expectMalformedFrontmatter(reading noteContents: String) {
+private func expectMalformedFrontmatter(reading noteContents: String, reasonContaining expectedReason: String? = nil) {
     do {
         _ = try FrontmatterReader.read(noteContents: noteContents)
         Issue.record("Expected FrontmatterReader.ReadError.malformedFrontmatter, got no error")
-    } catch FrontmatterReader.ReadError.malformedFrontmatter {
-        // expected
+    } catch let FrontmatterReader.ReadError.malformedFrontmatter(reason) {
+        if let expectedReason {
+            #expect(reason.contains(expectedReason))
+        }
     } catch {
         Issue.record("Expected FrontmatterReader.ReadError.malformedFrontmatter, got \(error)")
+    }
+}
+
+private func expectNotAnAuricleNote(reading noteContents: String) {
+    do {
+        _ = try FrontmatterReader.read(noteContents: noteContents)
+        Issue.record("Expected FrontmatterReader.ReadError.notAnAuricleNote, got no error")
+    } catch FrontmatterReader.ReadError.notAnAuricleNote {
+        // expected
+    } catch {
+        Issue.record("Expected FrontmatterReader.ReadError.notAnAuricleNote, got \(error)")
     }
 }
 
@@ -141,12 +154,26 @@ private func expectMalformedFrontmatter(reading noteContents: String) {
 
     """
 
-    do {
-        _ = try FrontmatterReader.read(noteContents: noteWithoutAuricleBlock)
-        Issue.record("Expected FrontmatterReader.ReadError.notAnAuricleNote, got no error")
-    } catch FrontmatterReader.ReadError.notAnAuricleNote {
-        // expected
-    } catch {
-        Issue.record("Expected FrontmatterReader.ReadError.notAnAuricleNote, got \(error)")
-    }
+    expectNotAnAuricleNote(reading: noteWithoutAuricleBlock)
+}
+
+@Test func aCRLFNoteReadsTheSameAsItsLFVersion() throws {
+    let meeting = makeMeeting(supersedes: "2026-04-28-tuesday-sync-with-ben.md")
+    let lfNote = FrontmatterRenderer.render(meeting: meeting)
+    let crlfNote = lfNote.replacingOccurrences(of: "\n", with: "\r\n")
+
+    #expect(crlfNote.unicodeScalars.contains("\r"))
+    #expect(try FrontmatterReader.read(noteContents: crlfNote) == FrontmatterReader.read(noteContents: lfNote))
+}
+
+@Test func anUnquotedWikilinkAttendeeParsesAsANestedSequenceAndThrowsMalformedFrontmatter() {
+    let rendered = corrupting(
+        "attendees:\n  - \"[[Ben]]\"\n",
+        with: "attendees:\n  - [[Ben]]\n",
+    )
+    expectMalformedFrontmatter(reading: rendered, reasonContaining: "non-string element")
+}
+
+@Test func anEmptyFrontmatterBlockThrowsNotAnAuricleNote() {
+    expectNotAnAuricleNote(reading: "---\n---\n")
 }
