@@ -16,7 +16,7 @@ import SummarizerInterface
 struct StrategyComparisonVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "__compare-strategies",
-        abstract: "Run the Citations and substring summarizers over real transcripts and write comparison reports.",
+        abstract: "Run summarizer arms (Citations, substring, or substring with another prompt set) over real transcripts and write comparison reports.",
         shouldDisplay: false,
     )
 
@@ -26,9 +26,17 @@ struct StrategyComparisonVerb: AsyncParsableCommand {
     @Option(help: "Directory to write results.md (metrics only) and detail.md (real meeting content) into.")
     var output: String
 
+    @Option(
+        name: .customLong("arm"),
+        help: "An arm to run: citations, substring, or substring:<absolute prompt dir>. Repeat for several. Default: citations and substring.",
+    )
+    var arms: [String] = []
+
     func run() async throws {
         let transcriptsDirectory = Self.directoryURL(transcripts)
         let outputDirectory = Self.directoryURL(output)
+
+        let specs = try Self.parseArms(arms)
 
         let fixtures: [StrategyComparisonFixture]
         do {
@@ -47,10 +55,7 @@ struct StrategyComparisonVerb: AsyncParsableCommand {
             throw ExitCode(1)
         }
 
-        let runner = StrategyComparisonRunner(arms: [
-            StrategyComparisonArm(label: "citations", strategy: ClaudeCitationsSummarizer()),
-            StrategyComparisonArm(label: "substring", strategy: ClaudeSubstringSummarizer()),
-        ])
+        let runner = StrategyComparisonRunner(arms: specs.map(Self.arm(for:)))
         let config = SummarizerConfig()
         let plannedCalls = runner.plannedCallCount(fixtureCount: fixtures.count)
         writeStderr(
@@ -85,6 +90,24 @@ struct StrategyComparisonVerb: AsyncParsableCommand {
         // comparison at all; a partial failure is itself a result.
         if failedArmCount == plannedCalls {
             throw ExitCode(1)
+        }
+    }
+
+    private static func parseArms(_ raw: [String]) throws -> [StrategyComparisonArmSpec] {
+        do {
+            return try StrategyComparisonArmSpec.parseAll(raw)
+        } catch {
+            writeStderr("__compare-strategies: \(error.localizedDescription)")
+            throw ExitCode(1)
+        }
+    }
+
+    private static func arm(for spec: StrategyComparisonArmSpec) -> StrategyComparisonArm {
+        switch spec.kind {
+        case .citations:
+            StrategyComparisonArm(label: spec.label, strategy: ClaudeCitationsSummarizer())
+        case .substring:
+            StrategyComparisonArm(label: spec.label, strategy: ClaudeSubstringSummarizer(promptDir: spec.promptDir))
         }
     }
 

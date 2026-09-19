@@ -57,10 +57,15 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
     }
 
     private let httpClient: AnthropicHTTPClient
+    private let promptDir: URL?
     private let log = Log(category: "claude-summarizer")
 
-    public init(httpClient: AnthropicHTTPClient = AnthropicHTTPClient()) {
+    /// - Parameter promptDir: Fixed at construction because the strategy
+    ///   protocol has no per-call channel for it. The composition root (or a
+    ///   prompt comparison) resolves it; `nil` uses the bundled prompt set.
+    public init(httpClient: AnthropicHTTPClient = AnthropicHTTPClient(), promptDir: URL? = nil) {
         self.httpClient = httpClient
+        self.promptDir = promptDir
     }
 
     public func summarize(
@@ -68,16 +73,15 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
         glossary: Glossary,
         config: SummarizerConfig,
     ) async throws -> SummaryWithGrounding {
-        // `attendees: []`/`promptDir: nil` always: neither channel exists on
-        // this fixed protocol signature or on `SummarizerConfig` today — the
-        // stage entry point (Story 3.7) threads real attendee data and
-        // `--prompt-dir` resolution in, not a strategy.
+        // `attendees: []` always: no attendee channel exists on this fixed
+        // protocol signature or on `SummarizerConfig` today — the stage entry
+        // point (Story 3.7) threads real attendee data in, not a strategy.
         let prompt = try SummarizationPromptBuilder.build(
             transcript: transcript,
             glossary: glossary,
             attendees: [],
             mode: .substring,
-            promptDir: nil,
+            promptDir: promptDir,
         )
 
         let requestBody = try Self.buildRequestBody(prompt: prompt, modelIdentifier: config.modelIdentifier)

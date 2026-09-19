@@ -99,7 +99,7 @@ private func uniqueEndpoint() -> URL {
     URL(string: "https://stub.invalid/\(UUID().uuidString)")!
 }
 
-private func makeSummarizer(endpoint: URL) -> ClaudeSubstringSummarizer {
+private func makeSummarizer(endpoint: URL, promptDir: URL? = nil) -> ClaudeSubstringSummarizer {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [SubstringStubURLProtocol.self]
     let httpClient = AnthropicHTTPClient(
@@ -108,7 +108,7 @@ private func makeSummarizer(endpoint: URL) -> ClaudeSubstringSummarizer {
         apiKeyProvider: { "test-key" },
         sleep: { _ in },
     )
-    return ClaudeSubstringSummarizer(httpClient: httpClient)
+    return ClaudeSubstringSummarizer(httpClient: httpClient, promptDir: promptDir)
 }
 
 private func makeTranscript() -> CanonicalTranscript {
@@ -376,6 +376,31 @@ private func makeEnvelope(modelAnswerText: String, model: String = "claude-opus-
     #expect(contentBlocks.count == 1)
     #expect(contentBlocks[0]["text"] as? String == expectedPrompt.transcript.text)
     #expect(contentBlocks[0]["cache_control"] == nil)
+}
+
+/// A prompt comparison builds two substring arms that differ only in their
+/// prompt directory, so the directory must reach the request the API sees.
+@Test func promptDirOverrideReachesTheSentSystemPrompt() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let overriddenSystem = "OVERRIDDEN SYSTEM PROMPT"
+    try AtomicWriter.write(Data(overriddenSystem.utf8), to: directory.appendingPathComponent("system.md"))
+
+    let endpoint = uniqueEndpoint()
+    defer { SubstringStubURLProtocol.unregister(url: endpoint) }
+    try SubstringStubURLProtocol.register(url: endpoint, status: 200, body: makeEnvelope(modelAnswerText: modelAnswerJSON()))
+
+    _ = try await makeSummarizer(endpoint: endpoint, promptDir: directory).summarize(
+        transcript: makeTranscript(), glossary: Glossary(), config: SummarizerConfig(),
+    )
+
+    let sentRequest = try #require(SubstringStubURLProtocol.capturedRequest(for: endpoint))
+    let bodyData = try #require(SubstringStubURLProtocol.bodyData(from: sentRequest))
+    let json = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+    let systemBlocks = try #require(json["system"] as? [[String: Any]])
+    let systemText = try #require(systemBlocks[0]["text"] as? String)
+    #expect(systemText.hasPrefix(overriddenSystem))
 }
 
 // MARK: - Log field construction
