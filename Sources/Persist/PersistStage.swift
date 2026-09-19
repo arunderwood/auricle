@@ -52,6 +52,23 @@ public enum PersistStage {
         let meetingsSubdir: String
     }
 
+    /// The two ambient inputs the stage reads: the instant a re-run is
+    /// published, and the zone every filename/frontmatter date is rendered
+    /// in. Injectable so tests can pin both; production uses the system clock
+    /// and the process's current zone.
+    public struct TimeSource: Sendable {
+        public let now: @Sendable () -> Date
+        public let timeZone: TimeZone
+
+        public init(
+            now: @escaping @Sendable () -> Date = { Date() },
+            timeZone: TimeZone = .current,
+        ) {
+            self.now = now
+            self.timeZone = timeZone
+        }
+    }
+
     /// Everything `publish` resolves before it can render or write anything:
     /// the decoded cache artifact, the fetched `Meeting` row, and the local
     /// date/time both the renderer and the filename resolver need. Bundled
@@ -78,6 +95,7 @@ public enum PersistStage {
         meetingsSubdir: String,
         stateStore: StateStore,
         stageRunner: StageRunner,
+        clock: TimeSource = TimeSource(),
     ) async throws -> StageRunner.StageOutcome {
         let vaultLocation = VaultLocation(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
         return try await stageRunner.run(stage: .persist, meetingID: meetingID, activeState: .summarizing) {
@@ -88,6 +106,7 @@ public enum PersistStage {
                     cacheDirectory: cacheDirectory,
                     vaultLocation: vaultLocation,
                     stateStore: stateStore,
+                    clock: clock,
                 )
             } catch {
                 return .failed(
@@ -107,6 +126,7 @@ public enum PersistStage {
         cacheDirectory: URL,
         vaultLocation: VaultLocation,
         stateStore: StateStore,
+        clock: TimeSource,
     ) async throws -> StageRunner.StageOutcome {
         let artifact = try readSummaryArtifact(cacheDirectory: cacheDirectory)
 
@@ -122,7 +142,7 @@ public enum PersistStage {
 
         // The one documented local-time exception (Decision 2.4): every
         // other timestamp in the system is UTC.
-        let (localDate, localTime24h) = localDateAndTime(from: captureStartedAt)
+        let (localDate, localTime24h) = localDateAndTime(from: captureStartedAt, in: clock.timeZone)
         let resolved = ResolvedMeeting(
             meetingID: meetingID,
             artifact: artifact,
@@ -131,7 +151,12 @@ public enum PersistStage {
             localTime24h: localTime24h,
         )
 
-        let writtenURL = try writeNote(resolved: resolved, isRepublish: isRepublish, vaultLocation: vaultLocation)
+        let writtenURL = try writeNote(
+            resolved: resolved,
+            isRepublish: isRepublish,
+            vaultLocation: vaultLocation,
+            clock: clock,
+        )
 
         meeting.vaultNotePath = writtenURL.path
         try await stateStore.updateMeeting(meeting)
@@ -145,12 +170,18 @@ public enum PersistStage {
     /// `vaultNotePath` (never published, or the user deleted the original)
     /// always falls through to a standard publish, per Decision 2.3's
     /// documented fallback.
-    private static func writeNote(resolved: ResolvedMeeting, isRepublish: Bool, vaultLocation: VaultLocation) throws -> URL {
+    private static func writeNote(
+        resolved: ResolvedMeeting,
+        isRepublish: Bool,
+        vaultLocation: VaultLocation,
+        clock: TimeSource,
+    ) throws -> URL {
         if isRepublish,
            let existingPath = resolved.meeting.vaultNotePath,
            FileManager.default.fileExists(atPath: existingPath) {
             let originalURL = URL(fileURLWithPath: existingPath)
-            let rerunURL = try nextRerunURL(originalURL: originalURL, localDate: resolved.localDate)
+            let (rerunDate, _) = localDateAndTime(from: clock.now(), in: clock.timeZone)
+            let rerunURL = try nextRerunURL(originalURL: originalURL, rerunDate: rerunDate)
             let markdown = FrontmatterRenderer.render(
                 meeting: frontmatterMeeting(resolved, supersedes: originalURL.lastPathComponent),
             )
@@ -214,15 +245,28 @@ public enum PersistStage {
 
     // MARK: - Rerun filename construction
 
-    /// Builds `<original-stem>--rerun-<localDate>[-N].md` in the original's
-    /// own directory (Decision 2.4's own text: this is a different axis than
+    /// The `--rerun-<YYYY-MM-DD>[-N]` tail a previous re-run left on a note's
+    /// stem. `[0-9]`, not `\d`: ICU's `\d` also matches non-ASCII digits.
+    private static let rerunSuffixPattern = "--rerun-[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]+)?$"
+
+    /// Builds `<base-stem>--rerun-<rerunDate>[-N].md` in the original's own
+    /// directory (Decision 2.4's own text: this is a different axis than
     /// `FilenameResolver`'s single-hyphen ordinal, and belongs to the
     /// persist stage, not that resolver). Deterministic, existence-checked
     /// candidates — never `FilenameResolver.resolve`, which has no rerun
     /// suffix shape to produce.
-    private static func nextRerunURL(originalURL: URL, localDate: String) throws -> URL {
+    ///
+    /// `originalURL` is whatever `meetings.vault_note_path` holds, which is
+    /// the previous re-run once one exists. The candidate is built from the
+    /// stem with that re-run's suffix stripped, so every re-run of a meeting
+    /// is a sibling of the first note (`<base>--rerun-D[-N]`) rather than a
+    /// suffix stacked on a suffix, and the same-day ordinal stays reachable.
+    private static func nextRerunURL(originalURL: URL, rerunDate: String) throws -> URL {
         let directory = originalURL.deletingLastPathComponent()
-        let stem = originalURL.deletingPathExtension().lastPathComponent
+        var stem = originalURL.deletingPathExtension().lastPathComponent
+        if let suffixRange = stem.range(of: rerunSuffixPattern, options: .regularExpression) {
+            stem.removeSubrange(suffixRange)
+        }
 
         var ordinal: Int?
         while true {
@@ -231,7 +275,7 @@ public enum PersistStage {
             } else {
                 ""
             }
-            let candidateURL = directory.appendingPathComponent("\(stem)--rerun-\(localDate)\(suffix).md")
+            let candidateURL = directory.appendingPathComponent("\(stem)--rerun-\(rerunDate)\(suffix).md")
             guard FileManager.default.fileExists(atPath: candidateURL.path) else {
                 return candidateURL
             }
@@ -245,14 +289,14 @@ public enum PersistStage {
 
     // MARK: - Local date/time (Decision 2.4's local-time exception)
 
-    /// Formats `date` as `("YYYY-MM-DD", "HHMM")` in `TimeZone.current` —
+    /// Formats `date` as `("YYYY-MM-DD", "HHMM")` in `timeZone` —
     /// numeric `DateComponents` extraction rather than `DateFormatter`, so
     /// the result can't be perturbed by the process's `Locale` (only its
     /// `TimeZone`, which is exactly the one axis Decision 2.4 means to vary
     /// on).
-    private static func localDateAndTime(from date: Date) -> (date: String, time24h: String) {
+    private static func localDateAndTime(from date: Date, in timeZone: TimeZone) -> (date: String, time24h: String) {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
+        calendar.timeZone = timeZone
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         let dateString = String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
         let timeString = String(format: "%02d%02d", components.hour ?? 0, components.minute ?? 0)

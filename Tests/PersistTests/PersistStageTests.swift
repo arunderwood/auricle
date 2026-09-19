@@ -30,6 +30,20 @@ private func makeTestDirectory() -> URL {
 private let captureStartedAtString = "2026-04-28T12:00:00Z"
 private let expectedLocalDate = "2026-04-28"
 
+/// Re-run instants sit weeks after the capture, at noon UTC for the same
+/// zone-independence reason as the capture instant, so a re-run named by the
+/// capture date instead of the re-run date can't pass by coincidence.
+private let firstRerunInstant = "2026-05-15T12:00:00Z"
+private let expectedFirstRerunDate = "2026-05-15"
+private let nextDayRerunInstant = "2026-05-16T12:00:00Z"
+private let expectedNextDayRerunDate = "2026-05-16"
+
+private func fixedTimeSource(at instant: String, zone: String = "UTC") throws -> PersistStage.TimeSource {
+    let date = try #require(ISO8601UTC.date(from: instant))
+    let timeZone = try #require(TimeZone(identifier: zone))
+    return PersistStage.TimeSource(now: { date }, timeZone: timeZone)
+}
+
 private func makeMeetingRow(
     id: String,
     vaultNotePath: String? = nil,
@@ -99,9 +113,14 @@ private func makeFixture(writeValidSummary: Bool = true) throws -> TestFixture {
 
 /// Every test below calls `PersistStage.run` against the same fixture-owned
 /// `cacheDirectory`/`meetingsSubdir: "Meetings"`/`stateStore`/`stageRunner` —
-/// only `meetingID`/`isRepublish`/(rarely) `vaultPath` vary per scenario.
+/// only `meetingID`/`isRepublish`/(rarely) `vaultPath`/`clock` vary per scenario.
 private extension TestFixture {
-    func run(meetingID: MeetingID, isRepublish: Bool = false, vaultPath: URL? = nil) async throws -> StageRunner.StageOutcome {
+    func run(
+        meetingID: MeetingID,
+        isRepublish: Bool = false,
+        vaultPath: URL? = nil,
+        clock: PersistStage.TimeSource = PersistStage.TimeSource(),
+    ) async throws -> StageRunner.StageOutcome {
         try await PersistStage.run(
             meetingID: meetingID,
             isRepublish: isRepublish,
@@ -110,6 +129,7 @@ private extension TestFixture {
             meetingsSubdir: "Meetings",
             stateStore: store,
             stageRunner: runner,
+            clock: clock,
         )
     }
 }
@@ -177,7 +197,11 @@ private extension TestFixture {
     let meetingID = MeetingID.generate()
     try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue, vaultNotePath: originalURL.path))
 
-    let outcome = try await fixture.run(meetingID: meetingID, isRepublish: true)
+    let outcome = try await fixture.run(
+        meetingID: meetingID,
+        isRepublish: true,
+        clock: fixedTimeSource(at: firstRerunInstant),
+    )
 
     guard case let .completed(targetState, _) = outcome else {
         Issue.record("expected .completed outcome, got \(outcome)")
@@ -185,7 +209,8 @@ private extension TestFixture {
     }
     #expect(targetState == .published)
 
-    let expectedRerunURL = fixture.meetingsSubdirURL.appendingPathComponent("\(localDate)-tuesday-sync--rerun-\(localDate).md")
+    let expectedRerunURL = fixture.meetingsSubdirURL
+        .appendingPathComponent("\(localDate)-tuesday-sync--rerun-\(expectedFirstRerunDate).md")
     #expect(FileManager.default.fileExists(atPath: expectedRerunURL.path))
     let rerunContent = try String(contentsOf: expectedRerunURL, encoding: .utf8)
     #expect(rerunContent.contains("supersedes"))
@@ -206,32 +231,91 @@ private extension TestFixture {
     #expect(meeting.vaultNotePath == expectedRerunURL.path)
 }
 
+private func modificationDate(of url: URL) throws -> Date {
+    try #require(FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+}
+
+private func requireCompleted(_ outcome: StageRunner.StageOutcome) throws {
+    guard case let .completed(targetState, _) = outcome else {
+        Issue.record("expected .completed outcome, got \(outcome)")
+        throw CancellationError()
+    }
+    #expect(targetState == .published)
+}
+
 @Test func secondReattributeSameDayAppendsOrdinalTwoToTheRerunSuffix() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-
-    let localDate = expectedLocalDate
-    let originalURL = fixture.meetingsSubdirURL.appendingPathComponent("\(localDate)-tuesday-sync.md")
-    try Data("original".utf8).write(to: originalURL)
-    let firstRerunURL = fixture.meetingsSubdirURL.appendingPathComponent("\(localDate)-tuesday-sync--rerun-\(localDate).md")
-    try Data("first rerun".utf8).write(to: firstRerunURL)
-
     let meetingID = MeetingID.generate()
-    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue, vaultNotePath: originalURL.path))
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+    let clock = try fixedTimeSource(at: firstRerunInstant)
 
-    let outcome = try await fixture.run(meetingID: meetingID, isRepublish: true)
+    try await requireCompleted(fixture.run(meetingID: meetingID))
+    let baseStem = "\(expectedLocalDate)-tuesday-sync"
+    let originalURL = fixture.meetingsSubdirURL.appendingPathComponent("\(baseStem).md")
+    let originalBytes = try Data(contentsOf: originalURL)
+    let originalModified = try modificationDate(of: originalURL)
 
-    guard case .completed = outcome else {
-        Issue.record("expected .completed outcome, got \(outcome)")
-        return
-    }
+    try await requireCompleted(fixture.run(meetingID: meetingID, isRepublish: true, clock: clock))
+    let firstRerunURL = fixture.meetingsSubdirURL.appendingPathComponent("\(baseStem)--rerun-\(expectedFirstRerunDate).md")
+    #expect(FileManager.default.fileExists(atPath: firstRerunURL.path))
+    let firstRerunBytes = try Data(contentsOf: firstRerunURL)
+    let firstRerunModified = try modificationDate(of: firstRerunURL)
 
-    let expectedSecondRerunURL = fixture.meetingsSubdirURL.appendingPathComponent("\(localDate)-tuesday-sync--rerun-\(localDate)-2.md")
-    #expect(FileManager.default.fileExists(atPath: expectedSecondRerunURL.path))
-    #expect(try Data(contentsOf: firstRerunURL) == Data("first rerun".utf8))
+    try await requireCompleted(fixture.run(meetingID: meetingID, isRepublish: true, clock: clock))
+    let secondRerunURL = fixture.meetingsSubdirURL.appendingPathComponent("\(baseStem)--rerun-\(expectedFirstRerunDate)-2.md")
+    #expect(FileManager.default.fileExists(atPath: secondRerunURL.path))
+
+    #expect(try Data(contentsOf: originalURL) == originalBytes)
+    #expect(try modificationDate(of: originalURL) == originalModified)
+    #expect(try Data(contentsOf: firstRerunURL) == firstRerunBytes)
+    #expect(try modificationDate(of: firstRerunURL) == firstRerunModified)
+
+    let secondRerunContent = try String(contentsOf: secondRerunURL, encoding: .utf8)
+    #expect(secondRerunContent.contains("\"\(firstRerunURL.lastPathComponent)\""))
+    #expect(!secondRerunContent.contains("\"\(originalURL.lastPathComponent)\""))
 
     let meeting = try #require(try await fixture.store.fetchMeeting(id: meetingID.rawValue))
-    #expect(meeting.vaultNotePath == expectedSecondRerunURL.path)
+    #expect(meeting.vaultNotePath == secondRerunURL.path)
+
+    let writtenFiles = try FileManager.default.contentsOfDirectory(atPath: fixture.meetingsSubdirURL.path)
+    #expect(Set(writtenFiles) == Set([
+        originalURL.lastPathComponent,
+        firstRerunURL.lastPathComponent,
+        secondRerunURL.lastPathComponent,
+    ]))
+}
+
+@Test func rerunOnALaterDayNamesTheBaseStemWithTheNewDateInsteadOfNestingSuffixes() async throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let meetingID = MeetingID.generate()
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+
+    try await requireCompleted(fixture.run(meetingID: meetingID))
+    try await requireCompleted(fixture.run(
+        meetingID: meetingID,
+        isRepublish: true,
+        clock: fixedTimeSource(at: firstRerunInstant),
+    ))
+    try await requireCompleted(fixture.run(
+        meetingID: meetingID,
+        isRepublish: true,
+        clock: fixedTimeSource(at: nextDayRerunInstant),
+    ))
+
+    let baseStem = "\(expectedLocalDate)-tuesday-sync"
+    let firstRerunName = "\(baseStem)--rerun-\(expectedFirstRerunDate).md"
+    let nextDayName = "\(baseStem)--rerun-\(expectedNextDayRerunDate).md"
+    let writtenFiles = try FileManager.default.contentsOfDirectory(atPath: fixture.meetingsSubdirURL.path)
+    #expect(Set(writtenFiles) == Set(["\(baseStem).md", firstRerunName, nextDayName]))
+
+    let nextDayURL = fixture.meetingsSubdirURL.appendingPathComponent(nextDayName)
+    let nextDayContent = try String(contentsOf: nextDayURL, encoding: .utf8)
+    #expect(nextDayContent.contains("\"\(firstRerunName)\""))
+
+    let meeting = try #require(try await fixture.store.fetchMeeting(id: meetingID.rawValue))
+    #expect(meeting.vaultNotePath == nextDayURL.path)
 }
 
 /// Mirrors `VaultWriterTests.swift`'s
@@ -243,20 +327,23 @@ private extension TestFixture {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
-    let localDate = expectedLocalDate
-    let stem = "\(localDate)-tuesday-sync"
+    let stem = "\(expectedLocalDate)-tuesday-sync"
     let originalURL = fixture.meetingsSubdirURL.appendingPathComponent("\(stem).md")
     try Data("original".utf8).write(to: originalURL)
     for ordinal in 1 ... PersistStage.maxRerunOrdinal {
         let suffix = ordinal >= 2 ? "-\(ordinal)" : ""
-        let candidateURL = fixture.meetingsSubdirURL.appendingPathComponent("\(stem)--rerun-\(localDate)\(suffix).md")
+        let candidateURL = fixture.meetingsSubdirURL.appendingPathComponent("\(stem)--rerun-\(expectedFirstRerunDate)\(suffix).md")
         try Data("rerun".utf8).write(to: candidateURL)
     }
 
     let meetingID = MeetingID.generate()
     try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue, vaultNotePath: originalURL.path))
 
-    let outcome = try await fixture.run(meetingID: meetingID, isRepublish: true)
+    let outcome = try await fixture.run(
+        meetingID: meetingID,
+        isRepublish: true,
+        clock: fixedTimeSource(at: firstRerunInstant),
+    )
 
     guard case let .failed(targetState, errorClass, _, _) = outcome else {
         Issue.record("expected .failed outcome, got \(outcome)")
@@ -317,6 +404,46 @@ private extension TestFixture {
     #expect(FileManager.default.fileExists(atPath: expectedURL.path))
     let content = try String(contentsOf: expectedURL, encoding: .utf8)
     #expect(!content.contains("supersedes"))
+}
+
+// MARK: - Time zone
+
+/// 03:30Z on the 28th is 20:30 on the 27th in Los Angeles (UTC-7 in April),
+/// so the filename's date and time and the frontmatter `date` all differ from
+/// what UTC gives. Only a machine zone that is also at UTC-7 could satisfy
+/// them without honoring the injected zone.
+@Test func captureDateAndTimeAreRenderedInTheInjectedTimeZone() async throws {
+    let fixture = try makeFixture(writeValidSummary: false)
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    try writeSummaryJSON(
+        """
+        {
+          "title": "Meeting at 2026-04-27T20:30 PDT",
+          "calendar_event_title": null,
+          "attendees": [],
+          "self_wikilink": null,
+          "needs_attribution": false,
+          "needs_calendar_enrichment": true,
+          "summary": "A summary paragraph.",
+          "action_items": [],
+          "decisions": [],
+          "transcript_segments": []
+        }
+        """,
+        to: fixture.cacheDirectory,
+    )
+    let meetingID = MeetingID.generate()
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue, captureStartedAt: "2026-04-28T03:30:00Z"))
+
+    try await requireCompleted(fixture.run(
+        meetingID: meetingID,
+        clock: fixedTimeSource(at: firstRerunInstant, zone: "America/Los_Angeles"),
+    ))
+
+    let expectedURL = fixture.meetingsSubdirURL.appendingPathComponent("2026-04-27-meeting-at-2030.md")
+    #expect(FileManager.default.fileExists(atPath: expectedURL.path))
+    let content = try String(contentsOf: expectedURL, encoding: .utf8)
+    #expect(content.contains("date: 2026-04-27"))
 }
 
 // MARK: - summary.json failures
