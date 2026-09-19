@@ -45,7 +45,9 @@ public struct ClaudeSubstringSummarizer: SummarizerStrategy {
     /// decision fixes a value for this call shape yet, so this is a
     /// documented stand-in until a real token-budget story lands — the same
     /// posture Story 3.3 already established for its per-model rate table.
-    private static let maxTokens = 4096
+    /// The budget is shared with the model's thinking tokens, and 4096 cut a
+    /// long meeting's JSON off mid-string.
+    private static let maxTokens = 16384
     /// A computed property, not a stored `static let`: `[String: Any]` isn't
     /// `Sendable`, and Swift 6.3's strict concurrency checking flags any
     /// stored global of a non-`Sendable` type as possibly-shared mutable
