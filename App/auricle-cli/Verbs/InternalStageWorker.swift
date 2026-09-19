@@ -7,6 +7,7 @@ import State
 import Summarize
 import SummarizerInterface
 import Telemetry
+import VaultGlossary
 
 // AR-PIPE-7: the GUI's and `CrashRecovery`'s subprocess-dispatch mechanism,
 // not a user-facing verb — `shouldDisplay: false` keeps it out of `auricle
@@ -26,6 +27,9 @@ struct InternalStageWorker: AsyncParsableCommand {
 
     @Option(help: "Protocol version the dispatching process was built against.")
     var workerProtocolVersion: Int
+
+    @Option(help: "Obsidian vault whose page names and wikilinks become the summarize stage's glossary.")
+    var vaultPath: String?
 
     func run() async throws {
         switch InternalStageValidator.validate(stage: stage, workerProtocolVersion: workerProtocolVersion) {
@@ -87,8 +91,7 @@ struct InternalStageWorker: AsyncParsableCommand {
                 stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
                 telemetryRecorder: TelemetryRecorder(stateStore: stateStore),
                 orchestrator: orchestrator,
-                // Empty: the vault glossary builder (Story 3.12) is what fills it.
-                glossary: Glossary(),
+                glossary: vaultGlossary(),
                 config: SummarizerConfig(),
             )
         } catch StateStoreError.meetingNotFound {
@@ -102,6 +105,18 @@ struct InternalStageWorker: AsyncParsableCommand {
         let exitCode = SummarizeStage.exitCode(for: outcome)
         if exitCode != 0 {
             throw ExitCode(exitCode)
+        }
+    }
+
+    /// Empty when no vault path was given or the vault cannot be read: a
+    /// vocabulary is an aid to the summary, never a reason to withhold it. The
+    /// one line written names the failure's type only, because a path is the
+    /// user's own and does not belong in a log.
+    private func vaultGlossary() -> Glossary {
+        guard let vaultPath else { return Glossary() }
+        let url = URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath, isDirectory: true)
+        return VaultGlossaryBuilder(vaultPath: url).buildOrEmpty { error in
+            writeStderr("__internal-stage: continuing without a vault glossary (\(type(of: error))).")
         }
     }
 }

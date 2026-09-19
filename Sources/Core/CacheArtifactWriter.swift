@@ -50,10 +50,12 @@ public enum CacheArtifactWriter {
         }
     }
 
-    /// `~/Library/Caches/com.auricle.app/<meeting-id>/` — exposed so callers
-    /// (and tests) can locate what `write` produced without duplicating this
-    /// path construction.
-    public static func cacheDirectory(for id: MeetingID) throws -> URL {
+    /// `~/Library/Caches/com.auricle.app/` — the one place the cache root is
+    /// constructed. Not created here: callers that write directly under it
+    /// (the vault glossary cache) create it themselves, and
+    /// `write(_:for:named:schemaVersion:)` creates the per-meeting directory
+    /// beneath it.
+    public static func cacheRoot() throws -> URL {
         let caches: URL
         do {
             caches = try FileManager.default.url(
@@ -65,9 +67,14 @@ public enum CacheArtifactWriter {
         } catch {
             throw WriteError.cacheRootUnavailable(underlying: error)
         }
-        return caches
-            .appendingPathComponent("com.auricle.app", isDirectory: true)
-            .appendingPathComponent(id.rawValue, isDirectory: true)
+        return caches.appendingPathComponent("com.auricle.app", isDirectory: true)
+    }
+
+    /// `~/Library/Caches/com.auricle.app/<meeting-id>/` — exposed so callers
+    /// (and tests) can locate what `write` produced without duplicating this
+    /// path construction.
+    public static func cacheDirectory(for id: MeetingID) throws -> URL {
+        try cacheRoot().appendingPathComponent(id.rawValue, isDirectory: true)
     }
 
     /// `JSONSerialization` round-trip rather than a custom `Encoder`: a

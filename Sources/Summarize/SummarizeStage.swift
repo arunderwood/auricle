@@ -18,8 +18,9 @@ import Telemetry
 /// returns an event supplies the note's title and attendees and the prompt's
 /// attendee names; no source, no match, a blank title or any error from the
 /// source leaves the unenriched variant of the artifact and never fails the
-/// stage. Either way `calendar.json` records which happened. There is no
-/// glossary builder yet; the glossary is whatever the caller injects.
+/// stage. Either way `calendar.json` records which happened. The glossary the
+/// caller injects is the full vault glossary; the stage scopes it to the
+/// meeting itself before the summarizer sees it.
 public enum SummarizeStage {
     private static let summaryArtifactName = "summary.json"
     private static let summarySchemaVersion = 1
@@ -30,6 +31,10 @@ public enum SummarizeStage {
 
     /// Completes into `summarizing`, the state persist's own first
     /// transaction re-asserts, because no state sits between the two stages.
+    ///
+    /// `glossary` is the full, unscoped vault glossary. The summarizer is
+    /// given the part of it this meeting's attendees and transcript touch, and
+    /// that part is written to the meeting's `glossary.json`.
     ///
     /// Throws `StateStoreError.meetingNotFound` when `meetingID` has no row,
     /// before anything is recorded: `StageRunner.run`'s first transaction
@@ -162,10 +167,12 @@ public enum SummarizeStage {
         let enrichment = try await CalendarEnrichment.resolve(using: context.calendarSource, at: captureStartedAtDate)
         writeCalendarArtifact(enrichment.artifact, for: meetingID)
 
+        let scopedGlossary = scopeAndRecordGlossary(glossary, transcript: transcript, speakers: speakers, for: meetingID)
+
         // The stage owns the attendee names: whatever the caller put on the
         // config would disagree with the note's attendees.
         let enrichedConfig = config.withAttendeeNames(enrichment.match?.attendeeNames ?? [])
-        let outcome = try await orchestrator.summarize(transcript: transcript, glossary: glossary, config: enrichedConfig)
+        let outcome = try await orchestrator.summarize(transcript: transcript, glossary: scopedGlossary, config: enrichedConfig)
 
         let artifact = try SummaryArtifactMapper.artifact(
             title: UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone),

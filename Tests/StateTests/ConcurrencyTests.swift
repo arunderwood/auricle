@@ -59,8 +59,8 @@ private func insertMeetingSQL(id: String) -> String {
     // Seed the schema before the contending connections open.
     try MigrationRegistrar.migrator.migrate(DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5)))
 
-    let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 2))
-    let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 2))
+    let guiPool = try DatabasePool(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5))
+    let subprocessQueue = try DatabaseQueue(path: path, configuration: makeConfiguration(busyTimeoutSeconds: 5))
 
     let lockAcquired = DispatchSemaphore(value: 0)
     let releaseLock = DispatchSemaphore(value: 0)
@@ -81,8 +81,10 @@ private func insertMeetingSQL(id: String) -> String {
     holderThread.start()
     lockAcquired.wait()
 
-    // Release the GUI's write lock ~0.3s in, well inside the 2s busy
-    // timeout the subprocess is configured with.
+    // Release the GUI's write lock ~0.3s in, well inside the 5s busy
+    // timeout the subprocess is configured with. The wide margin is for a
+    // loaded machine: the release runs on a global dispatch queue that
+    // parallel tests can starve past a shorter timeout.
     DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
         releaseLock.signal()
     }

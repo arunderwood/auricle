@@ -168,6 +168,12 @@ custom_rules:
       # VaultWriterTests.swift above: the fixture writes the blocking state
       # directly, CacheArtifactWriter under test never does.
       - ".*/Tests/CoreTests/CacheArtifactWriterTests\\.swift$"
+      # Builds a throwaway Obsidian vault on disk (thousands of notes for the
+      # 10K-file bound, where an fsync per file would dominate the test) for
+      # VaultGlossaryBuilder to scan. The builder only ever reads a vault; the
+      # fixture stands in for the user's own editing, which no auricle write
+      # path is involved in.
+      - ".*/Tests/VaultGlossaryTests/VaultFixture\\.swift$"
 
   log_facade_bypass:
     name: "Log facade bypass"

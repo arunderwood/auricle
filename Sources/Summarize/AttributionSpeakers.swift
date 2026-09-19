@@ -34,4 +34,22 @@ enum AttributionSpeakers {
         }
         return speakers.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
+
+    /// The names attribution gave its speakers, brackets stripped, each once,
+    /// in a fixed order. Glossary scoping matches these against the people in
+    /// the vault, so an attendee who says nothing still keeps their term.
+    static func attendeeNames(from speakers: [String: String]?) -> [String] {
+        var seen = Set<String>()
+        var names: [String] = []
+        for speaker in (speakers ?? [:]).keys.sorted() {
+            let name = (speakers?[speaker] ?? "")
+                .replacingOccurrences(of: "[[", with: "")
+                .replacingOccurrences(of: "]]", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, seen.insert(name.lowercased()).inserted {
+                names.append(name)
+            }
+        }
+        return names
+    }
 }
