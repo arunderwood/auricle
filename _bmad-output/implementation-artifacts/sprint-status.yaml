@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-19-2026 10:01
+last_updated: 09-19-2026 10:39
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -52,7 +52,7 @@ development_status:
   2-3-vaultwriter-atomic-write-path-resolution-collision-handling: done
   2-4-persist-stage-entry-point-compose-renderer-writer-re-publish: done
   2-5-frontmatter-schema-versioning-migration-aware-reader: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   epic-3: done
   3-1-summarizerinterface-protocol-normalized-summarywithgrounding: done
@@ -327,3 +327,65 @@ action_items:
     owner: "the maintainer"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-24-fix-the-re-publish-filename-use-the-re-r"
+    epic: 2
+    action: "Fix the re-publish filename: use the re-run date from an injectable clock,
+      strip an existing --rerun suffix from the stem, and add tests that run isRepublish
+      twice against the architecture.md example rows (DR-1, DR-2, VG-1)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-25-decide-how-persiststage-tells-a-retry-fr"
+    epic: 2
+    action: "Decide how PersistStage tells a retry from a re-publish, and what isRepublish
+      false does when the meeting already has a note on disk; add tests for it (DR-3,
+      DR-4)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-26-add-explicit-persist-wiring-to-story-4-7"
+    epic: 2
+    action: "Add explicit persist wiring to Story 4.7 (PersistStage.run, summary.json
+      handoff, vault_path and meetings_subdir from Core/Config, isRepublish from --reattribute)
+      and settle the persist-under-summarizing state mapping (SR-3, AD-1)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-27-assign-an-owner-story-to-the-re-publish"
+    epic: 2
+    action: "Assign an owner story to the re-publish notification text and to the
+      auricle/needs-summary tag, or drop them from epics.md (SR-1, SR-2)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-28-close-the-persist-test-gaps-inject-a-tim"
+    epic: 2
+    action: "Close the Persist test gaps: inject a time zone into PersistStage, assert
+      filename sources and the AtomicWriter error fold through the stage, and add
+      a render-to-read round trip with quote, backslash, colon, hash and newline (VG-2
+      to VG-5, DR-5)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-29-reconcile-epics-md-architecture-md-and-e"
+    epic: 2
+    action: "Reconcile epics.md, architecture.md and epic-2-context.md with the as-built
+      attendee rule, idempotency AC and slug chain, and decide whether MeetingForFrontmatter
+      keeps its three unrendered fields (SR-4, SR-5)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-30-copy-the-seven-deferred-entries-from-spe"
+    epic: 2
+    action: "Copy the seven deferred entries from spec-2-1 to spec-2-4 into deferred-work.md,
+      with the DR-3 trigger and AD-1 consequence as the current wording (PL-3)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
+  - id: "epic-2-retro-item-31-rewrite-the-history-narrating-comment-at"
+    epic: 2
+    action: "Rewrite the history-narrating comment at FilenameResolver.swift:79-82
+      as a constraint, and delete or wire idPrefixSlug (DR-10, DR-14)"
+    owner: "the maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md"
