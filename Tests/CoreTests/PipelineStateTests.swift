@@ -10,6 +10,7 @@ import Testing
         .awaitingAttribution: "awaiting_attribution",
         .attributing: "attributing",
         .summarizing: "summarizing",
+        .persisting: "persisting",
         .published: "published",
         .awaitingVerification: "awaiting_verification",
         .verified: "verified",
@@ -23,8 +24,8 @@ import Testing
         .publishedPartial: "published_partial",
     ]
 
-    #expect(PipelineState.allCases.count == 18)
-    #expect(expected.count == 18)
+    #expect(PipelineState.allCases.count == 19)
+    #expect(expected.count == 19)
     for state in PipelineState.allCases {
         #expect(state.rawValue == expected[state])
     }

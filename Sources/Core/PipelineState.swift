@@ -12,6 +12,7 @@ public enum PipelineState: String, Sendable, Codable, CaseIterable {
     case awaitingAttribution = "awaiting_attribution"
     case attributing
     case summarizing
+    case persisting
     case published
     case awaitingVerification = "awaiting_verification"
     case verified

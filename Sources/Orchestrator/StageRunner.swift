@@ -105,14 +105,22 @@ public actor StageRunner {
     // MARK: - Stale-detection synthesis
 
     /// Per-state wall-clock stale-detection budgets, in seconds (AR-FAIL-2 /
-    /// Decision 4.2, architecture.md:1054-1060): `transcribing` 2× NFR-P3
+    /// Decision 4.2, architecture.md:1061-1069): `transcribing` 2× NFR-P3
     /// (60s), `reviewingDiarization` 90s fixed, `summarizing` 2× NFR-P5
-    /// (720s — architecture's own stated ≈12min figure), `published` 30s.
-    /// `attributing` is intentionally absent — user-paced, no auto-failure.
+    /// (720s — architecture's own stated ≈12min figure), `persisting` 60s
+    /// fixed, `published` 30s. `attributing` is intentionally absent —
+    /// user-paced, no auto-failure.
+    ///
+    /// `persisting` is a fixed budget, not a multiple of a stage budget:
+    /// persist writes one note file, whose NFR-P8 budget is 500 ms, so 60s is
+    /// 120× the healthy case. That leaves room for a vault on a slow or
+    /// syncing volume, yet a crashed persist surfaces as `persist_failed`
+    /// within about a minute.
     public static let staleDetectionBudgetSeconds: [PipelineState: Int] = [
         .transcribing: 60,
         .reviewingDiarization: 90,
         .summarizing: 720,
+        .persisting: 60,
         .published: 30,
     ]
 
@@ -123,9 +131,10 @@ public actor StageRunner {
 
     /// The exact per-state table from the I/O matrix: `reviewingDiarization`
     /// and `published` are benign passthroughs (not `*_failed`);
-    /// `transcribing`/`summarizing` are the general "stale → `*_failed`"
-    /// case. `published`'s passthrough is a narrow, explicit carve-out of
-    /// the AC's general rule, not this table forgetting to fail it —
+    /// `transcribing`/`summarizing`/`persisting` are the general
+    /// "stale → `*_failed`" case. `published`'s passthrough is a narrow,
+    /// explicit carve-out of the AC's general rule, not this table
+    /// forgetting to fail it —
     /// `published_partial` is a distinct, unrelated trigger (only
     /// `--publish-anyway` + no summarize output) and never fires for a stuck
     /// notify.
@@ -137,6 +146,8 @@ public actor StageRunner {
             StaleTransition(targetState: .awaitingAttribution, errorClass: "ai_reviewer_timeout")
         case .summarizing:
             StaleTransition(targetState: .summarizationFailed, errorClass: "stale_active_state")
+        case .persisting:
+            StaleTransition(targetState: .persistFailed, errorClass: "stale_active_state")
         case .published:
             StaleTransition(targetState: .awaitingVerification, errorClass: "stale_active_state")
         default:

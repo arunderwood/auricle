@@ -19,7 +19,7 @@ import Testing
         Issue.record("expected .completed outcome, got \(outcome)")
         return
     }
-    #expect(targetState == .summarizing)
+    #expect(targetState == .persisting)
     #expect(SummarizeStage.exitCode(for: outcome) == 0)
 
     let raw = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.summaryURL())) as? [String: Any])
@@ -49,7 +49,7 @@ import Testing
 
     let events = try await fixture.events()
     #expect(events.map(\.event) == ["started", "completed"])
-    #expect(try await fixture.state() == "summarizing")
+    #expect(try await fixture.state() == "persisting")
     let completed = try #require(events.last)
     #expect(completed.metadataJSON == metadataJSON)
     let metadata = try stageMetadataObject(completed)

@@ -51,7 +51,7 @@ private func makeMeetingRow(
 ) -> Meeting {
     Meeting(
         id: id,
-        state: "summarizing",
+        state: "persisting",
         createdAt: "2026-04-28T09:00:00Z",
         updatedAt: "2026-04-28T09:00:00Z",
         captureStartedAt: captureStartedAt,

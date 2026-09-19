@@ -307,7 +307,7 @@ Three earned project tokens; everything else inherits.
 | Category | States | Color | Glyph | Label |
 |---|---|---|---|---|
 | Active capture | `recording` | red filled (pulsing) | `record.circle.fill` | "Recording" |
-| Active processing | `transcribing`, `summarizing`, `published` | blue | `arrow.triangle.2.circlepath` (Reduce-Motion-aware) | "Transcribing" / etc. |
+| Active processing | `transcribing`, `summarizing`, `persisting`, `published` | blue | `arrow.triangle.2.circlepath` (Reduce-Motion-aware) | "Transcribing" / etc. |
 | Success | `verified`, `retention_expired` | green | `checkmark.circle.fill` | "Verified" / "Audio deleted" |
 | User-actionable | `awaiting_attribution`, `awaiting_verification` | yellow | `hand.point.up.left.fill` | "Awaiting your input" / "Awaiting your review" |
 | Transient failure | `summarization_failed`, `persist_failed` | orange | `arrow.clockwise.circle` | "Retry needed" |
@@ -584,7 +584,7 @@ No external brand guidelines exist. auricle has a name, a tagline, and no logo /
 | Token | Light source | Dark source | Used for |
 |---|---|---|---|
 | `tokens.recording` | `Color(.systemRed)` | `Color(.systemRed)` | Recording indicator (filled, pulsing) |
-| `tokens.statusActive` | `Color(.systemBlue)` | `Color(.systemBlue)` | `transcribing` / `summarizing` / `published` chips |
+| `tokens.statusActive` | `Color(.systemBlue)` | `Color(.systemBlue)` | `transcribing` / `summarizing` / `persisting` / `published` chips |
 | `tokens.statusSuccess` | `Color(.systemGreen)` | `Color(.systemGreen)` | `verified` / `retention_expired` chips |
 | `tokens.statusAwaiting` | `Color(.systemYellow)` | `Color(.systemYellow)` | `awaiting_attribution` / `awaiting_verification` chips |
 | `tokens.statusRetryable` | `Color(.systemOrange)` | `Color(.systemOrange)` | `summarization_failed` / `persist_failed` chips |
@@ -804,7 +804,7 @@ These supersede the corresponding portions of earlier steps:
 - `SettingsView.swift` — macOS Settings scene (Cmd-,)
 - `DoctorWindow.swift` — separate window, user-initiated via Help menu or banner action
 
-Sort priority: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing/summarizing > published > verified > retention_expired > silent / discarded`. Then by `capture_started_at desc`.
+Sort priority: `recording > awaiting_attribution > awaiting_verification > *_failed (transient before permanent) > transcribing/summarizing/persisting > published > verified > retention_expired > silent / discarded`. Then by `capture_started_at desc`.
 
 Filters at bottom: toggle visibility of `verified` and `discarded`/`retention_expired` states (defaults: verified on, terminal off).
 

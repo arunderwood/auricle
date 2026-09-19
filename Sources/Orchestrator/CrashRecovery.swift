@@ -6,11 +6,14 @@ import State
 /// crashed between Txn A and Txn B (AR-PIPE-3) — nothing else moves
 /// `meetings.state` there and then stops. `reconcile()` runs the AC's
 /// literal query, re-dispatching the states with an automatic subprocess
-/// re-run and only logging `attributing` and `published` — `attributing` is
-/// user-paced (nothing to automatically re-invoke), and `published` is
-/// waiting on `notify`, which runs in-process per AR-PIPE-1 rather than as a
-/// subprocess; no in-process notify API exists yet for crash recovery to
-/// call into, so it is left for a future story.
+/// re-run and only logging `attributing`, `persisting` and `published` —
+/// `attributing` is user-paced (nothing to automatically re-invoke), and
+/// `persisting` and `published` are waiting on `persist` and `notify`, which
+/// run in-process per AR-PIPE-1 rather than as subprocesses. No in-process
+/// API exists for crash recovery to call into. The stale-detection sweep
+/// moves an orphaned `persisting` meeting to `persist_failed`, which
+/// `auricle run <id>` resumes; a `persisting` meeting must never be
+/// dispatched as `summarize`, because that would repeat a paid summarization.
 public struct CrashRecovery: Sendable {
     public enum Outcome: Sendable, Equatable {
         case redispatched(MeetingID, PipelineStage)
@@ -21,12 +24,12 @@ public struct CrashRecovery: Sendable {
     /// `Set` so membership is an O(1) filter over `StateStore.fetchPending()`'s
     /// broader "every non-terminal meeting" result.
     private static let reconcilableActiveStates: Set<PipelineState> = [
-        .transcribing, .reviewingDiarization, .attributing, .summarizing, .published,
+        .transcribing, .reviewingDiarization, .attributing, .summarizing, .persisting, .published,
     ]
 
     /// Active states with no automatic subprocess re-dispatch: only
     /// detected and logged.
-    private static let logOnlyActiveStates: Set<PipelineState> = [.attributing, .published]
+    private static let logOnlyActiveStates: Set<PipelineState> = [.attributing, .persisting, .published]
 
     private let stateStore: StateStore
     private let dispatcher: SubprocessDispatcher

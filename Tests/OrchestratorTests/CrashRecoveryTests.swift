@@ -5,6 +5,25 @@ import GRDB
 @testable import State
 import Testing
 
+/// Counts how often `SubprocessDispatcher` looks up the worker executable,
+/// which it does on every dispatch attempt, successful or not.
+private final class LookupCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 private func makeStore() throws -> StateStore {
     try StateStore.forTesting(writer: DatabaseQueue())
 }
@@ -121,4 +140,55 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
     #expect(events.isEmpty)
     let meeting = try #require(try await store.fetchMeeting(id: attributing))
     #expect(meeting.state == "attributing")
+}
+
+/// `persisting` is waiting on `persist`, which runs in-process per AR-PIPE-1.
+/// Dispatching it as a subprocess would either fail or, if mapped to
+/// `summarize`, repeat a paid summarization for a summary already on disk.
+@Test func reconcileLogsPersistingWithoutDispatchingAnyStage() async throws {
+    let store = try makeStore()
+    let lookups = LookupCounter()
+    let dispatcher = SubprocessDispatcher(
+        resolveExecutablePath: {
+            lookups.increment()
+            return nil
+        },
+        resolveVaultPath: { nil },
+    )
+
+    let persisting = meetingIDString("CR07")
+    try await store.insertMeeting(makeMeeting(id: persisting, state: "persisting"))
+    try await store.insertStageEvent(StageEvent(meetingID: persisting, stage: "persist", event: "started", occurredAt: "2026-01-01T00:00:00Z"))
+
+    let recovery = CrashRecovery(stateStore: store, dispatcher: dispatcher)
+    let outcomes = try await recovery.reconcile()
+
+    #expect(outcomes.count == 1)
+    guard case let .loggedOnly(id, state) = outcomes[0] else {
+        Issue.record("expected a .loggedOnly outcome, got \(outcomes)")
+        return
+    }
+    #expect(id.rawValue == persisting)
+    #expect(state == .persisting)
+    #expect(lookups.count == 0)
+
+    let events = try await store.fetchStageEvents(meetingID: persisting)
+    #expect(events.map(\.event) == ["started"])
+    let meeting = try #require(try await store.fetchMeeting(id: persisting))
+    #expect(meeting.state == "persisting")
+}
+
+@Test func reconcileStillDispatchesSummarizeForASummarizingMeeting() async throws {
+    let store = try makeStore()
+    let (dispatcher, cleanup) = try makeStubDispatcher()
+    defer { cleanup() }
+
+    let summarizing = meetingIDString("CR08")
+    try await store.insertMeeting(makeMeeting(id: summarizing, state: "summarizing"))
+
+    let recovery = CrashRecovery(stateStore: store, dispatcher: dispatcher)
+    let outcomes = try await recovery.reconcile()
+
+    let summarizingID = try #require(MeetingID(ulid: summarizing))
+    #expect(outcomes == [.redispatched(summarizingID, .summarize)])
 }

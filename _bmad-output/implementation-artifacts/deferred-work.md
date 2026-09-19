@@ -215,3 +215,9 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - closes: `_bmad-output/implementation-artifacts/spec-2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variants.md`, "The rendered `date` frontmatter field is an unquoted plain YAML scalar"
   resolution: `FrontmatterReader` composes YAML nodes with `Yams.compose` and reads fields through their literal-text accessors, not through tag-driven `Yams.load`, so no field resolves to a `Date` (`Sources/Persist/FrontmatterReader.swift:87-93`). `FrontmatterV1` also leaves `date` out, because no consumer needs it (`:20-26`). The renderer still writes the plain scalar.
+
+- closes: `_bmad-output/implementation-artifacts/spec-3-7-summarize-stage-entry-point-cache-dir-handoff.md`, "No state sits between a finished summarize and the persist stage"
+  resolution: `PipelineState.persisting` sits between them. `SummarizeStage` completes into `persisting`, `PersistStage` runs under it, and `StageRunner` gives it a fixed 60s stale budget that ends in `persist_failed`. `ActiveStageInFlight` maps it to `persist`, and `CrashRecovery` logs it without dispatching a subprocess, so neither the `summarizing` sweep nor the summarize re-dispatch can act on a meeting that is waiting for persist.
+
+- closes: `_bmad-output/implementation-artifacts/spec-2-4-persist-stage-entry-point-compose-renderer-writer-re-publish-semantics.md`, "`PersistStage.run` passes `activeState: .summarizing`"
+  resolution: `PersistStage.run` passes `activeState: .persisting`. `ActiveStageInFlight` maps that state to `persist`, the stale sweep ends it in `persist_failed`, and `CrashRecovery` logs it without dispatching a subprocess, so a crashed persist run is no longer read as a summarize run.

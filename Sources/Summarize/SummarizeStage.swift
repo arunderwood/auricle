@@ -29,8 +29,11 @@ public enum SummarizeStage {
     private static let transcriptArtifactName = "transcript.json"
     private static let log = Log(category: "summarize-stage")
 
-    /// Completes into `summarizing`, the state persist's own first
-    /// transaction re-asserts, because no state sits between the two stages.
+    /// Completes into `persisting`: the summary is written and persist is
+    /// pending or in flight. A state distinct from the active `summarizing`
+    /// keeps a finished summarize out of the summarize stale-detection sweep
+    /// and out of crash recovery's summarize re-dispatch, which would pay for
+    /// the summary again.
     ///
     /// `glossary` is the full, unscoped vault glossary. The summarizer is
     /// given the part of it this meeting's attendees and transcript touch, and
@@ -199,7 +202,7 @@ public enum SummarizeStage {
         )
 
         return .completed(
-            targetState: .summarizing,
+            targetState: .persisting,
             metadataJSON: encodeMetadataJSON(outcome: outcome, config: config),
         )
     }
