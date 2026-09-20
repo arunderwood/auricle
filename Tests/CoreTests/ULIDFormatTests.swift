@@ -12,6 +12,24 @@ private let crockfordAlphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
     #expect(ULIDFormat.isValid(ulid))
 }
 
+/// `MeetingID` strings are persisted, so the timestamp encoding is a wire
+/// format. The 16 random characters cannot be pinned; the 10-character
+/// timestamp prefix can. Expected prefixes are the 48-bit millisecond count
+/// written as big-endian Crockford base32, worked out independently of the
+/// library. Whole-second inputs keep the `Date` -> millisecond conversion exact.
+@Test(arguments: [
+    (seconds: 0.0, prefix: "0000000000"),
+    (seconds: 1_469_918_176.0, prefix: "01ARYZ6RR0"),
+    (seconds: 1_700_000_001.0, prefix: "01HF7YATZ8"),
+])
+func generatedULIDCarriesTheExactTimestampPrefixForAKnownTime(seconds: Double, prefix: String) {
+    let ulid = ULIDFormat.generate(now: Date(timeIntervalSince1970: seconds))
+
+    #expect(ulid.count == 26)
+    #expect(ulid.allSatisfy { crockfordAlphabet.contains($0) })
+    #expect(ulid.prefix(10) == prefix)
+}
+
 @Test func isValidRejectsWrongLengthAndDisallowedCharacters() {
     #expect(!ULIDFormat.isValid("TOOSHORT"))
     #expect(!ULIDFormat.isValid(String(repeating: "0", count: 27)))

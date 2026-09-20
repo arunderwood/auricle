@@ -909,15 +909,21 @@ DP4 + FR36 + NFR-R2 (never edit existing vault files) collides with FR40 (stable
 
 **When the persist stage runs for a meeting (`auricle run <id> --reattribute`, a bare resume, or any other path):**
 
-The stage is not told which path it is on. It derives that from `meetings.vault_note_path`.
+The stage is not told which path it is on. It derives that from `meetings.vault_note_path` and, when that names a file that is gone, from the notes' own `auricle.meeting_id`.
 
-1. Confirm the stored note still exists at `meetings.vault_note_path`. If it doesn't (never published, or the user deleted it), treat as fresh publish (no rerun suffix; standard filename per Decision 2.4). A fresh publish whose target filename already holds exactly the bytes about to be written is that meeting's own earlier write, so it returns that path and writes nothing.
-2. If the stored note exists and its bytes equal what this run renders, nothing changed since the last publish: write nothing and leave `meetings.vault_note_path` as it is. A stored re-run is compared against a rendering that carries its own `auricle.supersedes`.
-3. Otherwise (new summary, re-attribution, or the user edited the note in Obsidian), construct re-run filename: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md`
+1. Find the meeting's existing note, the predecessor.
+   - If `meetings.vault_note_path` names a file that exists, that file is the predecessor, wherever it lives. This includes a folder outside the configured `vault_path/meetings_subdir`, such as one an earlier configuration used.
+   - If it is unset, the meeting has never been published: there is no predecessor and nothing is scanned, so a first publish pays no directory scan against the persist write budget (NFR-P8). A write whose path was never recorded is still reused by the fresh publish below, because `VaultWriter.write` returns the file that already holds the bytes.
+   - If it is recorded but names a file that no longer exists (the user renamed, moved or deleted the note in Obsidian), look for the note by identity. Validate `vault_path` and resolve `meetings_subdir` as a fresh publish does (Decision 2.5), then scan that folder recursively for `.md` files. Read only each file's frontmatter (the first 8 KB) and parse it with the schema-aware reader (Decision 2.2). A file whose `auricle.meeting_id` equals the meeting's is a candidate. A file that is unreadable, not UTF-8, not an auricle note, or rejected by the reader is skipped. Hidden folders are not searched and symlinks are not followed.
+   - When several candidates match (an original and its re-runs), the predecessor is the candidate that no other candidate lists in its `auricle.supersedes`. If that is still ambiguous, it is the most recently modified.
+   - The scan stops after 5000 files and logs a warning through the `Log` facade when it does. It runs only in this step, and only for a recorded path that is missing: a fresh publish never scans.
+   - If no candidate is found, treat as fresh publish (no rerun suffix; standard filename per Decision 2.4). A fresh publish whose target filename already holds exactly the bytes about to be written is that meeting's own earlier write, so it returns that path and writes nothing.
+2. If the predecessor's bytes equal what this run renders, nothing changed since the last publish: write nothing. `meetings.vault_note_path` names the predecessor, which is an update when the lookup found it at a new path. A predecessor that is itself a re-run is compared against a rendering that carries its own `auricle.supersedes`.
+3. Otherwise (new summary, re-attribution, or the user edited the note in Obsidian), construct re-run filename: `<predecessor-filename-without-ext>--rerun-<YYYY-MM-DD>.md`
    - Example: `2026-04-28-tuesday-sync-with-ben.md` → `2026-04-28-tuesday-sync-with-ben--rerun-2026-05-15.md`
    - The double-hyphen separator (`--`) before `rerun` provides visual distinction from the single-hyphen slug separators inside the original filename.
    - **Multiple reruns on the same calendar day:** append a counter: `--rerun-<YYYY-MM-DD>-2.md`, `--rerun-<YYYY-MM-DD>-3.md`. Re-run date is in the user's local timezone (consistent with Decision 2.4's date-prefix rule). A candidate that already holds exactly the bytes about to be written is reused rather than skipped for the next counter. A retry on a later day names a new re-run date, so it does not reuse an earlier day's orphaned re-run.
-4. Write the re-run note (unless it is being reused) via the atomic-write primitive. Frontmatter includes `auricle.supersedes: "<original-filename>"` (just the filename, no path — Obsidian resolves wikilink-style).
+4. Write the re-run note (unless it is being reused) via the atomic-write primitive, into the configured meetings folder: `vault_path` is validated and `meetings_subdir` resolved exactly as for a fresh publish, whatever folder the predecessor is in. A change to `vault_path` or `meetings_subdir` therefore sends the next re-run to the new folder. Frontmatter includes `auricle.supersedes: "<predecessor-filename>"` (just the filename, no path — Obsidian resolves wikilink-style).
 5. Update `meetings.vault_note_path` to point at the re-run note (the latest publish becomes the canonical one for `auricle status` lookups).
 6. Notification body distinguishes: *"auricle: re-published Tuesday Sync with Ben (rerun 2026-05-15)"*.
 7. Historical publishes are queryable via `stage_events` rows where `stage='persist'` and `event='completed'` for that meeting.
@@ -987,7 +993,7 @@ Notes already in the vault keep their names when these rules change, because a r
 - **Re-publish vs same-day-collision discriminator:** the two paths use different suffixes, on different axes:
   - Same-day collision (different meeting that happens to slugify the same): `<date>-<slug>-2.md` (single hyphen, ordinal counter)
   - Re-publish (same meeting, intentional re-run): `<date>-<slug>--rerun-<YYYY-MM-DD>.md` (double hyphen, date suffix per Decision 2.3)
-  - The persist stage derives which path it's on from the stored note (re-publish exactly when `meetings.vault_note_path` names an existing file); no ambiguity in code, just visually distinct in the filesystem.
+  - The persist stage derives which path it's on from the meeting's existing note (re-publish exactly when `meetings.vault_note_path` names an existing file, or names a missing one and a note in the configured folder carries the meeting's `auricle.meeting_id`); no ambiguity in code, just visually distinct in the filesystem.
   - Either loop skips a candidate that holds other bytes but stops at one that already holds exactly the bytes being written: that file is this meeting's own earlier write, so the stage reuses it instead of adding an ordinal.
 - **Cross-Mac collisions** (same date, identical slug, different meetings on different Macs): not detected pre-publish on either Mac (each Mac sees no local conflict at write time). Surfaces at sync time as a git merge conflict OR an iCloud silent `(2)` rename. Accepted as low-probability, manually recoverable. See trade-off discussion above.
 
@@ -1228,7 +1234,7 @@ Telemetry writes happen at deterministic stage boundaries; the schema is locked 
 | Event | Emitted at | `metadata_json` content |
 |---|---|---|
 | `started` | Txn A of every stage | `{}` (just a timestamp marker) |
-| `completed` | Txn B of every stage on success | `{"duration_ms": ..., "stage_specific": <Codable type>}` |
+| `completed` | Txn B of every stage on success | The stage's own payload, as a flat object (see "Stage-specific `completed` metadata content" below). `duration_ms` is a column, not a JSON key. |
 | `failed` | Txn B of every stage on failure | `{"duration_ms": ..., "error_class": "...", "error_message": "...", "category": "transient|permanent|user_actionable|benign_terminal"}` |
 | `retried` | At each retry attempt within a stage's lifetime | `{"attempt_number": N, "previous_error_class": "...", "backoff_ms": ...}` |
 
@@ -1238,12 +1244,19 @@ Telemetry writes happen at deterministic stage boundaries; the schema is locked 
 enum StageMetadata: Codable {
     case capture(CaptureMeta)
     case transcribe(TranscribeMeta)
+    case reviewDiarization(ReviewDiarizationMeta)
     case attribute(AttributeMeta)
     case summarize(SummarizeMeta)
     case persist(PersistMeta)
     case notify(NotifyMeta)
 }
 ```
+
+`StageMetadata` is the catalogue of payload types. It is not the stored shape. Each `*Meta` struct declares explicit snake_case `CodingKeys`. A stage encodes its own `*Meta` directly and passes the string to `StageOutcome.completed(metadataJSON:)`, so the stored `metadata_json` is the flat object shown in the examples below. A flat object has no case key, so a reader picks the payload type from the row's `stage` column.
+
+The enum's own `Codable` conformance wraps the payload under a snake_case case key (`{"transcribe": {...}}`, `{"review_diarization": {...}}`). The key is there because `CaptureMeta` and `AttributeMeta` have identical empty payloads, and only a key tells them apart. Nothing outside the round-trip tests encodes or decodes the enum, and no stage writes the wrapped form to `stage_events`. A stage that used it would nest its payload one level deeper than the examples below.
+
+Payload sources today: `transcribe` from `TranscribeStage` (`Sources/Transcribe`), `summarize` from `SummarizeStage` (`Sources/Summarize`), `persist` from `PersistStage` (`Sources/Persist`). `capture`, `reviewing_diarization`, `attribute` and `notify` have a `*Meta` type but no stage that writes it yet. The story that adds one encodes its `*Meta` directly, as the three stages above do.
 
 A `metadata_schema_version` column on `stage_events` allows migration of metadata shapes over time independently of the table schema.
 

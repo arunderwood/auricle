@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import GRDB
 @testable import State
@@ -452,6 +453,28 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
     let indexSQL = try #require(sql)
     #expect(indexSQL.contains("WHERE"))
     #expect(indexSQL.contains("NOT IN"))
+}
+
+/// The migration's predicate is frozen SQL (AR-DATA-5), so it cannot share
+/// `PipelineState.terminal` at the source level. This test is the link.
+@Test func idxMeetingsStatePredicateListsExactlyThePipelineStatesListedAsTerminal() throws {
+    let (directory, path) = makeTestDatabasePath()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let queue = try DatabasePoolFactory.makeQueue(path: path)
+    try MigrationRegistrar.migrator.migrate(queue)
+
+    let sql = try queue.read { db in
+        try String.fetchOne(db, sql: "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_meetings_state'")
+    }
+    let indexSQL = try #require(sql)
+    let afterOpeningParenthesis = try #require(indexSQL.components(separatedBy: "NOT IN (").last)
+    let list = try #require(afterOpeningParenthesis.components(separatedBy: ")").first)
+    let states = list.components(separatedBy: ",").map {
+        $0.trimmingCharacters(in: CharacterSet(charactersIn: " '\n"))
+    }
+
+    #expect(states.count == PipelineState.terminal.count)
+    #expect(Set(states) == Set(PipelineState.terminal.map(\.rawValue)))
 }
 
 @Test func idxRetentionPendingFiresAtIsPartial() throws {

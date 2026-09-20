@@ -8,10 +8,18 @@ import State
 // listed in `AuricleCLI`'s `subcommands:` alongside the 10 real verbs.
 // `shouldDisplay: false` keeps it off `auricle help`, which per the AC lists
 // exactly those 10 verbs.
+//
+// `bogusverb` and an unknown flag fail to parse as this command's input, so
+// ArgumentParser's error shows this command's usage, not the top level's. The
+// `usage` string stands in for both lines it would otherwise fill with the
+// hidden name (the usage line and the "See ... --help" hint), and `helpNames`
+// is emptied so the hint is not generated a second time under that name.
 struct BareInvocation: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "__bare-status",
+        usage: "auricle <subcommand>\nSee 'auricle --help' for more information.",
         shouldDisplay: false,
+        helpNames: [],
     )
 
     /// A reading open, so a status command never creates the database or its
