@@ -74,9 +74,10 @@ public struct Log: Sendable {
         emit(.info, message, fields)
     }
 
-    /// `warn` has no distinct `OSLogType` of its own; this maps to `.notice`
-    /// (OSLog's `.default` type) — persisted and visible in `log show`
-    /// without special flags, one step below `.error`.
+    /// OSLog has no warning type: `Logger.warning` is an alias for `.error`,
+    /// which would make `warn` and `error` indistinguishable in `log show`.
+    /// `warn` writes `.default` instead (what `Logger.notice` writes), which is
+    /// persisted and shown without extra flags, like `.error`.
     public func warn(_ message: StaticString, _ fields: [String: LogSensitivity] = [:]) {
         emit(.default, message, fields)
     }
