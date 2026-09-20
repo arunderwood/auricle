@@ -143,7 +143,7 @@ let package = Package(
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "SummarizerInterfaceTests", dependencies: ["SummarizerInterface", "TestSupport"], path: "Tests/SummarizerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
-        .testTarget(name: "AIReviewerInterfaceTests", dependencies: ["AIReviewerInterface", "Core", "TestSupport"], path: "Tests/AIReviewerInterfaceTests"),
+        .testTarget(name: "AIReviewerInterfaceTests", dependencies: ["AIReviewerInterface", "Core", "DiarizerInterface", "TestSupport"], path: "Tests/AIReviewerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "CalendarInterfaceTests", dependencies: ["CalendarInterface", "TestSupport"], path: "Tests/CalendarInterfaceTests"),
         .testTarget(

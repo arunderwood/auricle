@@ -1,5 +1,6 @@
 @testable import AIReviewerInterface
 import Core
+import DiarizerInterface
 import Foundation
 import Testing
 
@@ -32,6 +33,18 @@ private let transcriptionSuggestion = TranscriptionSuggestion(
     charRange: ByteRange(start: 10, end: 14),
     proposedReplacement: "their",
 )
+
+private let twoSegmentDiarization = DiarizationArtifact(segments: [
+    DiarizedSegment(
+        id: "seg_1", speakerLabel: "Speaker_1", startSeconds: 0, endSeconds: 2,
+        utteranceIndex: DiarizedUtteranceRange(first: 0, last: 0),
+        voiceProfile: DiarizedVoiceProfile(overlapRatio: 0),
+    ),
+    DiarizedSegment(
+        id: "seg_2", speakerLabel: "Speaker_2", startSeconds: 2, endSeconds: 4,
+        utteranceIndex: nil, voiceProfile: DiarizedVoiceProfile(overlapRatio: 0.1),
+    ),
+])
 
 @Test func diarizationSuggestionRoundTripsThroughSnakeCaseJSON() throws {
     #expect(try keys(of: diarizationSuggestion) == ["suggestion_id", "reasoning", "kind", "segment_id", "proposed_splits"])
@@ -107,19 +120,15 @@ private let transcriptionSuggestion = TranscriptionSuggestion(
 }
 
 @Test func reviewInputsRoundTripAndAMockReviewerConforms() async throws {
-    struct FakeDiarization: Codable, Sendable, Equatable {
-        let segments: Int
-    }
     struct MockDiarizationReviewer: DiarizationReviewerStrategy {
-        typealias Diarization = FakeDiarization
         func review(
-            input: DiarizationReviewInput<FakeDiarization>,
+            input: DiarizationReviewInput,
             config: AIReviewerConfig,
         ) async throws -> AIReviewerResult<DiarizationSuggestion> {
             AIReviewerResult(
                 suggestions: [],
                 cost: AIReviewerCost(inputTokens: 0, outputTokens: 0, costUSD: 0, modelID: config.modelID),
-                reviewedSegmentCount: input.diarization.segments,
+                reviewedSegmentCount: input.diarization.segments.count,
             )
         }
     }
@@ -139,18 +148,18 @@ private let transcriptionSuggestion = TranscriptionSuggestion(
     let transcript = CanonicalTranscript(text: "Speaker_1: hi", utterances: [
         .init(speakerLabel: "Speaker_1", start: 0, end: 13),
     ])
-    let diarizationInput = DiarizationReviewInput(transcript: transcript, diarization: FakeDiarization(segments: 4))
+    let diarizationInput = DiarizationReviewInput(transcript: transcript, diarization: twoSegmentDiarization)
     let decoded = try JSONDecoder().decode(
-        DiarizationReviewInput<FakeDiarization>.self,
+        DiarizationReviewInput.self,
         from: JSONEncoder().encode(diarizationInput),
     )
-    #expect(decoded.diarization == FakeDiarization(segments: 4))
+    #expect(decoded == diarizationInput)
     #expect(decoded.transcript == transcript)
     #expect(try keys(of: diarizationInput) == ["transcript", "diarization"])
 
     let config = AIReviewerConfig(modelID: "claude-haiku-4-5")
     let diarizationResult = try await MockDiarizationReviewer().review(input: decoded, config: config)
-    #expect(diarizationResult.reviewedSegmentCount == 4)
+    #expect(diarizationResult.reviewedSegmentCount == 2)
     #expect(diarizationResult.cost.modelID == "claude-haiku-4-5")
 
     let transcriptionInput = TranscriptionReviewInput(

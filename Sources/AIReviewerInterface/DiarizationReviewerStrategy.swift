@@ -1,26 +1,24 @@
 import Core
+import DiarizerInterface
 
 /// The two immutable artifacts a diarization review reads. A named struct
 /// because a tuple cannot be `Codable`.
-public struct DiarizationReviewInput<Diarization: Codable & Sendable>: Codable, Sendable {
+public struct DiarizationReviewInput: Codable, Sendable, Equatable {
     public let transcript: CanonicalTranscript
-    public let diarization: Diarization
+    public let diarization: DiarizationArtifact
 
     enum CodingKeys: String, CodingKey {
         case transcript
         case diarization
     }
 
-    public init(transcript: CanonicalTranscript, diarization: Diarization) {
+    public init(transcript: CanonicalTranscript, diarization: DiarizationArtifact) {
         self.transcript = transcript
         self.diarization = diarization
     }
 }
 
 /// Phase 1 of the reviewer family: flags segments whose speaker labels look
-/// wrong. `Diarization` is the type of `diarization.json`; the diarizer's
-/// interface owns that type, and a concrete reviewer binds it.
+/// wrong.
 public protocol DiarizationReviewerStrategy: AIReviewerStrategy
-    where Input == DiarizationReviewInput<Diarization>, Output == DiarizationSuggestion {
-    associatedtype Diarization: Codable & Sendable
-}
+    where Input == DiarizationReviewInput, Output == DiarizationSuggestion {}

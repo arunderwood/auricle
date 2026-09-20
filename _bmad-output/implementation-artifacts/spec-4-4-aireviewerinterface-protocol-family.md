@@ -24,14 +24,14 @@ context: [
 **Always:**
 - Cache-artifact types use explicit snake_case `CodingKeys` (AR-PAT-2). `AIReviewerResult` and `TranscriptionSuggestion` schemas carry `schemaVersion` with value 1.
 - `AIReviewerStrategy.Input` and `.Output` are `Codable & Sendable`. Tuples are not `Codable`, so each sibling's input is a named struct holding the two values the epic lists.
-- `DiarizationArtifact` does not exist until Story 4.2. `DiarizationReviewInput` is generic over the diarization type, and `DiarizationReviewerStrategy` declares `associatedtype Diarization: Codable & Sendable`. Story 4.2 or 4.5 binds it.
+- `DiarizationReviewInput` holds `CanonicalTranscript` and Story 4.2's `DiarizationArtifact`. `DiarizationReviewerStrategy` fixes `Input == DiarizationReviewInput` with no diarization associated type.
 - `JargonCorrectionStrategy`, `GlossaryJargonCorrector` and their behavior stay unchanged. `JargonCorrection` only gains `Suggestion` conformance.
 - `AudioFingerprint` is a minimal schema-only struct: `schema_version`, `audio_sha256`, `duration_seconds`.
 
 **Never:**
-- No concrete reviewer, no `transcription_suggestions.json` writer, no `DiarizationArtifact`, no `ReviewDiarization` or `ClaudeAIReviewers` changes (Stories 4.2, 4.3, 4.5, Epic 10).
+- No concrete reviewer, no `transcription_suggestions.json` writer, no change to `DiarizationArtifact`, no `ReviewDiarization` or `ClaudeAIReviewers` changes (Stories 4.2, 4.3, 4.5, Epic 10).
 - No forcing of the glossary path through `review(input:config:)`.
-- No new package dependency.
+- No new target dependency beyond the test target's `DiarizerInterface`.
 
 ## I/O & Edge-Case Matrix
 
@@ -52,7 +52,8 @@ context: [
 - `Tests/AIReviewerInterfaceTests/JargonCorrectionTests.swift` -- test style; Swift Testing.
 - `Sources/Transcribe/TranscribeStage.swift` -- the only current writer of `transcript.json`; the detector must allow it.
 - `Sources/Summarize/SummarizeStage.swift` -- reads `transcript.json` and writes `summary.json` through `CacheArtifactWriter`; must not be flagged.
-- `Package.swift` -- target already depends on `Core`; the test target needs no new dependency.
+- `Package.swift` -- the target already depends on `DiarizerInterface`; the test target gains it for `DiarizationArtifact`.
+- `Sources/DiarizerInterface/DiarizationArtifact.swift` -- from Story 4.2 (PR #80, merged into this branch); segment ids are `seg_<n>`.
 - `_bmad-output/planning-artifacts/architecture.md` (Decision 5.1, 5.3, `segment_splits` example) -- source of the shapes.
 
 ## Tasks & Acceptance
@@ -78,8 +79,11 @@ context: [
 - `AIReviewerResult` carries `schema_version`; `TranscriptionSuggestion` entries do not, because the wrapper is the file schema.
 - The detector treats `moveItem`, `copyItem` and `replaceItemAt` as writes, since each can replace an immutable artifact.
 - `make check` passed.
+- 4.2 content was merged into this branch, so PR #78 shows the 4.2 diff until PR #80 merges.
 
 ## Spec Change Log
+
+- Trigger: Story 4.2 (`DiarizationArtifact`) landed on `feat/diarize-stage-4-2`, and the maintainer asked to complete 4.4 against it. Amended: the generic `Diarization` placeholder became a concrete `DiarizationArtifact` binding, and the frozen boundary changed to match. Avoids: a reviewer protocol that stays unusable until a later story binds it. KEEP: named input structs, the immutability scan, and the round-trip tests.
 
 ## Review Triage Log
 
