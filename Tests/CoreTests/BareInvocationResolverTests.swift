@@ -162,7 +162,7 @@ private let reportedStates: [(state: PipelineState, message: String)] = [
 ]
 
 /// `silent` is a benign halt and the rest are terminal, so none is in flight.
-private let unreportedStates: [PipelineState] = [.silent, .verified, .retentionExpired, .discarded]
+private let unreportedStates: [PipelineState] = [.silent] + PipelineState.terminal
 
 @Test func everyPipelineStateIsEitherReportedOrNamedAsNotInFlight() {
     let covered = Set(reportedStates.map(\.state)).union(unreportedStates)
