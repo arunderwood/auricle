@@ -57,6 +57,7 @@ private struct LeakyStoreError: Error, CustomStringConvertible {
         glossary: Glossary(),
         config: SummarizerConfig(),
         calendarSource: nil,
+        publishAnyway: false,
     )
 
     #expect(exit.code == WorkerExitCode.meetingNotFound)
@@ -78,6 +79,7 @@ private struct LeakyStoreError: Error, CustomStringConvertible {
         glossary: Glossary(),
         config: SummarizerConfig(),
         calendarSource: nil,
+        publishAnyway: false,
     )
 
     #expect(exit == WorkerExitStatus(code: WorkerExitCode.stateError))
@@ -99,6 +101,7 @@ private struct LeakyStoreError: Error, CustomStringConvertible {
         glossary: Glossary(),
         config: SummarizerConfig(),
         calendarSource: nil,
+        publishAnyway: false,
     )
 
     #expect(exit == WorkerExitStatus(code: WorkerExitCode.success))

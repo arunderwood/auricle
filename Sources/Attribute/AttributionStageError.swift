@@ -4,7 +4,7 @@ import Core
 /// `errorClass`. The rejections happen before `StageRunner.run`, so they leave
 /// the meeting's state and `stage_events` untouched.
 public enum AttributionStageError: ClassifiedStageError, Equatable {
-    /// The meeting is not waiting for attribution.
+    /// The meeting is not waiting for attribution (or, for a re-attribution, published).
     case wrongState(current: String)
     /// `diarization.json` is missing or undecodable.
     case diarizationUnreadable

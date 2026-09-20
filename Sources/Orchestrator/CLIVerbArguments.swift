@@ -71,6 +71,69 @@ public struct RunArguments: ParsableArguments {
     public var publishAnyway = false
 
     public init() {}
+
+    /// Rejects flag conflicts at parse time, so a bad combination never
+    /// reaches the runner. `RunArgumentsError` is not a `ValidationError`
+    /// because ArgumentParser exits 64 for that type, and Decision 1.5 says 1.
+    public mutating func validate() throws {
+        _ = try options()
+    }
+
+    /// The flags as typed values, or the first conflict found.
+    public func options() throws -> RunOptions {
+        let fromStage = try Self.stage(from, flag: "--from")
+        let toStage = try Self.stage(to, flag: "--to")
+        let onlyStage = try Self.stage(only, flag: "--only")
+
+        if fromStage != nil, onlyStage != nil {
+            throw RunArgumentsError.conflict("--from and --only cannot be combined.")
+        }
+        if toStage != nil, onlyStage != nil {
+            throw RunArgumentsError.conflict("--to and --only cannot be combined.")
+        }
+        if publishAnyway {
+            if fromStage == .attribute || onlyStage == .attribute {
+                throw RunArgumentsError.conflict("--publish-anyway skips attribution, so it cannot be combined with --from attribute or --only attribute.")
+            }
+            if reattribute {
+                throw RunArgumentsError.conflict("--publish-anyway skips attribution, so it cannot be combined with --reattribute.")
+            }
+        }
+        if reattribute, fromStage != nil || onlyStage != nil {
+            throw RunArgumentsError.conflict("--reattribute already means --from attribute, so it cannot be combined with --from or --only.")
+        }
+        if let fromStage, let toStage, fromStage > toStage {
+            throw RunArgumentsError.conflict("--from \(fromStage.rawValue) comes after --to \(toStage.rawValue).")
+        }
+        return RunOptions(
+            force: force,
+            from: fromStage,
+            to: toStage,
+            only: onlyStage,
+            reattribute: reattribute,
+            publishAnyway: publishAnyway,
+        )
+    }
+
+    private static func stage(_ raw: String?, flag: String) throws -> RunStage? {
+        guard let raw else { return nil }
+        guard let stage = RunStage(rawValue: raw) else {
+            let known = RunStage.allCases.map(\.rawValue).joined(separator: ", ")
+            throw RunArgumentsError.conflict("\(flag) '\(raw)' is not a stage. Stages: \(known).")
+        }
+        return stage
+    }
+}
+
+/// A `RunArguments` combination that cannot run. The process exits 1.
+public enum RunArgumentsError: Error, CustomStringConvertible, Equatable {
+    case conflict(String)
+
+    public var description: String {
+        switch self {
+        case let .conflict(message): message
+        }
+    }
 }
 
 /// `auricle attribute <id> [--batch] [--speakers "1=Ben,2=Sara"]`.

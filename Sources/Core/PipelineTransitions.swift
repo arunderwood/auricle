@@ -10,8 +10,10 @@ public enum PipelineTransitions {
     ///
     /// Transcribe completes into its own active state (no state sits between
     /// transcribe, diarize and review), so its active state is one of its own
-    /// targets. Attribute completes into `summarizing`, which summarize runs under,
-    /// and summarize completes into `persisting`, which persist runs under.
+    /// targets. Attribute completes into `summarizing`, which summarize runs
+    /// under. Summarize completes into `persisting`, which persist runs under.
+    /// Persist completes into `published`, or into `published_partial` when the
+    /// summary is the stub a failed `--publish-anyway` summarize left.
     public static func allowedTargets(stage: PipelineStage, activeState: PipelineState) -> Set<PipelineState>? {
         switch (stage, activeState) {
         case (.transcribe, .transcribing):
@@ -25,7 +27,7 @@ public enum PipelineTransitions {
         case (.summarize, .summarizing):
             [.persisting, .summarizationFailed]
         case (.persist, .persisting):
-            [.published, .persistFailed]
+            [.published, .publishedPartial, .persistFailed]
         case (.notify, .published):
             // A notification failure is not a pipeline failure.
             [.awaitingVerification]

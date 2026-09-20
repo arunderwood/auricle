@@ -24,6 +24,7 @@ public enum SummarizeWorker {
         glossary: Glossary,
         config: SummarizerConfig,
         calendarSource: (any CalendarSource)?,
+        publishAnyway: Bool,
     ) async -> WorkerExitStatus {
         await exitStatus {
             try await SummarizeStage.run(
@@ -35,6 +36,7 @@ public enum SummarizeWorker {
                 glossary: glossary,
                 config: config,
                 calendarSource: calendarSource,
+                publishAnyway: publishAnyway,
             )
         }
     }

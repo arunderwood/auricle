@@ -85,6 +85,30 @@ enum SummaryArtifactMapper {
         )
     }
 
+    /// The artifact a failed summarize leaves under `--publish-anyway`: every
+    /// field the success path builds from the stage's own inputs, and none of
+    /// the summarizer's. Persist renders it as the `published_partial` note.
+    static func stubArtifact(
+        title: String,
+        match: CalendarEnrichment.Match? = nil,
+        transcriptSegments: [TranscriptSegmentArtifact],
+        needsAttribution: Bool,
+    ) -> SummaryArtifact {
+        SummaryArtifact(
+            title: match?.title ?? title,
+            calendarEventTitle: match?.title,
+            attendees: match?.attendeeWikilinks ?? [],
+            selfWikilink: match?.selfWikilink,
+            needsAttribution: needsAttribution,
+            needsCalendarEnrichment: match == nil,
+            needsSummary: true,
+            summary: "",
+            actionItems: [],
+            decisions: [],
+            transcriptSegments: transcriptSegments,
+        )
+    }
+
     private static func quotedItems(_ items: [GroundedItem], transcriptBytes: [UInt8]) throws -> [QuotedItemArtifact] {
         try items.map { item in
             guard case let .success(quote) = TranscriptSlicer.slice(item.grounding, of: transcriptBytes) else {

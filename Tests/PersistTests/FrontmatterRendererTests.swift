@@ -418,3 +418,41 @@ func makeMeeting(
 
     #expect(rendered.contains("- First\n  > a1\n  > a2\n- Second\n  > b1\n\n## Decisions"))
 }
+
+@Test func publishedPartialVariantCarriesBothTagsAndOmitsActionItemsAndDecisions() throws {
+    let meeting = try MeetingForFrontmatter(
+        meetingID: #require(MeetingID(ulid: "01HJK3PQXY7N8M3FT4QHNWVZRP")),
+        title: "Meeting at 2026-04-28T10:30 PT",
+        date: "2026-04-28",
+        attendees: [],
+        schemaVersion: 1,
+        supersedes: nil,
+        needsAttribution: true,
+        needsCalendarEnrichment: false,
+        needsSummary: true,
+        summary: "",
+        actionItems: [],
+        decisions: [],
+        transcriptSegments: [TranscriptSegment(speaker: "[[Speaker_1]]", text: "Hello there.")],
+    )
+    let expected = """
+    ---
+    title: "Meeting at 2026-04-28T10:30 PT"
+    date: 2026-04-28
+    tags:
+      - auricle/meeting
+      - auricle/needs-attribution
+      - auricle/needs-summary
+    attendees: []
+    auricle:
+      meeting_id: "01HJK3PQXY7N8M3FT4QHNWVZRP"
+      schema_version: 1
+    ---
+
+    ## Transcript
+
+    **[[Speaker_1]]:** Hello there.
+
+    """
+    #expect(FrontmatterRenderer.render(meeting: meeting) == expected)
+}

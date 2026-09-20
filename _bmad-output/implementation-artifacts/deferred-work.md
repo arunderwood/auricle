@@ -451,3 +451,11 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
   summary: The default-run tests never exercise a successful SpeakerKit load, model reuse, or concurrent load sharing.
   evidence: Only the env-gated live test does. A loader seam in `WhisperKitDiarizer` would allow a stubbed test of `modelLoadCount` and `pendingLoad`. The 30 s NFR-P4 budget is also unverified until a live run.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
+  summary: `InternalStageWorker`'s wiring of `--publish-anyway` into `SummarizeWorker` has no automated test.
+  evidence: The worker body lives in `App/`, outside `swift test`. Argv, stage and runner tests each cover one side of the process boundary. Moving the worker body into `Sources/` behind a thin wrapper would let a test cover it. Severity medium.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
+  summary: A `published_partial` meeting does not reach notify or `awaiting_verification`; the runner prints the note path instead.
+  evidence: `PipelineTransitions` allows notify only under `published`. Story 4.7 resumes `published_partial` at summarize, and a successful re-run reaches `awaiting_verification`. Whether a partial note is announced by the notifier is still a product decision (see the earlier deferred entry on `published_partial` and notify). Severity low.

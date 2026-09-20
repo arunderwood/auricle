@@ -211,3 +211,17 @@ func theArgvMakeProcessBuildsParsesBackToTheValuesPassedIn(stage: PipelineStage,
 
     #expect(process.terminationHandler == nil)
 }
+
+@Test func makeProcessPassesPublishAnywayToTheWorkerOnlyWhenAsked() throws {
+    let stubURL = URL(fileURLWithPath: "/tmp/stub-auricle-cli-does-not-need-to-exist")
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stubURL }, resolveVaultPath: { nil })
+    let id = try #require(MeetingID(ulid: meetingIDString("PBA1")))
+
+    let with = try dispatcher.makeProcess(stage: .summarize, meetingID: id, workerProtocolVersion: 1, publishAnyway: true)
+    let without = try dispatcher.makeProcess(stage: .summarize, meetingID: id, workerProtocolVersion: 1)
+
+    #expect(with.arguments?.contains("--publish-anyway") == true)
+    #expect(without.arguments?.contains("--publish-anyway") == false)
+    let parsed = try InternalStageArguments.parse(Array(#require(with.arguments).dropFirst()))
+    #expect(parsed.publishAnyway)
+}
