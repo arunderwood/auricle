@@ -12,10 +12,15 @@ public struct MeetingForFilename: Sendable, Equatable {
     public let captureTime24h: String
     public let calendarEventTitle: String?
     /// Wikilink-formatted, e.g. "[[Ben]]" — includes self if self was a named participant.
+    /// An entry may carry a path, alias, heading or block part (`[[People/Ben Smith|Ben]]`);
+    /// the slug uses the alias when there is one, else the target's last path component.
     public let attendees: [String]
     /// Wikilink-formatted, e.g. "[[Jordan]]" — the config value described in epics.md's
-    /// UX-DR42/FR58 (`self.wikilink`). Compared against `attendees` entries by exact string
-    /// equality to identify which attendee to omit from the `with-...` slug.
+    /// UX-DR42/FR58 (`self.wikilink`). An attendee is omitted from the `with-...` slug when
+    /// its link identity equals this one's. A link's identity is its target's last path
+    /// component, without any `|alias`, `#heading` or `^block` part, compared
+    /// case-insensitively because Obsidian resolves links that way. Attendees that share an
+    /// identity count once.
     public let selfWikilink: String?
 
     public init(
