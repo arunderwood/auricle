@@ -1291,6 +1291,9 @@ So that the stage produces exactly one new vault note per execution, never edits
 **When** `PersistStage.run(meetingId:...)` executes
 **Then** the stage is not told whether this is a re-publish; it derives that from the stored note: a run is a re-publish exactly when `meetings.vault_note_path` is set and the file still exists at that path
 **And** if the stored note does not exist (never published, or the user deleted it), the stage falls back to a fresh-publish path (no rerun suffix, standard filename per Decision 2.4)
+**And** before that fallback, when `meetings.vault_note_path` is recorded but names a file that no longer exists (the user renamed or moved the note in Obsidian), the stage looks for the meeting's note by identity: it scans the configured meetings folder recursively for `.md` files, reads only each file's frontmatter (the first 8 KB), and treats a file whose `auricle.meeting_id` equals the meeting's as the stored note, so the re-run supersedes it by its new filename
+**And** files that are unreadable, not UTF-8, not auricle notes, or rejected by `FrontmatterReader` are skipped; when several files match (an original and its re-runs) the one no other match lists in `auricle.supersedes` is used, then the most recently modified; the scan stops after 5000 files and logs a warning; only when nothing matches is the run a fresh publish; a meeting with no recorded `meetings.vault_note_path` is a fresh publish from the start and never scans
+**And** a re-run is written into the configured meetings folder, with `vault_path` validated and `meetings_subdir` resolved exactly as a fresh publish does, even when the stored or found note is in another folder; a stored path that names an existing file still counts as the predecessor wherever it lives, and `auricle.supersedes` stays the predecessor's filename only
 **And** if the stored note exists and differs from what this run renders, the stage constructs a re-run filename per AR-DATA-7: `<original-filename-without-ext>--rerun-<YYYY-MM-DD>.md` using user's local timezone date
 **And** for multiple re-runs on the same calendar day, the counter is appended: `--rerun-<YYYY-MM-DD>-2.md`, `--rerun-<YYYY-MM-DD>-3.md`
 **And** the re-run note's frontmatter includes `auricle.supersedes: "<original-filename>.md"` (just the filename, no path)
@@ -3642,6 +3645,13 @@ So that captured audio is held until the user clicks the verification notificati
 **And** transition `meetings.state = 'retention_expired'`
 **And** the meeting row stays in SQLite as forensic record; only the audio file is deleted
 
+**Given** a retention timer is due and `status = 'pending'`
+**When** the scheduler picks it up
+**Then** it claims the row before it calls the handler, with one conditional write that moves `status` from `'pending'` to `'fired'` and matches only a row that is still `'pending'` (the `'fired'` mark in the criterion above is this claim, not a second write after the action)
+**And** a pass whose claim matches no row (another pass claimed it first, or the user has since set it to `'overridden'`) skips the timer and does not call the handler
+**And** if the handler fails, the scheduler moves the row back to `'pending'`, the audio is retained, and the next pass picks the timer up again
+**And** the scheduler uses only the `status` values Decision 2.1 defines for `retention_timers` (`'pending'|'fired'|'overridden'`)
+
 **Given** the conservative-by-default principle per NFR-R3
 **When** any error occurs during retention processing (filesystem error, SQL error)
 **Then** the audio is **retained**, NOT deleted — log at `error` level and surface for user investigation per UX spec Step 4 emotional principles
@@ -3649,7 +3659,7 @@ So that captured audio is held until the user clicks the verification notificati
 
 **Given** the test suite
 **When** I run `Tests/OrchestratorTests/RetentionSchedulerTests.swift`
-**Then** tests cover: due-timer fires correct deletion + state transition; not-yet-due timer is skipped; foreground vs backgrounded polling cadences; error during deletion → audio retained, error logged; fresh-launch immediate poll catches deferred fires
+**Then** tests cover: due-timer fires correct deletion + state transition; not-yet-due timer is skipped; foreground vs backgrounded polling cadences; error during deletion → audio retained, error logged; fresh-launch immediate poll catches deferred fires; a second pass over a claimed timer does not call the handler; a failing handler leaves the row `'pending'`
 
 ---
 

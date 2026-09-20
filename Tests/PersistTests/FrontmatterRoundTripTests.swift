@@ -36,6 +36,29 @@ private func composedFrontmatter(of note: String) throws -> Node {
     #expect(lines[closingFenceIndex + 2] == meeting.summary)
 }
 
+@Test func aNoteRenderedAtTheCurrentSchemaVersionReadsBackAtTheCurrentSchemaVersion() throws {
+    let base = makeMeeting()
+    let meeting = MeetingForFrontmatter(
+        meetingID: base.meetingID,
+        title: base.title,
+        date: base.date,
+        attendees: base.attendees,
+        schemaVersion: FrontmatterSchema.current,
+        supersedes: base.supersedes,
+        needsAttribution: base.needsAttribution,
+        needsCalendarEnrichment: base.needsCalendarEnrichment,
+        summary: base.summary,
+        actionItems: base.actionItems,
+        decisions: base.decisions,
+        transcriptSegments: base.transcriptSegments,
+    )
+
+    let result = try FrontmatterReader.read(noteContents: FrontmatterRenderer.render(meeting: meeting))
+
+    #expect(result.schemaVersion == FrontmatterSchema.current)
+    #expect(result.meetingID == meeting.meetingID)
+}
+
 @Test func aNewlineFollowedByASequenceMarkerNeverCorruptsAScalar() throws {
     let title = "Weekly\n- d"
     let attendee = "[[Ben\n- e]]"
