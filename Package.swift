@@ -262,6 +262,16 @@ let package = Package(
             ],
             path: "Tests/PipelineTests",
         ),
+        .testTarget(
+            name: "IntegrationTests",
+            dependencies: [
+                "Pipeline", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "Attribute", "Persist", "Notifications",
+                "Capture", "Transcribe", "TranscriberInterface", "Diarize", "DiarizerInterface", "ReviewDiarization", "AIReviewerInterface",
+                "Summarize", "SummarizerInterface", "ClaudeSummarizer",
+            ],
+            path: "Tests/IntegrationTests",
+            resources: [.copy("Fixtures")],
+        ),
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
         .testTarget(
             name: "NotificationsTests",
