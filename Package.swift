@@ -97,7 +97,11 @@ let package = Package(
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
         .target(name: "Notifications", dependencies: ["Core", "State", "Orchestrator", "Telemetry"], path: "Sources/Notifications"),
-        .target(name: "ReviewDiarization", dependencies: ["Core", "State", "Telemetry", "AIReviewerInterface"], path: "Sources/ReviewDiarization"),
+        .target(
+            name: "ReviewDiarization",
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "AIReviewerInterface", "DiarizerInterface"],
+            path: "Sources/ReviewDiarization",
+        ),
 
         // === Concrete strategies ===
         .target(name: "ClaudeSummarizer", dependencies: ["Core", "SummarizerInterface", "VaultGlossary", "Summarize"], path: "Sources/ClaudeSummarizer"),
@@ -192,7 +196,14 @@ let package = Package(
             ],
             path: "Tests/ClaudeAIReviewersTests",
         ),
-        .testTarget(name: "ReviewDiarizationTests", dependencies: ["ReviewDiarization", "TestSupport"], path: "Tests/ReviewDiarizationTests"),
+        .testTarget(
+            name: "ReviewDiarizationTests",
+            dependencies: [
+                "ReviewDiarization", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "AIReviewerInterface", "DiarizerInterface",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/ReviewDiarizationTests",
+        ),
         .testTarget(
             name: "WhisperKitTranscriberTests",
             dependencies: [

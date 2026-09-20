@@ -48,6 +48,20 @@ public struct Config: Sendable, Equatable {
         }
     }
 
+    public struct DiarizationReview: Sendable, Equatable {
+        public static let defaultModel = "claude-haiku-4-5"
+
+        /// Off by default: the review is an unproven AI feature that costs
+        /// money on every meeting.
+        public let enabled: Bool
+        public let model: String
+
+        public init(enabled: Bool = false, model: String = DiarizationReview.defaultModel) {
+            self.enabled = enabled
+            self.model = model
+        }
+    }
+
     /// Absolute, tilde-expanded, and never defaulted: a default would have to
     /// name one person's vault, and an unset value means "no vault", which the
     /// summarize stage treats as an empty glossary.
@@ -56,17 +70,20 @@ public struct Config: Sendable, Equatable {
     public let meetingsSubdir: String
     public let googleCalendar: GoogleCalendar
     public let attribution: Attribution
+    public let diarizationReview: DiarizationReview
 
     public init(
         vaultPath: URL? = nil,
         meetingsSubdir: String = Config.defaultMeetingsSubdir,
         googleCalendar: GoogleCalendar = GoogleCalendar(),
         attribution: Attribution = Attribution(),
+        diarizationReview: DiarizationReview = DiarizationReview(),
     ) {
         self.vaultPath = vaultPath
         self.meetingsSubdir = meetingsSubdir
         self.googleCalendar = googleCalendar
         self.attribution = attribution
+        self.diarizationReview = diarizationReview
     }
 
     public static func defaultFileURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
@@ -121,6 +138,10 @@ public struct Config: Sendable, Equatable {
                 clientSecret: nonEmpty(raw.googleCalendar?.clientSecret),
             ),
             attribution: attribution(raw.attribution),
+            diarizationReview: DiarizationReview(
+                enabled: raw.diarizationReview?.enabled ?? false,
+                model: nonEmpty(raw.diarizationReview?.model) ?? DiarizationReview.defaultModel,
+            ),
         )
     }
 
@@ -193,16 +214,23 @@ private struct RawAttribution: Decodable {
     }
 }
 
+private struct RawDiarizationReview: Decodable {
+    let enabled: Bool?
+    let model: String?
+}
+
 private struct RawConfig: Decodable {
     let vaultPath: String?
     let meetingsSubdir: String?
     let googleCalendar: RawGoogleCalendar?
     let attribution: RawAttribution?
+    let diarizationReview: RawDiarizationReview?
 
     enum CodingKeys: String, CodingKey {
         case vaultPath = "vault_path"
         case meetingsSubdir = "meetings_subdir"
         case googleCalendar = "google_calendar"
         case attribution
+        case diarizationReview = "diarization_review"
     }
 }
