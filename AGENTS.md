@@ -17,7 +17,7 @@ Local-first macOS meeting notetaker: capture → transcribe → diarize → attr
 
 ## Running and verifying
 
-- `make check` (or `scripts/check.sh`) runs the full gate chain exactly as `ci.yml` does — swiftformat, swiftlint, the custom-lint-rule fixture self-check, actionlint, zizmor, `swift build`/`swift test` with `--explicit-target-dependency-import-check error`, a release build, and both Xcode schemes. Run it before pushing — it's the same script CI invokes, not a parallel copy that can drift.
+- `make check` (or `scripts/check.sh`) runs the full gate chain exactly as `ci.yml` does — swiftformat, swiftlint, the custom-lint-rule fixture self-check, actionlint, zizmor, `swift build`/`swift test` with `--explicit-target-dependency-import-check error`, a release build, both Xcode schemes, and an assertion that the built `AuricleApp.app` embeds an executable `auricle-cli`. Run it before pushing — it's the same script CI invokes, not a parallel copy that can drift.
 - CI runs that chain as three parallel jobs, each calling one phase: `scripts/check.sh lint`, `swift`, and `app` (plus `release`, which runs only on pushes to main). `make check-lint` / `check-swift` / `check-app` / `check-release` reproduce a single job locally when you only need one.
 - One-time setup: `git config core.hooksPath .githooks` enables a fast pre-commit hook (`swiftformat --lint` + `swiftlint` only, ~1s) — off by default, since `.git/hooks/` isn't tracked and git won't look in `.githooks/` unless told to. The full check deliberately stays out of the hook — slow enough to invite `--no-verify`.
 - SwiftPM library alone, while iterating: `swift build && swift test`.
@@ -31,8 +31,8 @@ Local-first macOS meeting notetaker: capture → transcribe → diarize → attr
 
 ## Known pitfalls
 
-- New logic that lives only in `App/` has no automated test coverage — `Package.swift`'s test targets only cover `Sources/*`. Land real logic in a `Sources/` module and call it from a thin `App/` wrapper so it stays reachable by `swift test`.
+- New logic that lives only in `App/` has no automated test coverage — `Package.swift`'s test targets only cover `Sources/*`. Land real logic in a `Sources/` module and call it from a thin `App/` wrapper so it stays reachable by `swift test`. The CLI verbs' arguments follow this: they are `ParsableArguments` types in `Sources/Orchestrator/CLIVerbArguments.swift`, and each verb reads its own as an `@OptionGroup`.
 - `sprint-status.yaml` is not updated by the story-implementation workflow — treat each story's own spec file frontmatter `status` as ground truth for what's actually done.
-- A Tuist target name with a hyphen (e.g. `auricle-cli`) builds its product with underscores substituted unless `productName:` is set explicitly in `Project.swift` — by-name executable lookups (`Bundle.main.url(forAuxiliaryExecutable:)`) silently fail against the wrong name otherwise.
+- A Tuist target name with a hyphen (e.g. `auricle-cli`) builds its product with underscores substituted unless `productName:` is set explicitly in `Project.swift` — by-name executable lookups (`Bundle.main.url(forAuxiliaryExecutable:)`) silently fail against the wrong name otherwise. `scripts/check.sh app` fails when the built app has no executable `Contents/MacOS/auricle-cli`.
 
 <!-- /bmad:context -->
