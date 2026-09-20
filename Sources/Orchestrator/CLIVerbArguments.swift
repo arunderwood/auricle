@@ -135,3 +135,20 @@ public struct ConfigSetArguments: ParsableArguments {
 
     public init() {}
 }
+
+/// `auricle __internal-import <audio-file> [--started-at <ISO 8601>] [--title <text>]`.
+/// Hidden and exempt from the NFR-I7 binding contract, like `__internal-stage`.
+public struct ImportArguments: ParsableArguments {
+    public static let commandName = "__internal-import"
+
+    @Argument(help: "Path to the audio file to register.")
+    public var audioFile: String
+
+    @Option(help: "When the meeting started, as ISO 8601. Defaults to the file's creation date.")
+    public var startedAt: String?
+
+    @Option(help: "Meeting title.")
+    public var title: String?
+
+    public init() {}
+}

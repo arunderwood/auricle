@@ -207,6 +207,9 @@ custom_rules:
       # The bare `auricle` status line is the command's output, read by the
       # user or a script from stdout.
       - ".*/App/auricle-cli/Verbs/BareInvocation\\.swift$"
+      # The import verb's output is the new meeting id, captured by a script
+      # with `id=$(auricle __internal-import ...)`.
+      - ".*/App/auricle-cli/Verbs/ImportVerb\\.swift$"
       # The wedge measurement's report is the verb's output, one `key: value`
       # line per figure on stdout.
       - ".*/App/auricle-cli/Verbs/JargonWedgeVerb\\.swift$"

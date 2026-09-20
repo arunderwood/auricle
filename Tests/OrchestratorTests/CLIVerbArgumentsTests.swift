@@ -164,3 +164,18 @@ func aRunStageOptionWithNoValueDoesNotParse(option: String) {
     #expect(parsed.key == "vault_path")
     #expect(parsed.value == "/vaults/notes")
 }
+
+// MARK: - __internal-import
+
+@Test func importRequiresAnAudioFileAndParsesItsOptionalFlags() throws {
+    #expect(throws: (any Error).self) { try ImportArguments.parse([]) }
+
+    let bare = try ImportArguments.parse(["call.m4a"])
+    #expect(bare.audioFile == "call.m4a")
+    #expect(bare.startedAt == nil)
+    #expect(bare.title == nil)
+
+    let full = try ImportArguments.parse(["call.m4a", "--started-at", "2026-09-19T14:30:00Z", "--title", "Standup"])
+    #expect(full.startedAt == "2026-09-19T14:30:00Z")
+    #expect(full.title == "Standup")
+}
