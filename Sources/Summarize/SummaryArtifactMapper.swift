@@ -1,3 +1,4 @@
+import Attribute
 import Core
 import SummarizerInterface
 
@@ -8,23 +9,26 @@ import SummarizerInterface
 /// a paraphrase of it.
 enum SummaryArtifactMapper {
     /// One segment per utterance, in transcript order. `speaker` is the
-    /// attributed `[[Name]]` wikilink where `speakers` has one and
-    /// `[[<speakerLabel>]]` otherwise, so an unattributed speaker is still a
-    /// valid, resolvable link. `text` is the utterance without its leading
+    /// attributed `[[Name]]` wikilink and `[[Speaker_N]]` otherwise, so an
+    /// unattributed speaker is still a valid, resolvable link. It comes from
+    /// `utteranceSpeakers` (the diarization join) where that has one for the
+    /// utterance, because the transcript labels every utterance alike, and
+    /// from `speakers[utterance.speakerLabel]` where it has none. `text` is the utterance without its leading
     /// `<speakerLabel>: ` (see `CanonicalTranscript.Utterance`), because the
     /// renderer prints the speaker itself.
     static func transcriptSegments(
         of transcript: CanonicalTranscript,
         transcriptBytes: [UInt8],
         speakers: [String: String]?,
+        utteranceSpeakers: [String?]? = nil,
     ) throws -> [TranscriptSegmentArtifact] {
-        try transcript.utterances.map { utterance in
+        try transcript.utterances.enumerated().map { index, utterance in
             let start = startAfterLabel(of: utterance, in: transcriptBytes)
             guard case let .success(text) = TranscriptSlicer.slice(start: start, end: utterance.end, of: transcriptBytes) else {
                 throw SummarizeStageError.segmentExtractionFailed
             }
-            let speaker = speakers?[utterance.speakerLabel] ?? "[[\(utterance.speakerLabel)]]"
-            return TranscriptSegmentArtifact(speaker: speaker, text: text)
+            let speaker = speakerLink(for: utterance, at: index, speakers: speakers, utteranceSpeakers: utteranceSpeakers)
+            return TranscriptSegmentArtifact(speaker: speaker.link, text: text)
         }
     }
 
@@ -50,12 +54,29 @@ enum SummaryArtifactMapper {
         return bytes[afterColon] == UInt8(ascii: " ") ? afterColon + 1 : utterance.start
     }
 
-    /// True unless attribution exists and names every distinct speaker in the
-    /// transcript. A partly named transcript still needs attribution.
-    static func needsAttribution(transcript: CanonicalTranscript, speakers: [String: String]?) -> Bool {
-        guard let speakers else { return true }
-        let labels = Set(transcript.utterances.map(\.speakerLabel))
-        return !labels.isSubset(of: speakers.keys)
+    /// The link an utterance is shown under, and whether it names a person.
+    /// A `Speaker_N` value, wherever it comes from, names nobody.
+    private static func speakerLink(
+        for utterance: CanonicalTranscript.Utterance,
+        at index: Int,
+        speakers: [String: String]?,
+        utteranceSpeakers: [String?]?,
+    ) -> (link: String, named: Bool) {
+        let joined = utteranceSpeakers.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+        let value = joined ?? speakers?[utterance.speakerLabel] ?? utterance.speakerLabel
+        if UtteranceSpeakers.isPlaceholder(value) {
+            return ("[[\(value)]]", false)
+        }
+        return (value, true)
+    }
+
+    /// True unless attribution exists and names the speaker of every
+    /// utterance. A partly named transcript still needs attribution.
+    static func needsAttribution(transcript: CanonicalTranscript, speakers: [String: String]?, utteranceSpeakers: [String?]? = nil) -> Bool {
+        guard speakers != nil else { return true }
+        return transcript.utterances.enumerated().contains { index, utterance in
+            !speakerLink(for: utterance, at: index, speakers: speakers, utteranceSpeakers: utteranceSpeakers).named
+        }
     }
 
     /// The artifact for one run. Without a `match` it is the unenriched

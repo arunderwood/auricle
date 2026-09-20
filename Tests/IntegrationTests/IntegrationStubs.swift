@@ -51,8 +51,10 @@ struct Scenario: Sendable {
     /// A `Speaker_N`-to-wikilink map, or `nil` to run with `--publish-anyway`.
     let speakerNames: [String: String]?
 
+    /// The transcriber's real shape: it cannot tell speakers apart, so every
+    /// utterance carries one label and only `StubDiarizer` knows who spoke.
     var transcript: CanonicalTranscript {
-        CanonicalTranscriptBuilder.build(lines.map { (speakerLabel: $0.speaker, text: $0.text) })
+        CanonicalTranscriptBuilder.build(lines.map { (speakerLabel: WhisperKitTranscriberLabel.value, text: $0.text) })
     }
 
     /// Evenly spaced across the reference audio, so every segment lies inside it.
@@ -60,6 +62,10 @@ struct Scenario: Sendable {
         let width = audioSeconds / Double(lines.count)
         return lines.indices.map { UtteranceTiming(index: $0, startSeconds: Double($0) * width, endSeconds: Double($0 + 1) * width) }
     }
+}
+
+enum WhisperKitTranscriberLabel {
+    static let value = "Speaker_1"
 }
 
 /// Stands in for WhisperKit: returns the scenario's transcript and never
@@ -78,7 +84,7 @@ struct StubTranscriber: TranscriberStrategy {
 }
 
 /// Stands in for SpeakerKit: one segment per utterance, labelled as the
-/// scenario says.
+/// scenario says. This is the only place the speakers are told apart.
 struct StubDiarizer: DiarizerStrategy {
     let scenario: Scenario
 

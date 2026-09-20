@@ -176,7 +176,7 @@ public enum SummarizeStage {
         // config would disagree with the note's attendees.
         let enrichedConfig = config.withAttendeeNames(enrichment.match?.attendeeNames ?? [])
         let title = UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone)
-        let needsAttribution = SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers)
+        let needsAttribution = inputs.needsAttribution
 
         let outcome: SummarizerOrchestrator.Outcome
         let artifact: SummaryArtifact

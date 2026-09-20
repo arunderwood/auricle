@@ -176,3 +176,54 @@ private func grounded(actionRange: (Int, Int)) -> SummaryWithGrounding {
         )
     }
 }
+
+// MARK: - Diarization join
+
+private let sameLabelTranscript = CanonicalTranscript(text: text.replacingOccurrences(of: "Speaker_2", with: "Speaker_1"), utterances: [
+    .init(speakerLabel: "Speaker_1", start: 0, end: firstEnd),
+    .init(speakerLabel: "Speaker_1", start: firstEnd + 1, end: bytes.count),
+])
+
+@Test func joinedSpeakersNameUtterancesTheTranscriptLabelsIdentically() throws {
+    let joined: [String?] = ["[[Ada]]", "[[Ben]]"]
+    let segments = try SummaryArtifactMapper.transcriptSegments(
+        of: sameLabelTranscript,
+        transcriptBytes: Array(sameLabelTranscript.text.utf8),
+        speakers: ["Speaker_1": "[[Ada]]", "Speaker_2": "[[Ben]]"],
+        utteranceSpeakers: joined,
+    )
+
+    #expect(segments.map(\.speaker) == ["[[Ada]]", "[[Ben]]"])
+    #expect(segments.map(\.text) == ["café time", "🚀 go"])
+    #expect(!SummaryArtifactMapper.needsAttribution(transcript: sameLabelTranscript, speakers: ["Speaker_1": "[[Ada]]"], utteranceSpeakers: joined))
+}
+
+@Test func aPlaceholderSpeakerNeedsAttributionAndKeepsItsLink() throws {
+    let joined: [String?] = ["[[Ada]]", "Speaker_2"]
+    let segments = try SummaryArtifactMapper.transcriptSegments(
+        of: sameLabelTranscript,
+        transcriptBytes: Array(sameLabelTranscript.text.utf8),
+        speakers: ["Speaker_1": "[[Ada]]"],
+        utteranceSpeakers: joined,
+    )
+
+    #expect(segments.map(\.speaker) == ["[[Ada]]", "[[Speaker_2]]"])
+    #expect(SummaryArtifactMapper.needsAttribution(transcript: sameLabelTranscript, speakers: ["Speaker_1": "[[Ada]]"], utteranceSpeakers: joined))
+}
+
+@Test func aSpeakerMappedToItselfIsUnmapped() {
+    let identity = ["Speaker_1": "Speaker_1", "Speaker_2": "Speaker_2"]
+
+    #expect(SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: identity))
+}
+
+@Test func anUnresolvedUtteranceFallsBackToItsOwnLabelThroughTheSpeakersMap() throws {
+    let segments = try SummaryArtifactMapper.transcriptSegments(
+        of: transcript,
+        transcriptBytes: bytes,
+        speakers: ["Speaker_1": "[[Ada]]"],
+        utteranceSpeakers: [nil, nil],
+    )
+
+    #expect(segments.map(\.speaker) == ["[[Ada]]", "[[Speaker_2]]"])
+}

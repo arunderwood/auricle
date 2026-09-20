@@ -17,14 +17,25 @@ public struct RenderedSegment: Equatable, Sendable {
     public let text: String
     /// `nil` when the speaker came from the default map.
     public let appliedFrom: AttributionSource?
+    /// The parent segment's utterance range, also on a split's sub-segments.
+    public let utteranceIndex: DiarizedUtteranceRange?
 
-    public init(id: String, startSeconds: Double, endSeconds: Double, speakerLabel: String, text: String, appliedFrom: AttributionSource?) {
+    public init(
+        id: String,
+        startSeconds: Double,
+        endSeconds: Double,
+        speakerLabel: String,
+        text: String,
+        appliedFrom: AttributionSource?,
+        utteranceIndex: DiarizedUtteranceRange? = nil,
+    ) {
         self.id = id
         self.startSeconds = startSeconds
         self.endSeconds = endSeconds
         self.speakerLabel = speakerLabel
         self.text = text
         self.appliedFrom = appliedFrom
+        self.utteranceIndex = utteranceIndex
     }
 }
 
@@ -69,6 +80,7 @@ public func renderTranscript(
                     speakerLabel: nonBlank(part.speaker) ?? segment.speakerLabel,
                     text: "",
                     appliedFrom: split.source,
+                    utteranceIndex: segment.utteranceIndex,
                 ))
             }
             continue
@@ -78,12 +90,13 @@ public func renderTranscript(
             rendered.append(RenderedSegment(
                 id: segment.id, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds,
                 speakerLabel: override, text: text, appliedFrom: .manual,
+                utteranceIndex: segment.utteranceIndex,
             ))
         } else {
             rendered.append(RenderedSegment(
                 id: segment.id, startSeconds: segment.startSeconds, endSeconds: segment.endSeconds,
                 speakerLabel: speakers[segment.speakerLabel].flatMap(nonBlank) ?? segment.speakerLabel,
-                text: text, appliedFrom: nil,
+                text: text, appliedFrom: nil, utteranceIndex: segment.utteranceIndex,
             ))
         }
     }

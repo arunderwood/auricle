@@ -5,9 +5,14 @@ extension SummarizeStage {
     struct Inputs {
         let transcript: CanonicalTranscript
         let speakers: [String: String]?
+        let utteranceSpeakers: [String?]?
         let captureStartedAt: Date
         let transcriptBytes: [UInt8]
         let segments: [TranscriptSegmentArtifact]
+
+        var needsAttribution: Bool {
+            SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers, utteranceSpeakers: utteranceSpeakers)
+        }
     }
 
     /// Reads and validates every input the stage has, in the order that fails
@@ -16,16 +21,19 @@ extension SummarizeStage {
         let cacheDirectory = try resolveCacheDirectory(for: meetingID)
         let transcript = try readTranscript(in: cacheDirectory)
         let speakers = try AttributionSpeakers.read(in: cacheDirectory)
+        let utteranceSpeakers = try AttributionSpeakers.utteranceSpeakers(in: cacheDirectory, utteranceCount: transcript.utterances.count)
         let captureStartedAtDate = try parseCaptureStartedAt(captureStartedAt)
         let transcriptBytes = Array(transcript.text.utf8)
         let segments = try SummaryArtifactMapper.transcriptSegments(
             of: transcript,
             transcriptBytes: transcriptBytes,
             speakers: speakers,
+            utteranceSpeakers: utteranceSpeakers,
         )
         return Inputs(
             transcript: transcript,
             speakers: speakers,
+            utteranceSpeakers: utteranceSpeakers,
             captureStartedAt: captureStartedAtDate,
             transcriptBytes: transcriptBytes,
             segments: segments,
