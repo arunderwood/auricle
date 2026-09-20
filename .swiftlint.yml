@@ -337,6 +337,7 @@ custom_rules:
       # target needs its own directory added here before it can construct
       # its own type directly; this entry does not cover it.
       - ".*/Tests/ClaudeSummarizerTests/.*\\.swift$"
+      - ".*/Tests/ClaudeAIReviewersTests/.*\\.swift$"
       # Same non-bypass for GoogleCalendarSource's own unit tests: they
       # construct the actor to exercise it against stubbed Google responders.
       - ".*/Tests/GoogleCalendarSourceTests/.*\\.swift$"

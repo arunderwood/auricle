@@ -101,7 +101,11 @@ let package = Package(
 
         // === Concrete strategies ===
         .target(name: "ClaudeSummarizer", dependencies: ["Core", "SummarizerInterface", "VaultGlossary", "Summarize"], path: "Sources/ClaudeSummarizer"),
-        .target(name: "ClaudeAIReviewers", dependencies: ["Core", "AIReviewerInterface"], path: "Sources/ClaudeAIReviewers"),
+        .target(
+            name: "ClaudeAIReviewers",
+            dependencies: ["Core", "AIReviewerInterface", "DiarizerInterface", "ClaudeSummarizer", "SummarizerInterface"],
+            path: "Sources/ClaudeAIReviewers",
+        ),
         .target(
             name: "WhisperKitTranscriber",
             dependencies: [
@@ -180,7 +184,14 @@ let package = Package(
             resources: [.copy("Snapshots"), .copy("Fixtures")],
         ),
         .testTarget(name: "ClaudeSummarizerTests", dependencies: ["ClaudeSummarizer", "TestSupport", "Summarize"], path: "Tests/ClaudeSummarizerTests"),
-        .testTarget(name: "ClaudeAIReviewersTests", dependencies: ["ClaudeAIReviewers", "TestSupport"], path: "Tests/ClaudeAIReviewersTests"),
+        .testTarget(
+            name: "ClaudeAIReviewersTests",
+            dependencies: [
+                "ClaudeAIReviewers", "TestSupport", "Core", "AIReviewerInterface", "DiarizerInterface",
+                "ClaudeSummarizer", "SummarizerInterface",
+            ],
+            path: "Tests/ClaudeAIReviewersTests",
+        ),
         .testTarget(name: "ReviewDiarizationTests", dependencies: ["ReviewDiarization", "TestSupport"], path: "Tests/ReviewDiarizationTests"),
         .testTarget(
             name: "WhisperKitTranscriberTests",
