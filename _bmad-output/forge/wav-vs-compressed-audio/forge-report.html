@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Forge report: WAV vs compressed audio</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#222;line-height:1.5}
+h1{margin-bottom:.2rem}.sub{color:#666;margin-top:0}
+.seal{float:right;margin:0 0 1rem 1rem}
+h2{border-bottom:1px solid #ddd;padding-bottom:.2rem;margin-top:2rem}
+li{margin:.3rem 0}
+</style></head><body>
+<svg class="seal" width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="HARDENED seal">
+<circle cx="70" cy="70" r="64" fill="#8b1a1a"/><circle cx="70" cy="70" r="54" fill="none" stroke="#f3d9d9" stroke-width="3"/>
+<text x="70" y="78" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="bold" fill="#f3d9d9">HARDENED</text></svg>
+<h1>WAV vs compressed audio</h1>
+<p class="sub">Question: why does auricle store WAV instead of mp3 or m4a?</p>
+<h2>Outcome</h2>
+<p>The MVP keeps 16 kHz mono PCM16 WAV. Size is a real but post-MVP concern.</p>
+<h2>Locked decisions</h2>
+<ul>
+<li>MVP keeps WAV. Retention defaults to delete-sooner and <code>auricle keep</code> is v1.1, so size does not bite yet.</li>
+<li>"WAV is outdated" is not a reason to change.</li>
+</ul>
+<h2>Rejected</h2>
+<ul><li>mp3/m4a for the MVP working copy: it solves no MVP problem and adds an encode step to the recovery copy.</li></ul>
+<h2>Weak points that survived</h2>
+<ul>
+<li>Decision 1.4 calls AAC "non-byte-sliceable". That is wrong; the WAV choice stands on other reasons.</li>
+<li>Unverified meetings are never auto-deleted, so they grow unbounded at about 115 MB/hr.</li>
+<li>Post-MVP transcode to mono AAC at about 64 kbps (about 29 MB/hr) is undecided until "listening only vs re-processing" is answered.</li>
+</ul>
+<h2>Voices</h2>
+<ul>
+<li>🏗️ Winston, architect: the boring format wins when you control the pipeline.</li>
+<li>📊 Mary, analyst: audio is the recovery layer; lossy encoding trades recovery detail for size.</li>
+<li>Dara (generated storage skeptic): the slicing argument is false, and "acceptable for cache" fails once audio is kept long-term.</li>
+</ul>
+</body></html>
