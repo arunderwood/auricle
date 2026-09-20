@@ -78,3 +78,5 @@ public struct JargonCorrection: Codable, Sendable, Equatable {
         self.correctedSpan = correctedSpan
     }
 }
+
+extension JargonCorrection: Suggestion {}
