@@ -1,0 +1,44 @@
+{
+  "diarization": {
+    "segments": [
+      {"id": "seg_1", "speaker_label": "Speaker_1", "start_seconds": 0, "end_seconds": 4, "utterance_index": null, "voice_profile": {"overlap_ratio": 0}},
+      {"id": "seg_2", "speaker_label": "Speaker_2", "start_seconds": 4, "end_seconds": 9, "utterance_index": null, "voice_profile": {"overlap_ratio": 0}},
+      {"id": "seg_3", "speaker_label": "Speaker_1", "start_seconds": 9, "end_seconds": 12, "utterance_index": null, "voice_profile": {"overlap_ratio": 0}}
+    ]
+  },
+  "attribution": {
+    "schema_version": 1,
+    "future_key": {"ignored": true},
+    "speakers": {"Speaker_1": "[[Ben]]", "Speaker_2": "Speaker_2"},
+    "segment_overrides": [
+      {"segment_id": "seg_3", "speaker": "[[Sara]]", "applied_from": "manual"},
+      {"segment_id": "seg_99", "speaker": "[[Nobody]]", "applied_from": "manual"}
+    ],
+    "segment_splits": [
+      {
+        "original_segment_id": "seg_2",
+        "applied_from": "ai_suggestion",
+        "suggestion_id": "abc123",
+        "splits": [
+          {"new_id": "seg_2.0", "start": 4, "end": 6, "speaker": "[[Ben]]"},
+          {"new_id": "seg_2.1", "start": 6, "end": 9, "speaker": "[[Sara]]"}
+        ]
+      },
+      {
+        "original_segment_id": "seg_77",
+        "applied_from": "manual",
+        "suggestion_id": null,
+        "splits": [
+          {"new_id": "seg_77.0", "start": 1, "end": 2, "speaker": "[[Ben]]"},
+          {"new_id": "seg_77.1", "start": 2, "end": 3, "speaker": "[[Sara]]"}
+        ]
+      }
+    ]
+  },
+  "expected": [
+    {"id": "seg_1", "speaker": "[[Ben]]", "applied": "default"},
+    {"id": "seg_2.0", "speaker": "[[Ben]]", "applied": "ai:abc123"},
+    {"id": "seg_2.1", "speaker": "[[Sara]]", "applied": "ai:abc123"},
+    {"id": "seg_3", "speaker": "[[Sara]]", "applied": "manual"}
+  ]
+}

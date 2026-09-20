@@ -1,3 +1,4 @@
+import Core
 import Foundation
 
 /// Reads the speaker names out of `attribution.json` for the summarize stage.
@@ -5,7 +6,7 @@ import Foundation
 /// other keys (`segment_overrides`, `segment_splits`) belong to other readers
 /// and may grow without this one noticing.
 enum AttributionSpeakers {
-    static let fileName = "attribution.json"
+    static let fileName = AttributionArtifact.fileName
 
     /// The file, decoded for just the key this stage uses.
     private struct File: Decodable {

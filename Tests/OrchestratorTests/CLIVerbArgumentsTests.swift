@@ -120,6 +120,14 @@ func aRunStageOptionWithNoValueDoesNotParse(option: String) {
     #expect(parsed.batch)
 }
 
+@Test func attributeParsesTheSpeakersMapping() throws {
+    #expect(try AttributeArguments.parse([meetingID]).speakers == nil)
+    let parsed = try AttributeArguments.parse([meetingID, "--speakers", "1=Ben,2=Jordan Whitfield"])
+    #expect(parsed.speakers == "1=Ben,2=Jordan Whitfield")
+    #expect(!parsed.batch)
+    #expect(throws: (any Error).self) { try AttributeArguments.parse([meetingID, "--speakers"]) }
+}
+
 // MARK: - list, status
 
 @Test func listParsesAllAndJSONIndependently() throws {
