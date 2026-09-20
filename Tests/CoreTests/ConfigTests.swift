@@ -203,3 +203,31 @@ func meetingsSubdirCannotBeAbsoluteOrClimbOutOfTheVault(value: String) {
         try Config.load(homeDirectory: fakeHome)
     }
 }
+
+@Test func snippetDurationDefaultsToEightSeconds() throws {
+    #expect(try Config.parse("", homeDirectory: home).attribution.snippetDurationSeconds == 8)
+    #expect(try Config.parse("[attribution]\n", homeDirectory: home).attribution.snippetDurationSeconds == 8)
+}
+
+@Test func snippetDurationIsReadFromTheAttributionTable() throws {
+    let config = try Config.parse("[attribution]\nsnippet_duration_seconds = 6\n", homeDirectory: home)
+
+    #expect(config.attribution.snippetDurationSeconds == 6)
+}
+
+@Test func aSnippetDurationOutsideTheClampRangeIsKeptForTheStageToClamp() throws {
+    #expect(try Config.parse("[attribution]\nsnippet_duration_seconds = 20\n", homeDirectory: home).attribution.snippetDurationSeconds == 20)
+}
+
+@Test(arguments: ["0", "-3", "\"long\"", "2.5"])
+func anUnusableSnippetDurationThrowsInvalidValue(_ value: String) {
+    #expect(throws: ConfigError.self) {
+        try Config.parse("[attribution]\nsnippet_duration_seconds = \(value)\n", homeDirectory: home)
+    }
+}
+
+@Test func aNonPositiveSnippetDurationNamesItsKey() {
+    #expect(throws: ConfigError.invalidValue(key: "attribution.snippet_duration_seconds", reason: "must be a positive number of seconds")) {
+        try Config.parse("[attribution]\nsnippet_duration_seconds = 0\n", homeDirectory: home)
+    }
+}

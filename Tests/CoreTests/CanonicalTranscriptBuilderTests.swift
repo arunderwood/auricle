@@ -100,3 +100,16 @@ private func slice(_ utterance: CanonicalTranscript.Utterance, of transcript: Ca
 
     #expect(decoded == transcript)
 }
+
+@Test func builderReportsWhichInputPositionsSurvived() {
+    let built = CanonicalTranscriptBuilder.buildReportingKeptIndices([
+        (speakerLabel: "Speaker_1", text: "kept"),
+        (speakerLabel: "Speaker_1", text: "   "),
+        (speakerLabel: "Speaker_1", text: "\n"),
+        (speakerLabel: "Speaker_1", text: "also kept"),
+    ])
+
+    #expect(built.keptIndices == [0, 3])
+    #expect(built.transcript.utterances.count == 2)
+    #expect(built.transcript == build([("Speaker_1", "kept"), ("Speaker_1", "also kept")]))
+}

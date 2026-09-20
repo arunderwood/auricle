@@ -85,22 +85,67 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
 }
 
 /// architecture.md:1231 — `{"model_id": "whisper-large-v3-turbo",
-/// "audio_duration_s": 1827, "transcript_chars": 23847}`.
+/// "audio_duration_s": 1827, "transcript_chars": 23847}`. When the worker also
+/// diarizes, its summary rides along under `diarize`: `PipelineStage` has no
+/// `diarize` case, so the one `transcribe` row is where it is recorded.
 public struct TranscribeMeta: Codable, Equatable, Sendable {
     public var modelID: String
     public var audioDurationSeconds: Int
     public var transcriptChars: Int
+    public var diarize: DiarizeMeta?
 
     enum CodingKeys: String, CodingKey {
         case modelID = "model_id"
         case audioDurationSeconds = "audio_duration_s"
         case transcriptChars = "transcript_chars"
+        case diarize
     }
 
-    public init(modelID: String, audioDurationSeconds: Int, transcriptChars: Int) {
+    public init(modelID: String, audioDurationSeconds: Int, transcriptChars: Int, diarize: DiarizeMeta? = nil) {
         self.modelID = modelID
         self.audioDurationSeconds = audioDurationSeconds
         self.transcriptChars = transcriptChars
+        self.diarize = diarize
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        modelID = try container.decode(String.self, forKey: .modelID)
+        audioDurationSeconds = try container.decode(Int.self, forKey: .audioDurationSeconds)
+        transcriptChars = try container.decode(Int.self, forKey: .transcriptChars)
+        diarize = try container.decodeIfPresent(DiarizeMeta.self, forKey: .diarize)
+    }
+
+    /// `diarize` is omitted, not written as null, when no diarization step
+    /// ran, so a row without one keeps its original shape.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(modelID, forKey: .modelID)
+        try container.encode(audioDurationSeconds, forKey: .audioDurationSeconds)
+        try container.encode(transcriptChars, forKey: .transcriptChars)
+        try container.encodeIfPresent(diarize, forKey: .diarize)
+    }
+}
+
+/// What the diarization step reports inside the `transcribe` row's metadata.
+public struct DiarizeMeta: Codable, Equatable, Sendable {
+    public var modelID: String
+    public var segmentCount: Int
+    public var speakerCount: Int
+    public var snippetCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case modelID = "model_id"
+        case segmentCount = "segment_count"
+        case speakerCount = "speaker_count"
+        case snippetCount = "snippet_count"
+    }
+
+    public init(modelID: String, segmentCount: Int, speakerCount: Int, snippetCount: Int) {
+        self.modelID = modelID
+        self.segmentCount = segmentCount
+        self.speakerCount = speakerCount
+        self.snippetCount = snippetCount
     }
 }
 

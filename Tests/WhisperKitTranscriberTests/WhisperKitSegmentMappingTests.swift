@@ -63,3 +63,24 @@ import Testing
     #expect(options.temperature == 0)
     #expect(options.temperatureFallbackCount == 0)
 }
+
+@Test func timingsFollowTheKeptUtterancesAndAreIndexedByTranscriptPosition() {
+    let timed = WhisperKitTranscriber.timedTranscript(segments: [
+        .init(text: " first", start: 0, end: 1.5),
+        .init(text: "<|nospeech|>", start: 1.5, end: 2),
+        .init(text: " second", start: 2, end: 4.25),
+    ])
+
+    #expect(timed.transcript.utterances.count == 2)
+    #expect(timed.utteranceTimings == [
+        UtteranceTiming(index: 0, startSeconds: 0, endSeconds: 1.5),
+        UtteranceTiming(index: 1, startSeconds: 2, endSeconds: 4.25),
+    ])
+}
+
+@Test func noSegmentsGiveAnEmptyTranscriptAndNoTimings() {
+    let timed = WhisperKitTranscriber.timedTranscript(segments: [])
+
+    #expect(timed.transcript.utterances.isEmpty)
+    #expect(timed.utteranceTimings.isEmpty)
+}

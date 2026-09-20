@@ -49,3 +49,13 @@ import Testing
 
     #expect(outcome == .valid)
 }
+
+@Test func diarizeIsNotADispatchableStage() {
+    let outcome = InternalStageValidator.validate(
+        stage: "diarize",
+        workerProtocolVersion: 1,
+        expectedProtocolVersion: 1,
+    )
+
+    #expect(outcome == .unknownStage("diarize"))
+}

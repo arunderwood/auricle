@@ -14,4 +14,14 @@ import Foundation
 /// placeholder speaker until a diarization stage says otherwise.
 public protocol TranscriberStrategy: Sendable {
     func transcribe(audio: URL, config: TranscriberConfig) async throws -> CanonicalTranscript
+
+    /// `transcribe`, plus the per-utterance timing. A strategy that cannot
+    /// report timing inherits the default, which returns none.
+    func transcribeTimed(audio: URL, config: TranscriberConfig) async throws -> TimedTranscript
+}
+
+public extension TranscriberStrategy {
+    func transcribeTimed(audio: URL, config: TranscriberConfig) async throws -> TimedTranscript {
+        try await TimedTranscript(transcript: transcribe(audio: audio, config: config))
+    }
 }
