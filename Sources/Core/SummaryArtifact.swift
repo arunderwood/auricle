@@ -11,7 +11,7 @@
 /// same case and feeds only `FilenameResolver`'s slug-source-1 (Decision 2.4)
 /// — a `title` fallback string must never leak into the filename slug chain,
 /// which has its own independent fallbacks.
-public struct SummaryArtifact: Codable, Equatable {
+public struct SummaryArtifact: Codable, Equatable, Sendable {
     public let title: String
     public let calendarEventTitle: String?
     /// Already wikilink-formatted (e.g. `"[[Ben]]"` or `"[[Speaker_1]]"`),
@@ -69,7 +69,7 @@ public struct SummaryArtifact: Codable, Equatable {
 /// (`Sources/Persist/MeetingForFrontmatter.swift:67-75`) — a separate type
 /// because the cache-artifact dialect and the renderer's own input contract
 /// are independent boundaries that happen to share a shape today.
-public struct QuotedItemArtifact: Codable, Equatable {
+public struct QuotedItemArtifact: Codable, Equatable, Sendable {
     public let text: String
     public let quote: String
 
@@ -81,7 +81,7 @@ public struct QuotedItemArtifact: Codable, Equatable {
 
 /// Maps onto `MeetingForFrontmatter`'s `TranscriptSegment`
 /// (`Sources/Persist/MeetingForFrontmatter.swift:78-86`).
-public struct TranscriptSegmentArtifact: Codable, Equatable {
+public struct TranscriptSegmentArtifact: Codable, Equatable, Sendable {
     public let speaker: String
     public let text: String
 

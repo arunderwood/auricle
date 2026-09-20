@@ -10,10 +10,6 @@ import Telemetry
 /// (Decision 2.3/2.4). The whole body runs inside `StageRunner.run`'s `work`
 /// closure — this type never writes `stage_events`/`meetings.state` itself.
 public enum PersistStage {
-    /// `frontmatter_schema_version` (Decision 2.2): required forever, never
-    /// renamed. Fixed at `1` until a breaking frontmatter change ships.
-    private static let frontmatterSchemaVersion = 1
-
     /// Same rationale as `VaultWriter.maxCollisionOrdinal`: same-day reruns
     /// this deep aren't realistic, but the loop must still fail fast rather
     /// than spin forever on a defect. Kept separate from
@@ -241,7 +237,7 @@ public enum PersistStage {
             title: resolved.artifact.title,
             date: resolved.localDate,
             attendees: resolved.artifact.attendees,
-            schemaVersion: frontmatterSchemaVersion,
+            schemaVersion: FrontmatterSchema.current,
             supersedes: supersedes,
             needsAttribution: resolved.artifact.needsAttribution,
             needsCalendarEnrichment: resolved.artifact.needsCalendarEnrichment,
@@ -351,7 +347,7 @@ public enum PersistStage {
     /// whose enum-keyed encoding nests the payload under a `"persist"` key,
     /// a different shape than Decision 4.5 specifies for this row.
     private static func encodeMetadataJSON(vaultNotePath: String) -> String {
-        let meta = PersistMeta(vaultNotePath: vaultNotePath, frontmatterSchemaVersion: frontmatterSchemaVersion)
+        let meta = PersistMeta(vaultNotePath: vaultNotePath, frontmatterSchemaVersion: FrontmatterSchema.current)
         // `PersistMeta` is two plain, always-encodable scalars (String, Int)
         // with no custom encoding strategy in play, so this can't actually
         // fail in practice. Still: a stage that promises "nothing propagates
