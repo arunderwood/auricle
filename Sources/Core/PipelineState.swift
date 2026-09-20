@@ -24,4 +24,11 @@ public enum PipelineState: String, Sendable, Codable, CaseIterable {
     case summarizationFailed = "summarization_failed"
     case persistFailed = "persist_failed"
     case publishedPartial = "published_partial"
+
+    /// States a meeting has finished in: `StateStore.fetchPending` excludes them.
+    /// `idx_meetings_state`'s partial-index predicate lists the same three states
+    /// as raw SQL, because shipped migrations are never edited. Adding a case
+    /// here needs a migration that recreates that index, and `StateTests` fails
+    /// until it exists.
+    public static let terminal: [PipelineState] = [.verified, .retentionExpired, .discarded]
 }

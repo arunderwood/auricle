@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import GRDB
 @testable import State
@@ -45,6 +46,19 @@ private func makeMeeting(id: String = "01STATESTORETESTMEETING00") -> Meeting {
     let pending = try await store.fetchPending()
 
     #expect(pending.map(\.id).sorted() == ["01PENDINGMEETINGIDAAAAAAA"])
+}
+
+@Test func fetchPendingExcludesExactlyThePipelineStatesListedAsTerminal() async throws {
+    let store = try makeStore()
+    for (index, state) in PipelineState.allCases.enumerated() {
+        let id = "01ALLSTATESMEETINGID\(String(format: "%06d", index))"
+        try await store.insertMeeting(makeMeeting(id: id).with(state: state.rawValue))
+    }
+
+    let pendingStates = try await Set(store.fetchPending().map(\.state))
+
+    let nonTerminal = Set(PipelineState.allCases).subtracting(PipelineState.terminal)
+    #expect(pendingStates == Set(nonTerminal.map(\.rawValue)))
 }
 
 // MARK: - Column-scoped writers
@@ -204,6 +218,53 @@ private func transition(
     #expect(events.first?.stage == "transcribe")
     #expect(events.first?.event == "started")
     #expect(events.first?.id == inserted.id)
+}
+
+/// Records executed SQL from a connection's trace hook, which runs off the test's actor.
+private final class StatementLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var statements: [String] = []
+
+    func append(_ sql: String) {
+        lock.withLock { statements.append(sql) }
+    }
+
+    var all: [String] {
+        lock.withLock { statements }
+    }
+}
+
+@Test func fetchStageEventsOrdersSameSecondEventsByID() async throws {
+    let statements = StatementLog()
+    var configuration = Configuration()
+    configuration.prepareDatabase { db in
+        db.trace { event in
+            if case let .statement(statement) = event {
+                statements.append(statement.sql)
+            }
+        }
+    }
+    let store = try StateStore.forTesting(writer: DatabaseQueue(configuration: configuration))
+    try await store.insertMeeting(makeMeeting())
+    let sameSecond = "2026-01-01T00:05:00Z"
+    for (stage, event, occurredAt) in [
+        ("transcribe", "started", sameSecond),
+        ("transcribe", "completed", sameSecond),
+        ("capture", "completed", "2026-01-01T00:04:59Z"),
+    ] {
+        _ = try await store.insertStageEvent(
+            StageEvent(meetingID: "01STATESTORETESTMEETING00", stage: stage, event: event, occurredAt: occurredAt),
+        )
+    }
+
+    let events = try await store.fetchStageEvents(meetingID: "01STATESTORETESTMEETING00")
+
+    #expect(events.map { "\($0.stage) \($0.event)" } == ["capture completed", "transcribe started", "transcribe completed"])
+    // SQLite returns rows that tie on `occurred_at` in rowid order, so the result alone
+    // cannot tell this query from one with no tiebreak. Assert the clause that makes the
+    // order part of the contract.
+    let select = try #require(statements.all.last { $0.contains("FROM \"stage_events\"") })
+    #expect(select.contains("ORDER BY \"occurred_at\", \"id\""))
 }
 
 @Test func retentionTimerRoundTripsLosslessly() async throws {
