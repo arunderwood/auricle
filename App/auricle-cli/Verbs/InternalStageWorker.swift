@@ -2,6 +2,8 @@ import ArgumentParser
 import CalendarInterface
 import ClaudeSummarizer
 import Core
+import Diarize
+import DiarizerInterface
 import Foundation
 import GoogleCalendarSource
 import Orchestrator
@@ -12,6 +14,7 @@ import Telemetry
 import Transcribe
 import TranscriberInterface
 import VaultGlossary
+import WhisperKitDiarizer
 import WhisperKitTranscriber
 
 // AR-PIPE-7: the GUI's and `CrashRecovery`'s subprocess-dispatch mechanism,
@@ -79,13 +82,29 @@ struct InternalStageWorker: AsyncParsableCommand {
         let stateStore = try openStateStore()
         let config = TranscriberConfig()
         let modelStore = WhisperKitModelStore()
+        let diarizerConfig = diarizerConfig()
+        let diarizerStore = SpeakerKitModelStore()
+        let diarizer = WhisperKitDiarizer(store: diarizerStore)
         let exit = await TranscribeWorker.run(
             meetingID: meetingID,
             stateStore: stateStore,
             stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
             transcriber: WhisperKitTranscriber(store: modelStore),
             config: config,
-            ensureModel: { await Self.provisionModelIfMissing(modelStore, config: config) },
+            diarize: { input in
+                try await DiarizeStage.run(
+                    meetingID: input.meetingID,
+                    transcript: input.transcript,
+                    utteranceTimings: input.utteranceTimings,
+                    audio: input.audio,
+                    diarizer: diarizer,
+                    config: diarizerConfig,
+                )
+            },
+            ensureModel: {
+                await Self.provisionModelIfMissing(modelStore, config: config)
+                await Self.provisionDiarizerModelIfMissing(diarizerStore)
+            },
         )
         try finish(exit, prefixed: true)
     }
@@ -101,6 +120,25 @@ struct InternalStageWorker: AsyncParsableCommand {
         } catch {
             writeStderr("__internal-stage: the transcription model could not be downloaded (\(type(of: error))).")
         }
+    }
+
+    private static func provisionDiarizerModelIfMissing(_ store: SpeakerKitModelStore) async {
+        guard !store.isProvisioned else { return }
+        writeStderr("__internal-stage: downloading the diarization model (one time only).")
+        do {
+            try await store.provision()
+        } catch {
+            writeStderr("__internal-stage: the diarization model could not be downloaded (\(type(of: error))).")
+        }
+    }
+
+    /// Falls back to the default snippet length when the config cannot be
+    /// read. The line written names the failure's type only.
+    private func diarizerConfig() -> DiarizerConfig {
+        DiarizerConfig.loading(
+            config: { try Config.load() },
+            onFailure: { writeStderr("__internal-stage: using the default snippet length (\(type(of: $0))).") },
+        )
     }
 
     /// Wires `SummarizeStage`'s dependencies and hands the meeting to

@@ -32,6 +32,7 @@ public enum TranscribeWorker {
         stageRunner: StageRunner,
         transcriber: any TranscriberStrategy,
         config: TranscriberConfig,
+        diarize: TranscribeStage.DiarizationStep? = nil,
         ensureModel: @Sendable () async -> Void,
     ) async -> Exit {
         do {
@@ -51,6 +52,7 @@ public enum TranscribeWorker {
                 stageRunner: stageRunner,
                 transcriber: transcriber,
                 config: config,
+                diarize: diarize,
             )
             return Exit(code: TranscribeStage.exitCode(for: outcome))
         } catch StateStoreError.meetingNotFound {
