@@ -3645,6 +3645,13 @@ So that captured audio is held until the user clicks the verification notificati
 **And** transition `meetings.state = 'retention_expired'`
 **And** the meeting row stays in SQLite as forensic record; only the audio file is deleted
 
+**Given** a retention timer is due and `status = 'pending'`
+**When** the scheduler picks it up
+**Then** it claims the row before it calls the handler, with one conditional write that moves `status` from `'pending'` to `'fired'` and matches only a row that is still `'pending'` (the `'fired'` mark in the criterion above is this claim, not a second write after the action)
+**And** a pass whose claim matches no row (another pass claimed it first, or the user has since set it to `'overridden'`) skips the timer and does not call the handler
+**And** if the handler fails, the scheduler moves the row back to `'pending'`, the audio is retained, and the next pass picks the timer up again
+**And** the scheduler uses only the `status` values Decision 2.1 defines for `retention_timers` (`'pending'|'fired'|'overridden'`)
+
 **Given** the conservative-by-default principle per NFR-R3
 **When** any error occurs during retention processing (filesystem error, SQL error)
 **Then** the audio is **retained**, NOT deleted — log at `error` level and surface for user investigation per UX spec Step 4 emotional principles
@@ -3652,7 +3659,7 @@ So that captured audio is held until the user clicks the verification notificati
 
 **Given** the test suite
 **When** I run `Tests/OrchestratorTests/RetentionSchedulerTests.swift`
-**Then** tests cover: due-timer fires correct deletion + state transition; not-yet-due timer is skipped; foreground vs backgrounded polling cadences; error during deletion → audio retained, error logged; fresh-launch immediate poll catches deferred fires
+**Then** tests cover: due-timer fires correct deletion + state transition; not-yet-due timer is skipped; foreground vs backgrounded polling cadences; error during deletion → audio retained, error logged; fresh-launch immediate poll catches deferred fires; a second pass over a claimed timer does not call the handler; a failing handler leaves the row `'pending'`
 
 ---
 

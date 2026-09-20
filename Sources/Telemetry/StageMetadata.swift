@@ -1,10 +1,9 @@
-/// Per-stage `completed`-event metadata (architecture.md Decision 4.5): a
-/// stage's real business logic constructs one of these cases and JSON-encodes
-/// it at its own call site before handing the string to `StageRunner`'s
-/// `StageOutcome` — this type exists so that encoding has a typed shape to
-/// start from instead of a hand-assembled dictionary. `verify`/`discard` have
-/// no case here, matching the AC's own 7-case list; their events carry no
-/// typed metadata.
+/// The per-stage `completed`-event payload types (architecture.md Decision
+/// 4.5). A stage encodes its own `*Meta` struct directly and hands the string
+/// to `StageRunner`'s `StageOutcome`, so the `metadata_json` a row stores is
+/// the flat payload. This enum's wrapped encoding is never what a stage
+/// writes. `verify`/`discard` have no case here; their events carry no typed
+/// metadata.
 ///
 /// `Codable` conformance is hand-written rather than compiler-synthesized:
 /// Swift does not synthesize `Codable` for an enum with associated values, and
