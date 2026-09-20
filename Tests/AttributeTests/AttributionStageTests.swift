@@ -111,15 +111,41 @@ func aBadMappingWritesNothingAndLeavesTheState(raw: String) async throws {
     #expect(telemetry?.attributionCompletionPath == "publish_anyway")
 }
 
-@Test func aMeetingNotAwaitingAttributionIsRefused() async throws {
-    let fixture = try await AttributeFixture(state: "published")
+@Test(arguments: ["awaiting_verification", "published", "published_partial"])
+func aPublishedMeetingIsReattributedFromItsStoredMapping(state: String) async throws {
+    let fixture = try await AttributeFixture(state: state)
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    try AttributionFile(speakers: ["Speaker_1": "[[Ben]]"]).write(for: fixture.meetingID)
+
+    let status = await fixture.run(.batch(speakers: nil), reattribute: true)
+
+    #expect(status.code == 0)
+    #expect(try await fixture.state() == "summarizing")
+}
+
+@Test(arguments: ["awaiting_verification", "published", "published_partial"])
+func aPublishedMeetingIsRefusedUnlessReattributing(state: String) async throws {
+    let fixture = try await AttributeFixture(state: state)
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    try AttributionFile(speakers: ["Speaker_1": "[[Ben]]"]).write(for: fixture.meetingID)
+
+    let status = await fixture.run(.batch(speakers: nil))
+
+    #expect(status.code == 1)
+    #expect(try await fixture.state() == state)
+}
+
+@Test func aMeetingInAnUnrelatedStateIsRefusedEvenWhenReattributing() async throws {
+    let fixture = try await AttributeFixture(state: "summarizing")
     defer { fixture.cleanUp() }
     try fixture.plantInputs()
 
-    let status = await fixture.run(.batch(speakers: "1=Ben"))
+    let status = await fixture.run(.batch(speakers: "1=Ben"), reattribute: true)
 
     #expect(status.code == 1)
-    #expect(try await fixture.state() == "published")
+    #expect(try await fixture.state() == "summarizing")
     #expect(!fixture.exists(AttributionFile.fileName))
 }
 

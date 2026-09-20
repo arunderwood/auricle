@@ -54,6 +54,7 @@ public struct SubprocessDispatcher: Sendable {
         stage: PipelineStage,
         meetingID: MeetingID,
         workerProtocolVersion: Int = Core.WorkerProtocolVersion.current,
+        publishAnyway: Bool = false,
     ) throws -> Process {
         guard let executableURL = resolveExecutablePath() else {
             throw DispatchError.executableNotFound
@@ -66,6 +67,7 @@ public struct SubprocessDispatcher: Sendable {
             id: meetingID.rawValue,
             workerProtocolVersion: workerProtocolVersion,
             vaultPath: resolveVaultPath(),
+            publishAnyway: publishAnyway,
         ).arguments
         return process
     }
@@ -81,12 +83,23 @@ public struct SubprocessDispatcher: Sendable {
         stage: PipelineStage,
         meetingID: MeetingID,
         workerProtocolVersion: Int = Core.WorkerProtocolVersion.current,
+        publishAnyway: Bool = false,
         onExit: (@Sendable (WorkerExit) -> Void)? = nil,
     ) throws -> Process {
-        let process = try makeProcess(stage: stage, meetingID: meetingID, workerProtocolVersion: workerProtocolVersion)
+        let process = try makeProcess(
+            stage: stage,
+            meetingID: meetingID,
+            workerProtocolVersion: workerProtocolVersion,
+            publishAnyway: publishAnyway,
+        )
         if let onExit {
             process.terminationHandler = { finished in
-                onExit(WorkerExit(stage: stage, meetingID: meetingID, status: finished.terminationStatus))
+                onExit(WorkerExit(
+                    stage: stage,
+                    meetingID: meetingID,
+                    status: finished.terminationStatus,
+                    wasSignaled: finished.terminationReason == .uncaughtSignal,
+                ))
             }
         }
         try process.run()
@@ -101,10 +114,13 @@ public struct WorkerExit: Sendable, Equatable {
     public let stage: PipelineStage
     public let meetingID: MeetingID
     public let status: Int32
+    /// `status` is a signal number, not an exit code.
+    public let wasSignaled: Bool
 
-    public init(stage: PipelineStage, meetingID: MeetingID, status: Int32) {
+    public init(stage: PipelineStage, meetingID: MeetingID, status: Int32, wasSignaled: Bool = false) {
         self.stage = stage
         self.meetingID = meetingID
         self.status = status
+        self.wasSignaled = wasSignaled
     }
 }

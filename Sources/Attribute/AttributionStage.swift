@@ -25,6 +25,15 @@ public enum AttributionStage {
     static let cliSpeakersFlagPath = "cli_speakers_flag"
     static let publishAnywayPath = "publish_anyway"
 
+    private static let waitingStates: Set<PipelineState> = [.awaitingAttribution, .attributing]
+
+    /// A published meeting is re-attributed only when the caller asks
+    /// (`auricle run --reattribute`); attribution leaves its retention timer
+    /// alone.
+    private static let reattributableStates: Set<PipelineState> = waitingStates.union([
+        .awaitingVerification, .published, .publishedPartial,
+    ])
+
     private static let log = Log(category: "attribution-stage")
 
     private struct Plan {
@@ -47,11 +56,12 @@ public enum AttributionStage {
         stageRunner: StageRunner,
         telemetryRecorder: TelemetryRecorder,
         glossary: Glossary = Glossary(),
+        reattribute: Bool = false,
     ) async throws -> StageRunner.StageOutcome {
         guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
             throw StateStoreError.meetingNotFound(id: meetingID.rawValue)
         }
-        guard let state = PipelineState(rawValue: meeting.state), state == .awaitingAttribution || state == .attributing else {
+        guard let state = PipelineState(rawValue: meeting.state), (reattribute ? reattributableStates : waitingStates).contains(state) else {
             throw AttributionStageError.wrongState(current: meeting.state)
         }
         let plan = try makePlan(meetingID: meetingID, mode: mode, glossary: glossary)
@@ -85,11 +95,12 @@ public enum AttributionStage {
         stageRunner: StageRunner,
         telemetryRecorder: TelemetryRecorder,
         glossary: Glossary = Glossary(),
+        reattribute: Bool = false,
     ) async -> WorkerExitStatus {
         do {
             let outcome = try await run(
                 meetingID: meetingID, mode: mode, stateStore: stateStore, stageRunner: stageRunner,
-                telemetryRecorder: telemetryRecorder, glossary: glossary,
+                telemetryRecorder: telemetryRecorder, glossary: glossary, reattribute: reattribute,
             )
             let code = exitCode(for: outcome)
             return WorkerExitStatus(code: code, message: code == WorkerExitCode.success ? nil : "could not record the attribution transition.")

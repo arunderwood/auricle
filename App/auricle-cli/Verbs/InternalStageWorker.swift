@@ -43,15 +43,19 @@ struct InternalStageWorker: AsyncParsableCommand {
             try finish(status, prefixed: false)
 
         case let .run(stage, meetingID):
-            switch stage {
+            // Switching over `InternalStageKind` without a default is the
+            // worker-coverage check: a stage `auricle run` dispatches here
+            // does not compile until it has a case.
+            guard let kind = InternalStageKind(stage: stage) else {
+                try notYetImplemented(InternalStageArguments.commandName)
+            }
+            switch kind {
             case .transcribe:
                 try await runTranscribe(meetingID: meetingID)
             case .reviewDiarization:
                 try await runReviewDiarization(meetingID: meetingID)
             case .summarize:
                 try await runSummarize(meetingID: meetingID)
-            default:
-                try notYetImplemented(InternalStageArguments.commandName)
             }
         }
     }
@@ -177,6 +181,7 @@ struct InternalStageWorker: AsyncParsableCommand {
             glossary: vaultGlossary(),
             config: SummarizerConfig(),
             calendarSource: calendarSource(),
+            publishAnyway: arguments.publishAnyway,
         )
         try finish(exit, prefixed: true)
     }

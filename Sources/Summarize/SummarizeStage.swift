@@ -22,11 +22,11 @@ import Telemetry
 /// caller injects is the full vault glossary; the stage scopes it to the
 /// meeting itself before the summarizer sees it.
 public enum SummarizeStage {
-    private static let summaryArtifactName = "summary.json"
-    private static let summarySchemaVersion = 1
+    static let summaryArtifactName = "summary.json"
+    static let summarySchemaVersion = 1
     private static let calendarArtifactName = "calendar.json"
     private static let calendarSchemaVersion = 1
-    private static let transcriptArtifactName = "transcript.json"
+    static let transcriptArtifactName = "transcript.json"
     private static let log = Log(category: "summarize-stage")
 
     /// Completes into `persisting`: the summary is written and persist is
@@ -54,6 +54,7 @@ public enum SummarizeStage {
         config: SummarizerConfig,
         timeZone: TimeZone = .current,
         calendarSource: (any CalendarSource)? = nil,
+        publishAnyway: Bool = false,
     ) async throws -> StageRunner.StageOutcome {
         try await run(
             meetingID: meetingID,
@@ -65,6 +66,7 @@ public enum SummarizeStage {
             config: config,
             timeZone: timeZone,
             calendarSource: calendarSource,
+            publishAnyway: publishAnyway,
             promptSetHash: bundledPromptSetHash,
         )
     }
@@ -82,6 +84,7 @@ public enum SummarizeStage {
         config: SummarizerConfig,
         timeZone: TimeZone = .current,
         calendarSource: (any CalendarSource)? = nil,
+        publishAnyway: Bool = false,
         promptSetHash: @escaping @Sendable (SummarizationMode) throws -> String = bundledPromptSetHash,
     ) async throws -> StageRunner.StageOutcome {
         guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
@@ -96,6 +99,7 @@ public enum SummarizeStage {
                         captureStartedAt: captureStartedAt,
                         timeZone: timeZone,
                         calendarSource: calendarSource,
+                        publishAnyway: publishAnyway,
                         promptSetHash: promptSetHash,
                     ),
                     stateStore: stateStore,
@@ -131,6 +135,9 @@ public enum SummarizeStage {
         let captureStartedAt: String?
         let timeZone: TimeZone
         let calendarSource: (any CalendarSource)?
+        /// A failure after the calendar step leaves a stub summary for persist
+        /// instead of failing the stage.
+        let publishAnyway: Bool
         let promptSetHash: @Sendable (SummarizationMode) throws -> String
     }
 
@@ -154,17 +161,9 @@ public enum SummarizeStage {
         glossary: Glossary,
         config: SummarizerConfig,
     ) async throws -> StageRunner.StageOutcome {
-        let cacheDirectory = try resolveCacheDirectory(for: meetingID)
-        let transcript = try readTranscript(in: cacheDirectory)
-        let speakers = try AttributionSpeakers.read(in: cacheDirectory)
-        let captureStartedAtDate = try parseCaptureStartedAt(context.captureStartedAt)
-
-        let transcriptBytes = Array(transcript.text.utf8)
-        let segments = try SummaryArtifactMapper.transcriptSegments(
-            of: transcript,
-            transcriptBytes: transcriptBytes,
-            speakers: speakers,
-        )
+        let inputs = try readInputs(for: meetingID, captureStartedAt: context.captureStartedAt)
+        let (transcript, speakers, transcriptBytes, segments) = (inputs.transcript, inputs.speakers, inputs.transcriptBytes, inputs.segments)
+        let captureStartedAtDate = inputs.captureStartedAt
 
         let promptSetHashes = try resolvePromptSetHashes(using: context.promptSetHash)
 
@@ -176,21 +175,34 @@ public enum SummarizeStage {
         // The stage owns the attendee names: whatever the caller put on the
         // config would disagree with the note's attendees.
         let enrichedConfig = config.withAttendeeNames(enrichment.match?.attendeeNames ?? [])
-        let outcome = try await orchestrator.summarize(transcript: transcript, glossary: scopedGlossary, config: enrichedConfig)
+        let title = UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone)
+        let needsAttribution = SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers)
 
-        let artifact = try SummaryArtifactMapper.artifact(
-            title: UnenrichedMeetingTitle.title(captureStartedAt: captureStartedAtDate, in: context.timeZone),
-            match: enrichment.match,
-            grounded: outcome.summary,
-            transcriptSegments: segments,
-            needsAttribution: SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: speakers),
-            transcriptBytes: transcriptBytes,
-        )
+        let outcome: SummarizerOrchestrator.Outcome
+        let artifact: SummaryArtifact
         do {
-            try CacheArtifactWriter.write(artifact, for: meetingID, named: summaryArtifactName, schemaVersion: summarySchemaVersion)
-        } catch {
-            throw SummarizeStageError.summaryWriteFailed
+            outcome = try await orchestrator.summarize(transcript: transcript, glossary: scopedGlossary, config: enrichedConfig)
+            artifact = try SummaryArtifactMapper.artifact(
+                title: title,
+                match: enrichment.match,
+                grounded: outcome.summary,
+                transcriptSegments: segments,
+                needsAttribution: needsAttribution,
+                transcriptBytes: transcriptBytes,
+            )
+        } catch where context.publishAnyway && !Task.isCancelled && !(error is CancellationError) {
+            return try completeWithStub(
+                after: error,
+                for: meetingID,
+                stub: SummaryArtifactMapper.stubArtifact(
+                    title: title,
+                    match: enrichment.match,
+                    transcriptSegments: segments,
+                    needsAttribution: needsAttribution,
+                ),
+            )
         }
+        try writeSummary(artifact, for: meetingID)
 
         await recordAfterSummaryWritten(
             for: meetingID,
@@ -222,35 +234,6 @@ public enum SummarizeStage {
         }
     }
 
-    // MARK: - Inputs
-
-    /// Decoded exactly once: the same `CanonicalTranscript` value is what the
-    /// summarizer is given and what every quote and segment is sliced from,
-    /// so the byte offsets a pointer carries mean the same thing at both ends.
-    private static func readTranscript(in cacheDirectory: URL) throws -> CanonicalTranscript {
-        let data: Data
-        do {
-            data = try Data(contentsOf: cacheDirectory.appendingPathComponent(transcriptArtifactName))
-        } catch {
-            throw SummarizeStageError.transcriptMissing
-        }
-        do {
-            return try JSONDecoder().decode(CanonicalTranscript.self, from: data)
-        } catch {
-            throw SummarizeStageError.transcriptUndecodable
-        }
-    }
-
-    /// A cache root that cannot be resolved means the transcript cannot be
-    /// found either, so it is reported as the missing transcript it causes.
-    private static func resolveCacheDirectory(for meetingID: MeetingID) throws -> URL {
-        do {
-            return try CacheArtifactWriter.cacheDirectory(for: meetingID)
-        } catch {
-            throw SummarizeStageError.transcriptMissing
-        }
-    }
-
     /// One hash per mode, computed before the summarizer call because which
     /// strategy answers is not known until it has been paid for: a prompt
     /// file that cannot be resolved must fail the stage here rather than
@@ -270,13 +253,6 @@ public enum SummarizeStage {
             }
         }
         return hashes
-    }
-
-    private static func parseCaptureStartedAt(_ captureStartedAt: String?) throws -> Date {
-        guard let captureStartedAt, let date = ISO8601UTC.date(from: captureStartedAt) else {
-            throw SummarizeStageError.captureStartedAtMissing
-        }
-        return date
     }
 
     // MARK: - metadata_json
@@ -319,7 +295,7 @@ public enum SummarizeStage {
     /// Only a case name, a type name or a fixed sentence is ever recorded,
     /// never an error's own message: a foreign error can embed a path, a response body or transcript
     /// text, and `error_message` is persisted in `stage_events`.
-    private static func failure(for error: Error) -> (errorClass: String, message: String) {
+    static func failure(for error: Error) -> (errorClass: String, message: String) {
         switch error {
         case let stageError as SummarizeStageError:
             (stageError.errorClass, String(describing: stageError))

@@ -1,5 +1,5 @@
 // swift-tools-version: 6.3
-// AuricleKit — single SwiftPM library, 25 modular targets per AR-INIT-5.
+// AuricleKit — single SwiftPM library, 26 modular targets per AR-INIT-5.
 // Module boundaries are the architecture: cross-target imports declared here are
 // the ONLY intended imports. Plain `swift build` does not reject an undeclared
 // cross-edge — that needs `--explicit-target-dependency-import-check error`,
@@ -32,6 +32,7 @@ let package = Package(
         .library(name: "Attribute", targets: ["Attribute"]),
         .library(name: "Summarize", targets: ["Summarize"]),
         .library(name: "Persist", targets: ["Persist"]),
+        .library(name: "Pipeline", targets: ["Pipeline"]),
         .library(name: "Verify", targets: ["Verify"]),
         .library(name: "Notifications", targets: ["Notifications"]),
         .library(name: "ReviewDiarization", targets: ["ReviewDiarization"]),
@@ -98,6 +99,11 @@ let package = Package(
             name: "Persist",
             dependencies: ["Core", "State", "Telemetry", "Orchestrator", .product(name: "Yams", package: "Yams")],
             path: "Sources/Persist",
+        ),
+        .target(
+            name: "Pipeline",
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "Attribute", "Persist", "Notifications", "Transcribe"],
+            path: "Sources/Pipeline",
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
         .target(name: "Notifications", dependencies: ["Core", "State", "Orchestrator", "Telemetry"], path: "Sources/Notifications"),
@@ -246,6 +252,15 @@ let package = Package(
             name: "PersistTests",
             dependencies: ["Persist", "TestSupport", "Orchestrator", "State", .product(name: "GRDB", package: "GRDB.swift")],
             path: "Tests/PersistTests",
+        ),
+        .testTarget(
+            name: "PipelineTests",
+            dependencies: [
+                "Pipeline", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "Attribute", "Persist", "Notifications",
+                "DiarizerInterface", "Transcribe",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/PipelineTests",
         ),
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
         .testTarget(

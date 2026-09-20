@@ -24,13 +24,17 @@ public struct InternalStageArguments: ParsableArguments {
     @Option(help: "Obsidian vault whose page names and wikilinks become the summarize stage's glossary.")
     public var vaultPath: String?
 
+    @Flag(help: "The run was started with --publish-anyway: a summarize failure leaves a stub summary for persist to publish.")
+    public var publishAnyway = false
+
     public init() {}
 
-    public init(stage: String, id: String, workerProtocolVersion: Int, vaultPath: String? = nil) {
+    public init(stage: String, id: String, workerProtocolVersion: Int, vaultPath: String? = nil, publishAnyway: Bool = false) {
         self.stage = stage
         self.id = id
         self.workerProtocolVersion = workerProtocolVersion
         self.vaultPath = vaultPath
+        self.publishAnyway = publishAnyway
     }
 
     /// The argument vector, subcommand name first, that parses back to these
@@ -39,6 +43,9 @@ public struct InternalStageArguments: ParsableArguments {
         var vector = [Self.commandName, stage, id, "--worker-protocol-version", String(workerProtocolVersion)]
         if let vaultPath {
             vector += ["--vault-path", vaultPath]
+        }
+        if publishAnyway {
+            vector.append("--publish-anyway")
         }
         return vector
     }

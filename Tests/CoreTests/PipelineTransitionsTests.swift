@@ -13,7 +13,7 @@ import Testing
     #expect(summarize == [.persisting, .summarizationFailed])
 
     let persist = try #require(PipelineTransitions.allowedTargets(stage: .persist, activeState: .persisting))
-    #expect(persist == [.published, .persistFailed])
+    #expect(persist == [.published, .publishedPartial, .persistFailed])
 }
 
 /// The table is keyed by the pair `run` receives, so a stage run under another

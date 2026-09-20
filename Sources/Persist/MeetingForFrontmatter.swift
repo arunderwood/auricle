@@ -15,6 +15,10 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
     public let supersedes: String?
     public let needsAttribution: Bool
     public let needsCalendarEnrichment: Bool
+    /// The `published_partial` variant: adds the `auricle/needs-summary` tag
+    /// and leaves out the Action Items and Decisions sections, which an absent
+    /// summary cannot fill.
+    public let needsSummary: Bool
     /// One paragraph, already wikilinked.
     public let summary: String
     public let actionItems: [QuotedItem]
@@ -30,6 +34,7 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
         supersedes: String?,
         needsAttribution: Bool,
         needsCalendarEnrichment: Bool,
+        needsSummary: Bool = false,
         summary: String,
         actionItems: [QuotedItem],
         decisions: [QuotedItem],
@@ -43,6 +48,7 @@ public struct MeetingForFrontmatter: Sendable, Equatable {
         self.supersedes = supersedes
         self.needsAttribution = needsAttribution
         self.needsCalendarEnrichment = needsCalendarEnrichment
+        self.needsSummary = needsSummary
         self.summary = summary
         self.actionItems = actionItems
         self.decisions = decisions

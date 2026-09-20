@@ -379,3 +379,58 @@ private func requirePersistFailed(_ outcome: StageRunner.StageOutcome, errorClas
     #expect(meeting.vaultNotePath == nil)
     #expect(meeting.state == "persist_failed")
 }
+
+// MARK: - Stub summary (published_partial)
+
+private let stubSummaryJSON = """
+{
+  "title": "Meeting at 2026-04-28T05:00 PDT",
+  "calendar_event_title": null,
+  "attendees": [],
+  "self_wikilink": null,
+  "needs_attribution": true,
+  "needs_calendar_enrichment": true,
+  "needs_summary": true,
+  "summary": "",
+  "action_items": [],
+  "decisions": [],
+  "transcript_segments": [{"speaker": "[[Speaker_1]]", "text": "Hello there"}]
+}
+"""
+
+@Test func aStubSummaryPublishesTheNeedsSummaryNoteAndCompletesIntoPublishedPartial() async throws {
+    let fixture = try makeFixture(writeValidSummary: false)
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    try writeSummaryJSON(stubSummaryJSON, to: fixture.cacheDirectory)
+    let meetingID = MeetingID.generate()
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+
+    let outcome = try await fixture.run(meetingID: meetingID)
+
+    #expect(outcome.targetState == .publishedPartial)
+    let meeting = try await readMeeting(fixture, meetingID)
+    #expect(meeting.state == "published_partial")
+    let notePath = try #require(meeting.vaultNotePath)
+    let note = try String(contentsOfFile: notePath, encoding: .utf8)
+    #expect(note.contains("  - auricle/needs-summary"))
+    #expect(note.contains("  - auricle/needs-attribution"))
+    #expect(!note.contains("## Action Items"))
+    #expect(!note.contains("## Decisions"))
+    #expect(note.contains("## Transcript"))
+}
+
+@Test func aMissingSummaryStillFailsAsSummaryArtifactUnreadable() async throws {
+    let fixture = try makeFixture(writeValidSummary: false)
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let meetingID = MeetingID.generate()
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+
+    let outcome = try await fixture.run(meetingID: meetingID)
+
+    guard case let .failed(targetState, errorClass, _, _) = outcome else {
+        Issue.record("expected .failed outcome, got \(outcome)")
+        return
+    }
+    #expect(targetState == .persistFailed)
+    #expect(errorClass == "summary_artifact_unreadable")
+}

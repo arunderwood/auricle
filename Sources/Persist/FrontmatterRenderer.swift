@@ -19,6 +19,9 @@ public enum FrontmatterRenderer {
         if meeting.needsCalendarEnrichment {
             tags.append("auricle/needs-calendar-enrichment")
         }
+        if meeting.needsSummary {
+            tags.append("auricle/needs-summary")
+        }
 
         var auricleFields: [(Node, Node)] = [
             (plainScalar("meeting_id"), quotedScalar(meeting.meetingID.rawValue)),
@@ -86,8 +89,8 @@ public enum FrontmatterRenderer {
     private static func renderBody(_ meeting: MeetingForFrontmatter) -> String {
         [
             meeting.summary,
-            renderQuotedItemSection(heading: "Action Items", items: meeting.actionItems),
-            renderQuotedItemSection(heading: "Decisions", items: meeting.decisions),
+            meeting.needsSummary ? "" : renderQuotedItemSection(heading: "Action Items", items: meeting.actionItems),
+            meeting.needsSummary ? "" : renderQuotedItemSection(heading: "Decisions", items: meeting.decisions),
             renderTranscriptSection(meeting.transcriptSegments),
         ]
         .filter { !$0.isEmpty }

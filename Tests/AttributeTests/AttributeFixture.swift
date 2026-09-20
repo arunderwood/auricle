@@ -71,10 +71,10 @@ struct AttributeFixture {
         return try (Data(contentsOf: url("transcript.json")), Data(contentsOf: url("diarization.json")))
     }
 
-    func run(_ mode: AttributionStage.Mode, glossary: Glossary = Glossary()) async -> WorkerExitStatus {
+    func run(_ mode: AttributionStage.Mode, glossary: Glossary = Glossary(), reattribute: Bool = false) async -> WorkerExitStatus {
         await AttributionStage.execute(
             meetingID: meetingID, mode: mode, stateStore: store, stageRunner: runner,
-            telemetryRecorder: recorder, glossary: glossary,
+            telemetryRecorder: recorder, glossary: glossary, reattribute: reattribute,
         )
     }
 

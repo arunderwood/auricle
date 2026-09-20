@@ -80,7 +80,7 @@ public enum PersistStage {
     /// Reads `summary.json` from `cacheDirectory`, fetches `meetingID`'s row,
     /// publishes the rendered note, updates `meetings.vault_note_path`, and
     /// returns through `stageRunner.run` so the `persisting` →
-    /// `published`/`persist_failed` transition and its `stage_events` rows are
+    /// `published`/`published_partial`/`persist_failed` transition and its `stage_events` rows are
     /// always the two-transaction pattern's own writes, never this stage's.
     ///
     /// The stage is never told which path it is on. A run is a re-publish
@@ -160,7 +160,8 @@ public enum PersistStage {
 
         try await stateStore.setVaultNotePath(meetingID: meetingID.rawValue, path: writtenURL.path)
 
-        return .completed(targetState: .published, metadataJSON: encodeMetadataJSON(vaultNotePath: writtenURL.path))
+        let target: PipelineState = artifact.needsSummary ? .publishedPartial : .published
+        return .completed(targetState: target, metadataJSON: encodeMetadataJSON(vaultNotePath: writtenURL.path))
     }
 
     /// Picks the re-publish path (Decision 2.3) or the fresh-publish path
@@ -285,6 +286,7 @@ public enum PersistStage {
             supersedes: supersedes,
             needsAttribution: resolved.artifact.needsAttribution,
             needsCalendarEnrichment: resolved.artifact.needsCalendarEnrichment,
+            needsSummary: resolved.artifact.needsSummary,
             summary: resolved.artifact.summary,
             actionItems: resolved.artifact.actionItems.map { QuotedItem(text: $0.text, quote: $0.quote) },
             decisions: resolved.artifact.decisions.map { QuotedItem(text: $0.text, quote: $0.quote) },

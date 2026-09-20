@@ -21,6 +21,10 @@ public struct SummaryArtifact: Codable, Equatable, Sendable {
     public let selfWikilink: String?
     public let needsAttribution: Bool
     public let needsCalendarEnrichment: Bool
+    /// Set on the stub a failed summarize leaves for `--publish-anyway`: the
+    /// note publishes without a summary, action items or decisions, and the
+    /// meeting completes into `published_partial`.
+    public let needsSummary: Bool
     /// One paragraph, already wikilinked.
     public let summary: String
     public let actionItems: [QuotedItemArtifact]
@@ -34,6 +38,7 @@ public struct SummaryArtifact: Codable, Equatable, Sendable {
         case selfWikilink = "self_wikilink"
         case needsAttribution = "needs_attribution"
         case needsCalendarEnrichment = "needs_calendar_enrichment"
+        case needsSummary = "needs_summary"
         case summary
         case actionItems = "action_items"
         case decisions
@@ -47,6 +52,7 @@ public struct SummaryArtifact: Codable, Equatable, Sendable {
         selfWikilink: String?,
         needsAttribution: Bool,
         needsCalendarEnrichment: Bool,
+        needsSummary: Bool = false,
         summary: String,
         actionItems: [QuotedItemArtifact],
         decisions: [QuotedItemArtifact],
@@ -58,10 +64,27 @@ public struct SummaryArtifact: Codable, Equatable, Sendable {
         self.selfWikilink = selfWikilink
         self.needsAttribution = needsAttribution
         self.needsCalendarEnrichment = needsCalendarEnrichment
+        self.needsSummary = needsSummary
         self.summary = summary
         self.actionItems = actionItems
         self.decisions = decisions
         self.transcriptSegments = transcriptSegments
+    }
+
+    /// An absent `needs_summary` key means a complete summary.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        calendarEventTitle = try container.decodeIfPresent(String.self, forKey: .calendarEventTitle)
+        attendees = try container.decode([String].self, forKey: .attendees)
+        selfWikilink = try container.decodeIfPresent(String.self, forKey: .selfWikilink)
+        needsAttribution = try container.decode(Bool.self, forKey: .needsAttribution)
+        needsCalendarEnrichment = try container.decode(Bool.self, forKey: .needsCalendarEnrichment)
+        needsSummary = try container.decodeIfPresent(Bool.self, forKey: .needsSummary) ?? false
+        summary = try container.decode(String.self, forKey: .summary)
+        actionItems = try container.decode([QuotedItemArtifact].self, forKey: .actionItems)
+        decisions = try container.decode([QuotedItemArtifact].self, forKey: .decisions)
+        transcriptSegments = try container.decode([TranscriptSegmentArtifact].self, forKey: .transcriptSegments)
     }
 }
 
