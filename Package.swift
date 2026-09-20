@@ -102,7 +102,10 @@ let package = Package(
         ),
         .target(
             name: "Pipeline",
-            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "Attribute", "Persist", "Notifications", "Transcribe"],
+            dependencies: [
+                "Core", "State", "Telemetry", "Orchestrator", "Attribute", "Persist", "Notifications", "Transcribe", "TranscriberInterface",
+                "ReviewDiarization", "AIReviewerInterface", "Summarize", "SummarizerInterface", "CalendarInterface",
+            ],
             path: "Sources/Pipeline",
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
@@ -257,7 +260,9 @@ let package = Package(
             name: "PipelineTests",
             dependencies: [
                 "Pipeline", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "Attribute", "Persist", "Notifications",
-                "DiarizerInterface", "Transcribe",
+                "DiarizerInterface", "Transcribe", "TranscriberInterface", "ReviewDiarization", "AIReviewerInterface", "Summarize",
+                "SummarizerInterface", "CalendarInterface",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Tests/PipelineTests",
