@@ -11,7 +11,8 @@
 #   scripts/check.sh lint       formatting, linting, workflow linting
 #   scripts/check.sh swift      SwiftPM debug build + tests
 #   scripts/check.sh release    SwiftPM release build
-#   scripts/check.sh app        tuist generate + both Xcode schemes
+#   scripts/check.sh app        tuist generate + both Xcode schemes + the
+#                               embedded-worker assertion
 #
 # Deliberately excludes ci.yml's two git-hygiene checks (tracked generated
 # project, dirty tree after `tuist generate`): those assert the working tree
@@ -64,6 +65,15 @@ phase_release() {
     swift build -c release
 }
 
+# The value of one build setting for the AuricleApp target, read from the
+# `$build_settings` text `phase_app` captures. Filtering by target name keeps
+# this right if the scheme ever builds more than one target.
+app_build_setting() {
+    printf '%s\n' "$build_settings" | awk -v key="$1" '
+        /^Build settings for action build and target / { in_app = ($NF == "AuricleApp:") }
+        in_app && $1 == key && $2 == "=" { sub(/^[^=]*= /, ""); print; exit }'
+}
+
 phase_app() {
     echo "==> tuist generate"
     (cd App && mise exec -- tuist generate --no-open)
@@ -72,11 +82,47 @@ phase_app() {
     # `tuist generate` resolves the package graph into the workspace's derived
     # data; xcodebuild against the bare project computes a different derived
     # data path and re-resolves every package from scratch.
+    build_settings=$(xcodebuild -workspace App/Auricle.xcworkspace -scheme AuricleApp -destination "platform=macOS" -showBuildSettings)
+    target_build_dir=$(app_build_setting TARGET_BUILD_DIR)
+    product_name=$(app_build_setting FULL_PRODUCT_NAME)
+    executable_folder=$(app_build_setting EXECUTABLE_FOLDER_PATH)
+    case "$product_name" in
+        *.app) ;;
+        *)
+            echo "error: could not read AuricleApp's product name from xcodebuild -showBuildSettings." >&2
+            exit 1
+            ;;
+    esac
+    if [ -z "$target_build_dir" ] || [ -z "$executable_folder" ]; then
+        echo "error: could not read AuricleApp's build directory from xcodebuild -showBuildSettings." >&2
+        exit 1
+    fi
+
+    # An incremental build reuses the bundle on disk, and removing the embed
+    # step from Project.swift does not delete a binary an earlier build
+    # already copied in. Building from no bundle makes the assertion below
+    # describe this build, not the last one.
+    rm -rf "${target_build_dir:?}/$product_name"
+
     echo "==> xcodebuild AuricleApp"
     xcodebuild -workspace App/Auricle.xcworkspace -scheme AuricleApp -destination "platform=macOS" build
 
     echo "==> xcodebuild auricle-cli"
     xcodebuild -workspace App/Auricle.xcworkspace -scheme auricle-cli -destination "platform=macOS" build
+
+    # Nothing else proves the worker is embedded: `swift test` never reaches
+    # App/, and both builds succeed without the copy step. The dispatcher
+    # resolves the worker with Bundle.main.url(forAuxiliaryExecutable:), which
+    # looks in the bundle's executable folder, so that folder is where the
+    # binary has to be.
+    echo "==> auricle-cli embedded in $product_name"
+    embedded_cli="$target_build_dir/$executable_folder/auricle-cli"
+    if [ ! -f "$embedded_cli" ] || [ ! -x "$embedded_cli" ]; then
+        echo "error: $embedded_cli is missing or not executable." >&2
+        echo "SubprocessDispatcher finds the worker with Bundle.main.url(forAuxiliaryExecutable: \"auricle-cli\"), so every subprocess dispatch from the app would fail." >&2
+        echo "Check the copyFiles and productName settings in App/Project.swift." >&2
+        exit 1
+    fi
 }
 
 echo "==> mise install"
