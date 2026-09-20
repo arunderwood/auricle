@@ -41,5 +41,5 @@ Epic 4 exits through two gates. Part A guards the pipeline plumbing on every PR.
 ## Design Notes
 
 - `PipelineFixture` lives in `PipelineTests`, so `IntegrationTests` cannot import it. It scripts workers with closures and an in-memory store; this gate needs the real workers and a file database, so it has its own harness.
-- The publish-anyway note carries no `auricle/needs-attribution` tag today: the attribute stage writes `Speaker_N` to `Speaker_N` for every speaker, and `SummaryArtifactMapper.needsAttribution` counts that as attributed. Story 4.6's spec says the tag should be present. Part A asserts the recorded completion path (`publish_anyway`) instead.
+- Part A builds the stub transcript the way WhisperKit does (every utterance `Speaker_1`), so the note's speakers can only come from the `diarization.json` join. It asserts the publish-anyway note carries `auricle/needs-attribution`.
 - Part B's path check is shape-only (`YYYY-MM-DD-<slug>.md` at `meetings.vault_note_path`); the exact-name check is Part A's.
