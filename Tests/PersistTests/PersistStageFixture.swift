@@ -164,14 +164,6 @@ func plantNote(meetingID: MeetingID, supersedes: String? = nil, at url: URL) thr
     try Data(markdown.utf8).write(to: url)
 }
 
-/// The meeting row's stored note path, dropped as a crash after the vault
-/// write would leave it.
-func clearVaultNotePath(_ fixture: TestFixture, _ meetingID: MeetingID) throws {
-    try fixture.database.write { db in
-        try db.execute(sql: "UPDATE meetings SET vault_note_path = NULL WHERE id = ?", arguments: [meetingID.rawValue])
-    }
-}
-
 func requireCompleted(_ outcome: StageRunner.StageOutcome) throws {
     guard case let .completed(targetState, _) = outcome else {
         Issue.record("expected .completed outcome, got \(outcome)")

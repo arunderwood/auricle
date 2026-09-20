@@ -12,10 +12,25 @@ import Testing
 private let originalName = "\(expectedLocalDate)-tuesday-sync.md"
 private let firstRerunName = "\(expectedLocalDate)-tuesday-sync--rerun-\(expectedFirstRerunDate).md"
 
-private func insertMeeting(_ fixture: TestFixture) async throws -> MeetingID {
+private func insertMeeting(_ fixture: TestFixture, vaultNotePath: String? = nil) async throws -> MeetingID {
     let meetingID = MeetingID.generate()
-    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue))
+    try await fixture.store.insertMeeting(makeMeetingRow(id: meetingID.rawValue, vaultNotePath: vaultNotePath))
     return meetingID
+}
+
+/// A recorded note path whose file is gone, as a rename or move in Obsidian
+/// leaves it: the only state that sends the stage looking for the note by id.
+private func missingNotePath(_ fixture: TestFixture) -> String {
+    fixture.meetingsSubdirURL.appendingPathComponent("moved-away.md").path
+}
+
+private func recordMissingNotePath(_ fixture: TestFixture, _ meetingID: MeetingID) async throws {
+    try await fixture.database.write { db in
+        try db.execute(
+            sql: "UPDATE meetings SET vault_note_path = ? WHERE id = ?",
+            arguments: [missingNotePath(fixture), meetingID.rawValue],
+        )
+    }
 }
 
 /// Publishes the meeting's first note into the fixture's `Meetings` folder.
@@ -239,7 +254,7 @@ private func files(in directory: URL) throws -> Set<String> {
     // A hand edit makes the original the most recently modified file, so only
     // the `supersedes` link can point the lookup at the first re-run.
     try setModificationDate(Date().addingTimeInterval(3600), of: originalURL)
-    try clearVaultNotePath(fixture, meetingID)
+    try await recordMissingNotePath(fixture, meetingID)
     try reviseSummary(fixture, to: "Third summary.")
 
     try await requireCompleted(fixture.run(meetingID: meetingID, clock: clock))
@@ -256,7 +271,7 @@ private func files(in directory: URL) throws -> Set<String> {
 @Test func whenNoNoteSupersedesTheOthersTheNewestByModificationDateIsThePredecessor() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let meetingID = try await insertMeeting(fixture)
+    let meetingID = try await insertMeeting(fixture, vaultNotePath: missingNotePath(fixture))
     let newerURL = fixture.meetingsSubdirURL.appendingPathComponent("alpha.md")
     let olderURL = fixture.meetingsSubdirURL.appendingPathComponent("omega.md")
     try plantNote(meetingID: meetingID, at: newerURL)
@@ -298,7 +313,7 @@ private func plantUnmatchableFiles(in folder: URL, meetingID: MeetingID) throws 
 @Test func unreadableAndNonNoteFilesAreNeverTakenForTheMeetingsNote() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let meetingID = try await insertMeeting(fixture)
+    let meetingID = try await insertMeeting(fixture, vaultNotePath: missingNotePath(fixture))
     let planted = try plantUnmatchableFiles(in: fixture.meetingsSubdirURL, meetingID: meetingID)
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: planted.unreadable.path) }
 
@@ -315,7 +330,7 @@ private func plantUnmatchableFiles(in folder: URL, meetingID: MeetingID) throws 
     let meetingID = try await insertMeeting(fixture)
     let originalURL = try await publishOriginal(fixture, meetingID)
     let originalBytes = try Data(contentsOf: originalURL)
-    try clearVaultNotePath(fixture, meetingID)
+    try await recordMissingNotePath(fixture, meetingID)
     let planted = try plantUnmatchableFiles(in: fixture.meetingsSubdirURL, meetingID: meetingID)
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: planted.unreadable.path) }
     try reviseSummary(fixture)
@@ -331,7 +346,7 @@ private func plantUnmatchableFiles(in folder: URL, meetingID: MeetingID) throws 
 @Test func aNoteWhoseFrontmatterNamesADifferentMeetingIsNotMatched() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let meetingID = try await insertMeeting(fixture)
+    let meetingID = try await insertMeeting(fixture, vaultNotePath: missingNotePath(fixture))
     let otherURL = fixture.meetingsSubdirURL.appendingPathComponent("someone-elses.md")
     try plantNote(meetingID: MeetingID.generate(), at: otherURL)
     let otherBytes = try Data(contentsOf: otherURL)
@@ -344,10 +359,29 @@ private func plantUnmatchableFiles(in folder: URL, meetingID: MeetingID) throws 
     #expect(try Data(contentsOf: otherURL) == otherBytes)
 }
 
-@Test func aNoteInAHiddenFolderIsNotSearched() async throws {
+@Test func aMeetingWithNoRecordedPathIsAFreshPublishAndNeverScans() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     let meetingID = try await insertMeeting(fixture)
+    // A scan would adopt this note as the predecessor and write a re-run that
+    // supersedes it; a fresh publish leaves it alone and writes the standard name.
+    let plantedURL = fixture.meetingsSubdirURL.appendingPathComponent("carries-the-meeting-id.md")
+    try plantNote(meetingID: meetingID, at: plantedURL)
+    let plantedBytes = try Data(contentsOf: plantedURL)
+
+    try await requireCompleted(fixture.run(meetingID: meetingID, clock: fixedTimeSource(at: firstRerunInstant)))
+
+    #expect(try listedFiles(fixture) == ["carries-the-meeting-id.md", originalName])
+    let content = try String(contentsOf: fixture.meetingsSubdirURL.appendingPathComponent(originalName), encoding: .utf8)
+    #expect(!content.contains("supersedes"))
+    #expect(try Data(contentsOf: plantedURL) == plantedBytes)
+    #expect(try await readMeeting(fixture, meetingID).vaultNotePath == fixture.meetingsSubdirURL.appendingPathComponent(originalName).path)
+}
+
+@Test func aNoteInAHiddenFolderIsNotSearched() async throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let meetingID = try await insertMeeting(fixture, vaultNotePath: missingNotePath(fixture))
     try plantNote(meetingID: meetingID, at: fixture.meetingsSubdirURL.appendingPathComponent(".trash/old.md"))
 
     try await requireCompleted(fixture.run(meetingID: meetingID))

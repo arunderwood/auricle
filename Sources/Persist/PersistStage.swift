@@ -85,8 +85,9 @@ public enum PersistStage {
     ///
     /// The stage is never told which path it is on. A run is a re-publish
     /// exactly when the meeting already has a note: the file `vaultNotePath`
-    /// names, or failing that the note in the configured meetings folder whose
-    /// `auricle.meeting_id` is this meeting's. Otherwise it is a fresh publish.
+    /// names or, when that file is gone, the note in the configured meetings
+    /// folder whose `auricle.meeting_id` is this meeting's. A meeting with no
+    /// recorded `vaultNotePath`, or with no note found, is a fresh publish.
     /// Output identical to what a vault file already holds is reused rather
     /// than written again, so re-running the stage never leaves a duplicate
     /// note behind.
@@ -194,13 +195,22 @@ public enum PersistStage {
 
     /// The meeting's existing note, if it has one. The file `vaultNotePath`
     /// names wins wherever it sits, including outside the configured folder.
-    /// Without it (never recorded, or the user renamed or moved the note) the
-    /// configured meetings folder is searched for the note by `meeting_id`.
+    /// A recorded path whose file is gone (the user renamed or moved the note)
+    /// sends the search to the configured meetings folder, by `meeting_id`.
+    ///
+    /// A meeting with no recorded path has never been published, so it has no
+    /// predecessor and nothing is scanned: the scan costs a read per file in
+    /// the folder, and a first publish is on the stage's latency budget. A
+    /// write whose path was never recorded is found by `VaultWriter.write`,
+    /// which reuses the file that already holds the bytes.
     ///
     /// Only the search needs the folder, so a stored note is not checked
     /// against the configuration until a re-run has to be written next to it.
     private static func findPredecessor(resolved: ResolvedMeeting, vaultLocation: VaultLocation) throws -> URL? {
-        if let storedPath = resolved.meeting.vaultNotePath, FileManager.default.fileExists(atPath: storedPath) {
+        guard let storedPath = resolved.meeting.vaultNotePath else {
+            return nil
+        }
+        if FileManager.default.fileExists(atPath: storedPath) {
             return URL(fileURLWithPath: storedPath)
         }
         let meetingsDirectory = try VaultWriter.resolveMeetingsDirectory(
