@@ -1218,7 +1218,7 @@ Telemetry writes happen at deterministic stage boundaries; the schema is locked 
 | Event | Emitted at | `metadata_json` content |
 |---|---|---|
 | `started` | Txn A of every stage | `{}` (just a timestamp marker) |
-| `completed` | Txn B of every stage on success | `{"duration_ms": ..., "stage_specific": <Codable type>}` |
+| `completed` | Txn B of every stage on success | The stage's own payload, as a flat object (see "Stage-specific `completed` metadata content" below). `duration_ms` is a column, not a JSON key. |
 | `failed` | Txn B of every stage on failure | `{"duration_ms": ..., "error_class": "...", "error_message": "...", "category": "transient|permanent|user_actionable|benign_terminal"}` |
 | `retried` | At each retry attempt within a stage's lifetime | `{"attempt_number": N, "previous_error_class": "...", "backoff_ms": ...}` |
 
@@ -1228,12 +1228,19 @@ Telemetry writes happen at deterministic stage boundaries; the schema is locked 
 enum StageMetadata: Codable {
     case capture(CaptureMeta)
     case transcribe(TranscribeMeta)
+    case reviewDiarization(ReviewDiarizationMeta)
     case attribute(AttributeMeta)
     case summarize(SummarizeMeta)
     case persist(PersistMeta)
     case notify(NotifyMeta)
 }
 ```
+
+`StageMetadata` is the catalogue of payload types. It is not the stored shape. Each `*Meta` struct declares explicit snake_case `CodingKeys`. A stage encodes its own `*Meta` directly and passes the string to `StageOutcome.completed(metadataJSON:)`, so the stored `metadata_json` is the flat object shown in the examples below. A flat object has no case key, so a reader picks the payload type from the row's `stage` column.
+
+The enum's own `Codable` conformance wraps the payload under a snake_case case key (`{"transcribe": {...}}`, `{"review_diarization": {...}}`). The key is there because `CaptureMeta` and `AttributeMeta` have identical empty payloads, and only a key tells them apart. Nothing outside the round-trip tests encodes or decodes the enum, and no stage writes the wrapped form to `stage_events`. A stage that used it would nest its payload one level deeper than the examples below.
+
+Payload sources today: `transcribe` from `TranscribeStage` (`Sources/Transcribe`), `summarize` from `SummarizeStage` (`Sources/Summarize`), `persist` from `PersistStage` (`Sources/Persist`). `capture`, `reviewing_diarization`, `attribute` and `notify` have a `*Meta` type but no stage that writes it yet. The story that adds one encodes its `*Meta` directly, as the three stages above do.
 
 A `metadata_schema_version` column on `stage_events` allows migration of metadata shapes over time independently of the table schema.
 

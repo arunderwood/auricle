@@ -17,9 +17,9 @@ public enum StageEventKind: String, Sendable, Equatable {
 /// `targetState` are the closed enums (`PipelineStage`/`PipelineState`), not
 /// raw strings — `.rawValue` conversion happens once, at the boundary into
 /// `StateStore`. `metadataJSON` is already-serialized, snake_case-dialect
-/// JSON (AR-PAT-2): the stage that produced it did its own
-/// `StageMetadata` → JSON encoding at its own call site (Decision 4.5's
-/// "typed at the call site" step); this logger's job is routing the result
+/// JSON (AR-PAT-2): the stage that produced it encoded its own `*Meta`
+/// payload at its own call site (Decision 4.5's "typed at the call site"
+/// step); this logger's job is routing the result
 /// to the right `StateStore` write, not re-deriving it.
 ///
 /// `expectedState` and `expectedUpdatedAt` make the state write conditional
