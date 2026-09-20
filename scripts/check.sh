@@ -10,7 +10,7 @@
 #   scripts/check.sh            every phase, in order
 #   scripts/check.sh lint       formatting, linting, workflow linting
 #   scripts/check.sh swift      SwiftPM debug build + tests
-#   scripts/check.sh release    SwiftPM release build
+#   scripts/check.sh release    SwiftPM release build + Log.debug strip check
 #   scripts/check.sh app        tuist generate + both Xcode schemes
 #
 # Deliberately excludes ci.yml's two git-hygiene checks (tracked generated
@@ -58,10 +58,14 @@ phase_swift() {
 }
 
 phase_release() {
-    # deferred-work.md:41-43: automates the exact release build already
-    # manually run and accepted as sufficient during Story 1.3's review.
     echo "==> swift build -c release"
     swift build -c release
+
+    # A successful release build does not show that `Log.debug` is stripped:
+    # the code compiles the same with its `#if DEBUG` guard deleted. The
+    # tests run in debug, so only this step sees the release machine code.
+    echo "==> verify Log.debug is stripped from the release build"
+    scripts/verify-release-debug-log-stripped.sh
 }
 
 phase_app() {
