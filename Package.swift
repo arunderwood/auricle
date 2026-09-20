@@ -134,7 +134,14 @@ let package = Package(
             path: "Tests/OrchestratorTests",
         ),
         .testTarget(name: "PermissionsTests", dependencies: ["Permissions", "TestSupport"], path: "Tests/PermissionsTests"),
-        .testTarget(name: "CaptureTests", dependencies: ["Capture", "TestSupport"], path: "Tests/CaptureTests"),
+        .testTarget(
+            name: "CaptureTests",
+            dependencies: [
+                "Capture", "TestSupport", "Core", "State", "Telemetry",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/CaptureTests",
+        ),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "TranscriberInterfaceTests", dependencies: ["TranscriberInterface", "TestSupport"], path: "Tests/TranscriberInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
