@@ -123,6 +123,16 @@ private func quotes(under heading: String, in note: String) -> [String] {
     return result
 }
 
+private extension Harness {
+    /// A mapping is written against a diarization, so it can only follow one.
+    func attribute(_ id: MeetingID, names: [String: String]?) async throws {
+        guard let names else { return }
+        let first = await runner().run(meetingID: id, options: RunOptions(to: .reviewDiarization))
+        #expect(first == RunResult(exitCode: 0))
+        try AttributionFile(speakers: names).write(for: id)
+    }
+}
+
 @Test(arguments: [oneToOne, fourWayPublishAnyway])
 private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(scenario: Scenario) async throws {
     let harness = try await Harness(scenario: scenario)
@@ -137,9 +147,7 @@ private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(sce
     let audioPath = try #require(imported.audioCachePath)
     #expect(FileManager.default.fileExists(atPath: audioPath))
 
-    if let names = scenario.speakerNames {
-        try AttributionFile(speakers: names).write(for: id)
-    }
+    try await harness.attribute(id, names: scenario.speakerNames)
 
     // Run
     let result = await harness.runner().run(meetingID: id, options: RunOptions(publishAnyway: scenario.speakerNames == nil))

@@ -20,7 +20,7 @@ public struct AttributionInputs: Sendable {
     }
 
     private static let diarizationName = "diarization.json"
-    private static let suggestionsName = "diarization_suggestions.json"
+    private static let suggestionsName = DiarizationDependents.suggestionsFileName
     private static let calendarName = "calendar.json"
 
     public enum LoadError: Error, Equatable, Sendable {

@@ -199,3 +199,51 @@ private func aMeetingOneSecondUnderItsBudgetIsLeftAloneAndOneAtItIsSwept(_ budge
     #expect(try await store.fetchMeeting(id: underBudget)?.state == state)
     #expect(try await store.fetchMeeting(id: atBudget)?.state == budgetCase.stateAfterSweep)
 }
+
+// MARK: - `run`: the guarded start
+
+@Test func runWritesNothingWhenTheMeetingIsNotInTheStateTheCallerRead() async throws {
+    let store = try makeStore()
+    let id = meetingID("GRD2")
+    try await store.insertMeeting(makeMeeting(id: id, state: "awaiting_attribution"))
+    let runner = makeRunner(store: store)
+    let resolvedID = try #require(MeetingID(ulid: id))
+    let ran = LockedFlag()
+
+    await #expect(throws: StateStoreError.staleWrite(id: id)) {
+        _ = try await runner.run(stage: .notify, meetingID: resolvedID, activeState: .published, expectedState: .published) {
+            ran.set()
+            return .completed(targetState: .awaitingVerification)
+        }
+    }
+
+    #expect(!ran.isSet)
+    #expect(try await store.fetchMeeting(id: id)?.state == "awaiting_attribution")
+    #expect(try await store.fetchStageEvents(meetingID: id).isEmpty)
+}
+
+@Test func runProceedsWhenTheMeetingIsInTheStateTheCallerRead() async throws {
+    let store = try makeStore()
+    let id = meetingID("GRD3")
+    try await store.insertMeeting(makeMeeting(id: id, state: "published"))
+    let runner = makeRunner(store: store)
+    let resolvedID = try #require(MeetingID(ulid: id))
+
+    _ = try await runner.run(stage: .notify, meetingID: resolvedID, activeState: .published, expectedState: .published) {
+        .completed(targetState: .awaitingVerification)
+    }
+
+    #expect(try await store.fetchMeeting(id: id)?.state == "awaiting_verification")
+}
+
+private final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    var isSet: Bool {
+        lock.withLock { flag }
+    }
+
+    func set() {
+        lock.withLock { flag = true }
+    }
+}

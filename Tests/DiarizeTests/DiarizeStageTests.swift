@@ -201,3 +201,33 @@ func aDiarizerErrorFoldsToItsStableClass(error: DiarizerError, errorClass: Strin
     try await expectFailure(fixture, diarizer: StubDiarizer(.success([raw(1, 0, 3)])), errorClass: "snippet_write_failed", message: "snippetWriteFailed")
     #expect(!DiarizeErrorClass.retryable.contains("snippet_write_failed"))
 }
+
+@Test func rewritingTheArtifactRemovesWhatWasWrittenAgainstTheOldOne() async throws {
+    let fixture = DiarizeFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantAudio(seconds: 30)
+    let directory = try fixture.cacheDirectory()
+    let bystander = directory.appendingPathComponent("transcript.json")
+    for name in ["attribution.json", "diarization_suggestions.json", "transcript.json"] {
+        try AtomicWriter.write(Data("{}".utf8), to: directory.appendingPathComponent(name))
+    }
+
+    _ = try await run(fixture, diarizer: StubDiarizer(.success([raw(4, 0, 12), raw(9, 12, 28)])))
+
+    #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("attribution.json").path))
+    #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("diarization_suggestions.json").path))
+    #expect(FileManager.default.fileExists(atPath: bystander.path))
+    #expect(try FileManager.default.fileExists(atPath: fixture.artifactURL().path))
+}
+
+@Test func aFailedDiarizationLeavesTheOldArtifactAndItsDependents() async throws {
+    let fixture = DiarizeFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantAudio(seconds: 30)
+    let attribution = try fixture.cacheDirectory().appendingPathComponent("attribution.json")
+    try AtomicWriter.write(Data("{}".utf8), to: attribution)
+
+    try await expectFailure(fixture, diarizer: StubDiarizer(.failure(DiarizerError.diarizationFailed)), errorClass: "diarize_failed")
+
+    #expect(FileManager.default.fileExists(atPath: attribution.path))
+}

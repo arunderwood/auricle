@@ -7,6 +7,10 @@ import Telemetry
 /// immutable `diarization.json`, and cuts the per-speaker snippets the
 /// attribution sheet plays.
 ///
+/// Rewriting `diarization.json` removes the artifacts that describe the old
+/// one (`DiarizationDependents`) first, so a crash between the two leaves
+/// nothing stale behind.
+///
 /// It is a step, not a stage of its own. It records no `stage_events` row and
 /// touches no state: `PipelineStage` has no `diarize` case, and the transcribe
 /// stage that runs it in the same subprocess records the `DiarizeMeta` this
@@ -41,6 +45,7 @@ public enum DiarizeStage {
         let directory: URL
         do {
             directory = try CacheArtifactWriter.cacheDirectory(for: meetingID)
+            try DiarizationDependents.remove(in: directory)
             try CacheArtifactWriter.write(artifact, for: meetingID, named: artifactName, schemaVersion: schemaVersion)
         } catch {
             throw DiarizeStageError.artifactWriteFailed

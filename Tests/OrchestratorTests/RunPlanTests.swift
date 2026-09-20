@@ -84,8 +84,8 @@ func aBareRunResumesAtTheStageTheStateNeeds(state: PipelineState, start: RunStag
     #expect(try plan(options, from: .captured).stages == [.transcribe, .reviewDiarization, .attribute, .summarize])
 }
 
-@Test func onlyRunsOneStageWhateverTheState() throws {
-    #expect(try plan(RunOptions(only: .summarize), from: .awaitingAttribution).stages == [.summarize])
+@Test func onlyRunsOneStage() throws {
+    #expect(try plan(RunOptions(only: .summarize), from: .summarizationFailed).stages == [.summarize])
 }
 
 @Test func toBeforeTheResolvedStartIsAPlanErrorNamingBothStages() throws {
@@ -100,11 +100,49 @@ func aBareRunResumesAtTheStageTheStateNeeds(state: PipelineState, start: RunStag
 func anExplicitFromOrOnlyDoesNotLiftThePermanentFailureRefusal(state: PipelineState) {
     #expect(RunPlan.make(options: RunOptions(from: .summarize), state: state) == .failure(.permanentFailure(state)))
     #expect(RunPlan.make(options: RunOptions(only: .summarize), state: state) == .failure(.permanentFailure(state)))
-    #expect((try? RunPlan.make(options: RunOptions(force: true, from: .summarize), state: state).get())?.stages.first == .summarize)
+    #expect((try? RunPlan.make(options: RunOptions(force: true, from: .transcribe), state: state).get())?.stages.first == .transcribe)
 }
 
 @Test func anExplicitFromBeatsTheStateDerivedStart() throws {
-    #expect(try plan(RunOptions(from: .persist), from: .captured).stages == [.persist, .notify])
+    #expect(try plan(RunOptions(from: .summarize), from: .persistFailed).stages == [.summarize, .persist, .notify])
+}
+
+// MARK: - Impossible starts
+
+@Test(arguments: [
+    (RunStage.notify, PipelineState.awaitingAttribution),
+    (.persist, .captured),
+    (.summarize, .awaitingAttribution),
+    (.attribute, .captured),
+    (.reviewDiarization, .published),
+    (.notify, .awaitingVerification),
+])
+func anExplicitStartTheMeetingHasNotReachedIsRefusedNamingBoth(stage: RunStage, state: PipelineState) throws {
+    for options in [RunOptions(from: stage), RunOptions(only: stage)] {
+        let refusal = try #require(RunPlan.make(options: options, state: state).failure)
+
+        #expect(refusal == .cannotStart(stage: stage, state: state))
+        #expect(refusal.message.contains(stage.rawValue) && refusal.message.contains(state.rawValue))
+    }
+}
+
+@Test(arguments: [PipelineState.captureFailed, .transcriptionFailed])
+func forceDoesNotMakeALaterStageStartableFromAFailedCapture(state: PipelineState) {
+    let result = RunPlan.make(options: RunOptions(force: true, from: .summarize), state: state)
+
+    #expect(result == .failure(.cannotStart(stage: .summarize, state: state)))
+}
+
+@Test(arguments: PipelineState.allCases.filter { ![.recording, .silent, .verified, .discarded, .retentionExpired].contains($0) })
+func transcribeStartsFromEveryRunnableState(state: PipelineState) throws {
+    #expect(try plan(RunOptions(force: true), from: state).stages == RunStage.allCases)
+}
+
+@Test(arguments: PipelineState.allCases)
+func theStageAStateResumesAtCanStartFromThatState(state: PipelineState) {
+    guard let stage = try? plan(RunOptions(), from: state).stages.first else { return }
+
+    #expect(stage.entryStates.contains(state))
 }
 
 // MARK: - Refusals and force
