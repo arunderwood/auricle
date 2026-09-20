@@ -96,7 +96,7 @@ let package = Package(
             path: "Sources/Persist",
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
-        .target(name: "Notifications", dependencies: ["Core", "State"], path: "Sources/Notifications"),
+        .target(name: "Notifications", dependencies: ["Core", "State", "Orchestrator", "Telemetry"], path: "Sources/Notifications"),
         .target(name: "ReviewDiarization", dependencies: ["Core", "State", "Telemetry", "AIReviewerInterface"], path: "Sources/ReviewDiarization"),
 
         // === Concrete strategies ===
@@ -214,6 +214,10 @@ let package = Package(
             path: "Tests/PersistTests",
         ),
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
-        .testTarget(name: "NotificationsTests", dependencies: ["Notifications", "TestSupport"], path: "Tests/NotificationsTests"),
+        .testTarget(
+            name: "NotificationsTests",
+            dependencies: ["Notifications", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", .product(name: "GRDB", package: "GRDB.swift")],
+            path: "Tests/NotificationsTests",
+        ),
     ],
 )
