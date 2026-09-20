@@ -431,3 +431,23 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - closes: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`, "`App/Project.swift`'s bundle-embedding fix (`productName`, `copyFiles`) has no automated regression check"
   resolution: The `app` phase of `scripts/check.sh` deletes the built `AuricleApp.app`, runs both `xcodebuild` builds, and fails unless `Contents/MacOS/auricle-cli` exists and is executable. It reads the bundle location from `xcodebuild -showBuildSettings` (`TARGET_BUILD_DIR`, `FULL_PRODUCT_NAME`, `EXECUTABLE_FOLDER_PATH`), so no derived-data path is hard-coded. `ci.yml` calls the script, so CI runs the check with no workflow change. Removing either the `copyFiles` embed or `productName: "auricle-cli"` from `App/Project.swift` makes `scripts/check.sh app` exit 1 with a message naming both settings.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: A diarization or snippet failure after `transcript.json` is written fails the whole transcribe stage, so a retry repeats transcription.
+  evidence: The approved matrix folds `diarize_*` failures into `transcription_failed`. The transcript is immutable and already on disk at that point, so Story 4.7's supervisor could resume at diarization instead. Whether a diarize failure should block the meeting at all is a design question for 4.7.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: `SpeakerKitModelStore` treats any non-empty model folder as complete, so a partial download is never repaired.
+  evidence: Same heuristic Story 4.1 deferred for WhisperKit. The real SpeakerKit model layout is needed for a file-level check. Unverified: `provision` has never run against the real repository.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: `MonoAudioLoader` converts in chunks with no end-of-stream flush, so the last resampled samples may be lost (unverified, medium if true).
+  evidence: A 44.1 kHz to 16 kHz round trip that compares total sample counts would settle it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: `WhisperKitDiarizer.rawSegments` drops `.multiple` and `.noMatch` segments, so `overlap_ratio` may undercount overlap (unverified, medium if true).
+  evidence: Whether `useExclusiveReconciliation: false` makes SpeakerKit emit per-speaker overlapping segments or `.multiple` is only visible in a live run. Story 4.10 Part B can check it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: The default-run tests never exercise a successful SpeakerKit load, model reuse, or concurrent load sharing.
+  evidence: Only the env-gated live test does. A loader seam in `WhisperKitDiarizer` would allow a stubbed test of `modelLoadCount` and `pendingLoad`. The 30 s NFR-P4 budget is also unverified until a live run.

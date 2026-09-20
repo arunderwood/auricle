@@ -36,6 +36,18 @@ public struct Config: Sendable, Equatable {
         }
     }
 
+    public struct Attribution: Sendable, Equatable {
+        public static let defaultSnippetDurationSeconds = 8
+
+        /// Any positive value is kept as written; the diarization stage clamps
+        /// it to the range a snippet can usefully play.
+        public let snippetDurationSeconds: Int
+
+        public init(snippetDurationSeconds: Int = Attribution.defaultSnippetDurationSeconds) {
+            self.snippetDurationSeconds = snippetDurationSeconds
+        }
+    }
+
     /// Absolute, tilde-expanded, and never defaulted: a default would have to
     /// name one person's vault, and an unset value means "no vault", which the
     /// summarize stage treats as an empty glossary.
@@ -43,15 +55,18 @@ public struct Config: Sendable, Equatable {
     /// Relative to `vaultPath`; never absolute and never climbs out of it.
     public let meetingsSubdir: String
     public let googleCalendar: GoogleCalendar
+    public let attribution: Attribution
 
     public init(
         vaultPath: URL? = nil,
         meetingsSubdir: String = Config.defaultMeetingsSubdir,
         googleCalendar: GoogleCalendar = GoogleCalendar(),
+        attribution: Attribution = Attribution(),
     ) {
         self.vaultPath = vaultPath
         self.meetingsSubdir = meetingsSubdir
         self.googleCalendar = googleCalendar
+        self.attribution = attribution
     }
 
     public static func defaultFileURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
@@ -105,7 +120,16 @@ public struct Config: Sendable, Equatable {
                 clientID: nonEmpty(raw.googleCalendar?.clientID),
                 clientSecret: nonEmpty(raw.googleCalendar?.clientSecret),
             ),
+            attribution: attribution(raw.attribution),
         )
+    }
+
+    private static func attribution(_ raw: RawAttribution?) throws -> Attribution {
+        guard let seconds = raw?.snippetDurationSeconds else { return Attribution() }
+        guard seconds > 0 else {
+            throw ConfigError.invalidValue(key: "attribution.snippet_duration_seconds", reason: "must be a positive number of seconds")
+        }
+        return Attribution(snippetDurationSeconds: seconds)
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
@@ -161,14 +185,24 @@ private struct RawGoogleCalendar: Decodable {
     }
 }
 
+private struct RawAttribution: Decodable {
+    let snippetDurationSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case snippetDurationSeconds = "snippet_duration_seconds"
+    }
+}
+
 private struct RawConfig: Decodable {
     let vaultPath: String?
     let meetingsSubdir: String?
     let googleCalendar: RawGoogleCalendar?
+    let attribution: RawAttribution?
 
     enum CodingKeys: String, CodingKey {
         case vaultPath = "vault_path"
         case meetingsSubdir = "meetings_subdir"
         case googleCalendar = "google_calendar"
+        case attribution
     }
 }

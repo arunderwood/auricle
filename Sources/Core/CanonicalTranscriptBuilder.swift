@@ -17,10 +17,21 @@ import Foundation
 /// to say.
 public enum CanonicalTranscriptBuilder {
     public static func build(_ utterances: [(speakerLabel: String, text: String)]) -> CanonicalTranscript {
+        buildReportingKeptIndices(utterances).transcript
+    }
+
+    /// `build`, plus the positions in `utterances` that survived. The n-th
+    /// kept index is the input position of the transcript's n-th utterance,
+    /// which is how a caller holding per-input data (a segment's timing)
+    /// keeps it aligned after blank utterances are dropped.
+    public static func buildReportingKeptIndices(
+        _ utterances: [(speakerLabel: String, text: String)],
+    ) -> (transcript: CanonicalTranscript, keptIndices: [Int]) {
         var text = ""
         var offset = 0
         var built: [CanonicalTranscript.Utterance] = []
-        for utterance in utterances {
+        var kept: [Int] = []
+        for (position, utterance) in utterances.enumerated() {
             guard let body = canonicalText(utterance.text) else { continue }
             let line = "\(utterance.speakerLabel): \(body)"
             if !built.isEmpty {
@@ -29,10 +40,11 @@ public enum CanonicalTranscriptBuilder {
             }
             let byteCount = line.utf8.count
             built.append(CanonicalTranscript.Utterance(speakerLabel: utterance.speakerLabel, start: offset, end: offset + byteCount))
+            kept.append(position)
             text += line
             offset += byteCount
         }
-        return CanonicalTranscript(text: text, utterances: built)
+        return (CanonicalTranscript(text: text, utterances: built), kept)
     }
 
     /// NFC, every line-break form turned into LF, each line trimmed, blank

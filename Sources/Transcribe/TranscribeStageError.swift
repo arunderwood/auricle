@@ -1,10 +1,11 @@
+import Core
 import TranscriberInterface
 
 /// Every way `TranscribeStage` itself can fail, one case per stable
 /// `errorClass`. No case carries a payload: a path, a model's own message or
 /// transcript text can therefore never reach `stage_events.error_message` or
 /// `metadata_json`, and `String(describing:)` of a case is its own name.
-enum TranscribeStageError: Error, Equatable, CaseIterable {
+enum TranscribeStageError: ClassifiedStageError, Equatable, CaseIterable {
     /// There is no `audio.wav` in the meeting's cache directory.
     case audioMissing
     /// `audio.wav` is present but cannot be opened as audio.
@@ -52,5 +53,11 @@ enum TranscribeStageError: Error, Equatable, CaseIterable {
         }
     }
 
-    static let retryableErrorClasses = Set(allCases.filter(\.isRetryable).map(\.errorClass))
+    var errorMessage: String {
+        String(describing: self)
+    }
+
+    /// The diarization step runs inside this stage's worker, so its
+    /// retryable classes belong to the set the exit code is read from.
+    static let retryableErrorClasses = Set(allCases.filter(\.isRetryable).map(\.errorClass)).union(DiarizeErrorClass.retryable)
 }

@@ -52,6 +52,10 @@ public actor WhisperKitTranscriber: TranscriberStrategy {
     }
 
     public func transcribe(audio: URL, config: TranscriberConfig) async throws -> CanonicalTranscript {
+        try await transcribeTimed(audio: audio, config: config).transcript
+    }
+
+    public func transcribeTimed(audio: URL, config: TranscriberConfig) async throws -> TimedTranscript {
         try Self.requireReadableAudio(at: audio)
         let resolved = try store.resolve(modelID: config.modelID, modelFolder: config.modelFolder)
         let model = try await loadedModel(for: resolved)
@@ -62,7 +66,7 @@ public actor WhisperKitTranscriber: TranscriberStrategy {
         } catch {
             throw TranscriberError.transcriptionFailed
         }
-        return Self.transcript(from: results)
+        return Self.timedTranscript(from: results)
     }
 
     // MARK: - Model loading
@@ -138,8 +142,31 @@ public actor WhisperKitTranscriber: TranscriberStrategy {
 
     // MARK: - Mapping
 
+    struct TimedSegment {
+        let text: String
+        let start: Double
+        let end: Double
+    }
+
     static func transcript(from results: [TranscriptionResult]) -> CanonicalTranscript {
-        transcript(segmentTexts: results.flatMap { $0.segments.map(\.text) })
+        timedTranscript(from: results).transcript
+    }
+
+    static func timedTranscript(from results: [TranscriptionResult]) -> TimedTranscript {
+        timedTranscript(segments: results.flatMap { $0.segments.map { TimedSegment(text: $0.text, start: Double($0.start), end: Double($0.end)) } })
+    }
+
+    /// Timings follow the utterances the builder keeps, so a segment dropped
+    /// for being blank leaves no timing behind and `index` is the position in
+    /// the transcript, not in the segment list.
+    static func timedTranscript(segments: [TimedSegment]) -> TimedTranscript {
+        let built = CanonicalTranscriptBuilder.buildReportingKeptIndices(
+            segments.map { (speakerLabel: speakerLabel, text: removingSpecialTokens(from: $0.text)) },
+        )
+        let timings = built.keptIndices.enumerated().map { utteranceIndex, segmentIndex in
+            UtteranceTiming(index: utteranceIndex, startSeconds: segments[segmentIndex].start, endSeconds: segments[segmentIndex].end)
+        }
+        return TimedTranscript(transcript: built.transcript, utteranceTimings: timings)
     }
 
     /// One utterance per segment. A segment left empty by token removal or

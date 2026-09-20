@@ -17,6 +17,20 @@ import TranscriberInterface
 /// concrete transcriber, no diarizer, and nothing about how a transcript was
 /// produced beyond the `CanonicalTranscript` it gets back.
 public enum TranscribeStage {
+    /// What a diarization step is handed once the transcript is written.
+    public struct DiarizationInput: Sendable {
+        public let meetingID: MeetingID
+        public let transcript: CanonicalTranscript
+        public let utteranceTimings: [UtteranceTiming]
+        public let audio: URL
+    }
+
+    /// The step that diarizes the meeting inside this stage's own transaction,
+    /// injected so this module names no diarizer. It throws only
+    /// `ClassifiedStageError`s, whose class and message become the failure
+    /// row's.
+    public typealias DiarizationStep = @Sendable (DiarizationInput) async throws -> DiarizeMeta
+
     private static let audioArtifactName = "audio.wav"
     private static let transcriptArtifactName = "transcript.json"
     private static let transcriptSchemaVersion = 1
@@ -36,13 +50,14 @@ public enum TranscribeStage {
         stageRunner: StageRunner,
         transcriber: any TranscriberStrategy,
         config: TranscriberConfig = TranscriberConfig(),
+        diarize: DiarizationStep? = nil,
     ) async throws -> StageRunner.StageOutcome {
         guard try await stateStore.fetchMeeting(id: meetingID.rawValue) != nil else {
             throw StateStoreError.meetingNotFound(id: meetingID.rawValue)
         }
         return try await stageRunner.run(stage: .transcribe, meetingID: meetingID, activeState: .transcribing) {
             do {
-                return try await transcribe(meetingID: meetingID, transcriber: transcriber, config: config)
+                return try await transcribe(meetingID: meetingID, transcriber: transcriber, config: config, diarize: diarize)
             } catch {
                 let classified = failure(for: error)
                 return .failed(
@@ -74,26 +89,35 @@ public enum TranscribeStage {
         meetingID: MeetingID,
         transcriber: any TranscriberStrategy,
         config: TranscriberConfig,
+        diarize: DiarizationStep?,
     ) async throws -> StageRunner.StageOutcome {
         let audio = try audioURL(for: meetingID)
         let durationSeconds = try audioDurationSeconds(of: audio)
 
-        let transcript: CanonicalTranscript
+        let timed: TimedTranscript
         do {
-            transcript = try await transcriber.transcribe(audio: audio, config: config)
+            timed = try await transcriber.transcribeTimed(audio: audio, config: config)
         } catch let error as TranscriberError {
             throw TranscribeStageError(error)
         }
 
+        let transcript = timed.transcript
         do {
             try CacheArtifactWriter.write(transcript, for: meetingID, named: transcriptArtifactName, schemaVersion: transcriptSchemaVersion)
         } catch {
             throw TranscribeStageError.transcriptWriteFailed
         }
 
+        let diarizeMeta = try await diarize?(DiarizationInput(
+            meetingID: meetingID,
+            transcript: transcript,
+            utteranceTimings: timed.utteranceTimings,
+            audio: audio,
+        ))
+
         return .completed(
             targetState: .transcribing,
-            metadataJSON: encodeMetadataJSON(config: config, audioDurationSeconds: durationSeconds, transcript: transcript),
+            metadataJSON: encodeMetadataJSON(config: config, audioDurationSeconds: durationSeconds, transcript: transcript, diarize: diarizeMeta),
         )
     }
 
@@ -134,11 +158,17 @@ public enum TranscribeStage {
     /// 4.5 specifies for this row. Encoding these scalar fields cannot fail
     /// in practice, and `work` must not crash the process on the one path
     /// that least needs an escape hatch, so a failure degrades to `{}`.
-    private static func encodeMetadataJSON(config: TranscriberConfig, audioDurationSeconds: Int, transcript: CanonicalTranscript) -> String {
+    private static func encodeMetadataJSON(
+        config: TranscriberConfig,
+        audioDurationSeconds: Int,
+        transcript: CanonicalTranscript,
+        diarize: DiarizeMeta?,
+    ) -> String {
         let meta = TranscribeMeta(
             modelID: config.modelID,
             audioDurationSeconds: audioDurationSeconds,
             transcriptChars: transcript.text.count,
+            diarize: diarize,
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -157,8 +187,8 @@ public enum TranscribeStage {
     /// never an error's own message: a foreign error can embed a path or
     /// transcript text, and `error_message` is persisted in `stage_events`.
     private static func failure(for error: Error) -> (errorClass: String, message: String) {
-        if let stageError = error as? TranscribeStageError {
-            return (stageError.errorClass, String(describing: stageError))
+        if let classified = error as? any ClassifiedStageError {
+            return (classified.errorClass, classified.errorMessage)
         }
         return ("transcribe_unexpected_error", String(reflecting: type(of: error)))
     }

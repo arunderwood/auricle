@@ -114,6 +114,7 @@ let package = Package(
             name: "WhisperKitDiarizer",
             dependencies: [
                 "Core", "DiarizerInterface",
+                .product(name: "SpeakerKit", package: "WhisperKit"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
             path: "Sources/WhisperKitDiarizer",
@@ -145,7 +146,7 @@ let package = Package(
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "TranscriberInterfaceTests", dependencies: ["TranscriberInterface", "TestSupport"], path: "Tests/TranscriberInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
-        .testTarget(name: "DiarizerInterfaceTests", dependencies: ["DiarizerInterface", "TestSupport"], path: "Tests/DiarizerInterfaceTests"),
+        .testTarget(name: "DiarizerInterfaceTests", dependencies: ["DiarizerInterface", "Core", "TestSupport"], path: "Tests/DiarizerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
         .testTarget(name: "SummarizerInterfaceTests", dependencies: ["SummarizerInterface", "TestSupport"], path: "Tests/SummarizerInterfaceTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.
@@ -156,11 +157,18 @@ let package = Package(
             name: "TranscribeTests",
             dependencies: [
                 "Transcribe", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "TranscriberInterface", "WhisperKitTranscriber",
+                "Diarize", "DiarizerInterface",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Tests/TranscribeTests",
         ),
-        .testTarget(name: "DiarizeTests", dependencies: ["Diarize", "TestSupport"], path: "Tests/DiarizeTests"),
+        .testTarget(
+            name: "DiarizeTests",
+            dependencies: [
+                "Diarize", "TestSupport", "Core", "DiarizerInterface", "Telemetry", "WhisperKitDiarizer",
+            ],
+            path: "Tests/DiarizeTests",
+        ),
         .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
         .testTarget(
             name: "SummarizeTests",
@@ -182,7 +190,14 @@ let package = Package(
             ],
             path: "Tests/WhisperKitTranscriberTests",
         ),
-        .testTarget(name: "WhisperKitDiarizerTests", dependencies: ["WhisperKitDiarizer", "TestSupport"], path: "Tests/WhisperKitDiarizerTests"),
+        .testTarget(
+            name: "WhisperKitDiarizerTests",
+            dependencies: [
+                "WhisperKitDiarizer", "TestSupport", "Core", "DiarizerInterface",
+                .product(name: "SpeakerKit", package: "WhisperKit"),
+            ],
+            path: "Tests/WhisperKitDiarizerTests",
+        ),
         // Summarize and its collaborators: the real source is run through the real stage.
         .testTarget(
             name: "GoogleCalendarSourceTests",

@@ -321,6 +321,10 @@ custom_rules:
       # The concrete transcriber's own unit tests construct it to test it, the
       # same non-bypass as the strategy targets' own directories above.
       - ".*/Tests/WhisperKitTranscriberTests/.*\\.swift$"
+      - ".*/Tests/WhisperKitDiarizerTests/.*\\.swift$"
+      # The diarization step's env-gated performance test runs it against the
+      # real diarizer, because a stub cannot measure the 30-minute budget.
+      - ".*/Tests/DiarizeTests/PerformanceTests\\.swift$"
       # The transcribe stage's env-gated performance test runs the stage against
       # the real transcriber, because a stub cannot measure the 30-minute
       # budget. It is the only file in that test target that names it.
