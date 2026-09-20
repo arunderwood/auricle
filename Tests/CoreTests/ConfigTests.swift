@@ -231,3 +231,29 @@ func anUnusableSnippetDurationThrowsInvalidValue(_ value: String) {
         try Config.parse("[attribution]\nsnippet_duration_seconds = 0\n", homeDirectory: home)
     }
 }
+
+@Test func diarizationReviewDefaultsToOffWithHaikuModel() throws {
+    let config = try Config.parse("", homeDirectory: home)
+
+    #expect(config.diarizationReview == Config.DiarizationReview(enabled: false, model: "claude-haiku-4-5"))
+}
+
+@Test func parsesDiarizationReviewKeys() throws {
+    let config = try Config.parse("[diarization_review]\nenabled = true\nmodel = \"claude-sonnet-4-5\"\n", homeDirectory: home)
+
+    #expect(config.diarizationReview.enabled)
+    #expect(config.diarizationReview.model == "claude-sonnet-4-5")
+}
+
+@Test func blankDiarizationReviewModelFallsBackToTheDefault() throws {
+    let config = try Config.parse("[diarization_review]\nmodel = \"\"\n", homeDirectory: home)
+
+    #expect(config.diarizationReview.model == Config.DiarizationReview.defaultModel)
+    #expect(!config.diarizationReview.enabled)
+}
+
+@Test func wrongTypeForDiarizationReviewEnabledIsInvalid() {
+    #expect(throws: ConfigError.self) {
+        try Config.parse("[diarization_review]\nenabled = \"yes\"\n", homeDirectory: home)
+    }
+}

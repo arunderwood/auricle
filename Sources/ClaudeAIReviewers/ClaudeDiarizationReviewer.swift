@@ -25,7 +25,7 @@ private struct ClaudeDiarizationModelEntry: Decodable {
 /// whose speaker labels look wrong. It writes nothing; the caller persists
 /// the result.
 public struct ClaudeDiarizationReviewer: DiarizationReviewerStrategy {
-    public static let defaultModelID = "claude-haiku-4-5"
+    public static let defaultModelID = Config.DiarizationReview.defaultModel
 
     private static let maxTokens = 4096
     /// Computed, not stored: `[String: Any]` is not `Sendable`.

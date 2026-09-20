@@ -1,5 +1,7 @@
+import AIReviewerInterface
 import ArgumentParser
 import CalendarInterface
+import ClaudeAIReviewers
 import ClaudeSummarizer
 import Core
 import Diarize
@@ -7,6 +9,7 @@ import DiarizerInterface
 import Foundation
 import GoogleCalendarSource
 import Orchestrator
+import ReviewDiarization
 import State
 import Summarize
 import SummarizerInterface
@@ -43,6 +46,8 @@ struct InternalStageWorker: AsyncParsableCommand {
             switch stage {
             case .transcribe:
                 try await runTranscribe(meetingID: meetingID)
+            case .reviewDiarization:
+                try await runReviewDiarization(meetingID: meetingID)
             case .summarize:
                 try await runSummarize(meetingID: meetingID)
             default:
@@ -139,6 +144,25 @@ struct InternalStageWorker: AsyncParsableCommand {
             config: { try Config.load() },
             onFailure: { writeStderr("__internal-stage: using the default snippet length (\(type(of: $0))).") },
         )
+    }
+
+    /// Builds the Claude reviewer and hands the meeting to
+    /// `ReviewDiarizationWorker`. The reviewer is built even with the flag off:
+    /// constructing it makes no network call and reads no key.
+    private func runReviewDiarization(meetingID: MeetingID) async throws {
+        let stateStore = try openStateStore()
+        let settings = ReviewDiarizationSettings.loading(
+            config: { try Config.load() },
+            onFailure: { writeStderr("__internal-stage: diarization review is off because the config could not be read (\(type(of: $0))).") },
+        )
+        let exit = await ReviewDiarizationWorker.run(
+            meetingID: meetingID,
+            stateStore: stateStore,
+            stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
+            reviewer: ClaudeDiarizationReviewer(),
+            settings: settings,
+        )
+        try finish(exit, prefixed: true)
     }
 
     /// Wires `SummarizeStage`'s dependencies and hands the meeting to
