@@ -73,13 +73,16 @@ public struct RunArguments: ParsableArguments {
     public init() {}
 }
 
-/// `auricle attribute <id> [--batch]`.
+/// `auricle attribute <id> [--batch] [--speakers "1=Ben,2=Sara"]`.
 public struct AttributeArguments: ParsableArguments {
     @Argument(help: "Meeting ID.")
     public var id: String
 
     @Flag(help: "Apply the last-known speaker mapping instead of opening the GUI.")
     public var batch = false
+
+    @Option(help: "Name speakers without the GUI: comma-separated <number>=<name> pairs, e.g. \"1=Ben,2=Jordan Whitfield\". Speakers left out keep their Speaker_N placeholder.")
+    public var speakers: String?
 
     public init() {}
 }

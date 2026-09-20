@@ -10,7 +10,8 @@ public enum PipelineTransitions {
     ///
     /// Transcribe completes into its own active state (no state sits between
     /// transcribe, diarize and review), so its active state is one of its own
-    /// targets. Summarize completes into `persisting`, which persist runs under.
+    /// targets. Attribute completes into `summarizing`, which summarize runs under,
+    /// and summarize completes into `persisting`, which persist runs under.
     public static func allowedTargets(stage: PipelineStage, activeState: PipelineState) -> Set<PipelineState>? {
         switch (stage, activeState) {
         case (.transcribe, .transcribing):
@@ -19,6 +20,8 @@ public enum PipelineTransitions {
             // A reviewer that times out is a benign passthrough, not a
             // failure state, so the meeting still advances.
             [.awaitingAttribution]
+        case (.attribute, .attributing):
+            [.summarizing]
         case (.summarize, .summarizing):
             [.persisting, .summarizationFailed]
         case (.persist, .persisting):

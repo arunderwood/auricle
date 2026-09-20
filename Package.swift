@@ -83,7 +83,11 @@ let package = Package(
         // === Stages ===
         .target(name: "Transcribe", dependencies: ["Core", "State", "Telemetry", "Orchestrator", "TranscriberInterface", "DiarizerInterface"], path: "Sources/Transcribe"),
         .target(name: "Diarize", dependencies: ["Core", "State", "Telemetry", "DiarizerInterface"], path: "Sources/Diarize"),
-        .target(name: "Attribute", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Attribute"),
+        .target(
+            name: "Attribute",
+            dependencies: ["Core", "State", "Telemetry", "Orchestrator", "DiarizerInterface", "AIReviewerInterface", "VaultGlossary"],
+            path: "Sources/Attribute",
+        ),
         .target(
             name: "Summarize",
             dependencies: ["Core", "State", "Telemetry", "Orchestrator", "SummarizerInterface", "AIReviewerInterface", "CalendarInterface", "VaultGlossary"],
@@ -177,7 +181,15 @@ let package = Package(
             ],
             path: "Tests/DiarizeTests",
         ),
-        .testTarget(name: "AttributeTests", dependencies: ["Attribute", "TestSupport"], path: "Tests/AttributeTests"),
+        .testTarget(
+            name: "AttributeTests",
+            dependencies: [
+                "Attribute", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "AIReviewerInterface", "DiarizerInterface",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            path: "Tests/AttributeTests",
+            resources: [.copy("Fixtures")],
+        ),
         .testTarget(
             name: "SummarizeTests",
             dependencies: [

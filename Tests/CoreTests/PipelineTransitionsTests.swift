@@ -35,8 +35,12 @@ import Testing
     #expect(PipelineTransitions.allowedTargets(stage: .notify, activeState: .published) == [.awaitingVerification])
 }
 
+@Test func theAttributeEntryLeadsOnlyToSummarizing() {
+    #expect(PipelineTransitions.allowedTargets(stage: .attribute, activeState: .attributing) == [.summarizing])
+}
+
 @Test func aPairWithNoEntryIsNil() {
     #expect(PipelineTransitions.allowedTargets(stage: .transcribe, activeState: .summarizing) == nil)
     #expect(PipelineTransitions.allowedTargets(stage: .capture, activeState: .recording) == nil)
-    #expect(PipelineTransitions.allowedTargets(stage: .attribute, activeState: .attributing) == nil)
+    #expect(PipelineTransitions.allowedTargets(stage: .attribute, activeState: .summarizing) == nil)
 }
