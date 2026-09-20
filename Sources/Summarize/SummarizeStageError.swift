@@ -11,6 +11,8 @@ enum SummarizeStageError: Error, Equatable {
     case transcriptUndecodable
     /// `attribution.json` is present but its `speakers` object cannot be read.
     case attributionUndecodable
+    /// `diarization.json` is present but is not a `DiarizationArtifact`.
+    case diarizationUndecodable
     /// The meeting row has no `capture_started_at`, or it is not an ISO8601
     /// timestamp, so the unenriched title has nothing to be built from.
     case captureStartedAtMissing
@@ -29,6 +31,7 @@ enum SummarizeStageError: Error, Equatable {
         case .transcriptMissing: "transcript_missing"
         case .transcriptUndecodable: "transcript_undecodable"
         case .attributionUndecodable: "attribution_undecodable"
+        case .diarizationUndecodable: "diarization_undecodable"
         case .captureStartedAtMissing: "capture_started_at_missing"
         case .promptSetUnavailable: "prompt_set_unavailable"
         case .quoteExtractionFailed: "quote_extraction_failed"
