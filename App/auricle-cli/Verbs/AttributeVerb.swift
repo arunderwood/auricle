@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct AttributeVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,11 +7,7 @@ struct AttributeVerb: AsyncParsableCommand {
         abstract: "Attribute speakers for a meeting. Opens the GUI by default.",
     )
 
-    @Argument(help: "Meeting ID.")
-    var id: String
-
-    @Flag(help: "Apply the last-known speaker mapping instead of opening the GUI.")
-    var batch = false
+    @OptionGroup var arguments: AttributeArguments
 
     func run() async throws {
         try notYetImplemented("attribute")

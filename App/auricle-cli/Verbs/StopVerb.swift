@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct StopVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,8 +7,7 @@ struct StopVerb: AsyncParsableCommand {
         abstract: "Stop active capture.",
     )
 
-    @Flag(help: "Suppress stdout output; exit code only.")
-    var quiet = false
+    @OptionGroup var arguments: StopArguments
 
     func run() async throws {
         try notYetImplemented("stop")

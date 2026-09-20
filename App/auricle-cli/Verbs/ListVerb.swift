@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct ListVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,11 +7,7 @@ struct ListVerb: AsyncParsableCommand {
         abstract: "List meetings auricle on this Mac knows about.",
     )
 
-    @Flag(help: "Include verified and discarded meetings.")
-    var all = false
-
-    @Flag(help: "Output machine-readable JSON.")
-    var json = false
+    @OptionGroup var arguments: ListArguments
 
     func run() async throws {
         try notYetImplemented("list")

@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 /// The one grouped verb (Decision 1.5): every other verb is flat, but reading
 /// vs. writing a config value are different enough operations to warrant
@@ -16,8 +17,7 @@ struct ConfigVerb: AsyncParsableCommand {
             abstract: "Read a config value, or all values (secrets redacted) if <key> is omitted.",
         )
 
-        @Argument(help: "Config key.")
-        var key: String?
+        @OptionGroup var arguments: ConfigGetArguments
 
         func run() async throws {
             try notYetImplemented("config get")
@@ -30,11 +30,7 @@ struct ConfigVerb: AsyncParsableCommand {
             abstract: "Write a config value.",
         )
 
-        @Argument(help: "Config key.")
-        var key: String
-
-        @Argument(help: "Value to write.")
-        var value: String
+        @OptionGroup var arguments: ConfigSetArguments
 
         func run() async throws {
             try notYetImplemented("config set")

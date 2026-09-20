@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct DiscardVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,11 +7,7 @@ struct DiscardVerb: AsyncParsableCommand {
         abstract: "Delete cached audio and state for a captured-but-unwanted meeting.",
     )
 
-    @Argument(help: "Meeting ID.")
-    var id: String
-
-    @Flag(help: "Suppress stdout output; exit code only.")
-    var quiet = false
+    @OptionGroup var arguments: DiscardArguments
 
     func run() async throws {
         try notYetImplemented("discard")
