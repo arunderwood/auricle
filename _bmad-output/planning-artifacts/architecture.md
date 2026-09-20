@@ -950,20 +950,30 @@ Where:
 
 **Slug normalization steps (applied in order):**
 
-1. Unicode NFKD decomposition (decomposes accented characters into base + combining mark)
-2. Strip all non-ASCII characters (drops the combining marks AND any character that doesn't have a decomposed ASCII form, e.g., `北京` → empty, emoji → empty)
-3. Lowercase
-4. Replace any run of `[^a-z0-9]+` with single hyphen
-5. Strip leading and trailing hyphens
-6. Collapse consecutive hyphens
-7. Length cap at 60 characters; truncate at the last hyphen boundary at or before 60 chars (avoids mid-word cuts; if no hyphen found, hard-cut at 60)
-8. If result is empty after all normalization → **fall through to next slug source priority**
+1. Map every character in the Unicode general categories dash punctuation (Pd) and space, line and paragraph separator (Zs, Zl, Zp), plus U+2212 (minus sign), to a separator. This covers the en dash, the em dash, U+2010–U+2015 and U+00A0. Step 6 turns each into a hyphen, so the words on either side stay apart (`Q3–Q4` → `q3-q4`, not `q3q4`)
+2. Transliterate the letters NFKD cannot decompose through a fixed table: `ß`→`ss`, `æ`→`ae`, `Æ`→`AE`, `œ`→`oe`, `Œ`→`OE`, `ø`→`o`, `Ø`→`O`, `đ`→`d`, `Đ`→`D`, `ð`→`d`, `Ð`→`D`, `þ`→`th`, `Þ`→`Th`, `ł`→`l`, `Ł`→`L`, `ı`→`i`. The table is fixed on purpose. `CFStringTransform` and ICU transliteration are not used, because their output varies by OS version and filenames must stay stable
+3. Unicode NFKD decomposition (decomposes accented characters into base + combining mark)
+4. Strip all non-ASCII characters (drops the combining marks AND any character that has no decomposed ASCII form and is not in the step 2 table, e.g., `北京` → empty, emoji → empty)
+5. Lowercase
+6. Replace any run of `[^a-z0-9]+` with single hyphen
+7. Strip leading and trailing hyphens
+8. Collapse consecutive hyphens
+9. Length cap at 60 characters; truncate at the last hyphen boundary at or before 60 chars (avoids mid-word cuts). If the character just after the 60th is a hyphen, the first 60 characters already end on a word boundary and are kept whole. If no hyphen is found, hard-cut at 60
+10. If result is empty after all normalization → **fall through to next slug source priority**
+
+Notes already in the vault keep their names when these rules change, because a re-publish builds its filename from the stored `meetings.vault_note_path` (Decision 2.3) and does not re-derive the slug.
+
+**Attendee links:** each attendee is a wikilink string, and only its parts are used. The target is the text before `|`, without any `#heading` or `^block` suffix. The display name is the alias after `|` when there is one, else the target's last path component, and the slug uses the display name. A link's identity is the target's last path component, compared case-insensitively because Obsidian links are. An attendee whose identity equals the self link's identity is dropped, and attendees that share an identity count once, in first-seen order (`[[People/Ben Smith|Ben]]` → `ben`, `[[Ben#Notes]]` → `ben`, `[[jordan]]` is self when self is `[[Jordan]]`).
 
 **Slug edge cases (named explicitly so the fallback chain is testable):**
 
 | Input | Outcome |
 |---|---|
 | `"Café résumé"` (calendar title) | NFKD strips accents → `cafe-resume` (slug source 1 succeeds) |
+| `"Q3–Q4 Planning"` (calendar title; en dash) | The dash becomes a separator → `q3-q4-planning` (slug source 1 succeeds) |
+| `"Große Runde"` (calendar title; `ß`) | Transliteration table → `grosse-runde` (slug source 1 succeeds) |
+| `"Æther Œuvre"` (calendar title; ligatures) | Transliteration table → `aether-oeuvre` (slug source 1 succeeds) |
+| `"a"` + U+00A0 + `"b"` (calendar title; no-break space) | The space separator becomes a hyphen → `a-b` (slug source 1 succeeds) |
 | `"北京会议"` (calendar title; CJK) | NFKD + ASCII strip → empty → fall through to source 2 |
 | `"🎉 Launch!"` (calendar title; emoji + ASCII) | NFKD + ASCII strip → `launch` (slug source 1 succeeds) |
 | `"🎉🎉🎉"` (calendar title; all-emoji) | NFKD + ASCII strip → empty → fall through to source 2 |
