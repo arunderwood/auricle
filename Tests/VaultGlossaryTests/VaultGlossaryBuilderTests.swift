@@ -356,7 +356,9 @@ import Testing
     var outcome: VaultGlossaryBuilder.Outcome?
     let elapsed = try clock.measure { outcome = try fixture.builder().build() }
 
-    #expect(elapsed < .seconds(10))
+    // Catches a super-linear scan, not a slow machine: an unloaded debug build takes about 4 s,
+    // and a shared CI runner running the whole suite in parallel has taken 12 s.
+    #expect(elapsed < .seconds(60))
     let built = try #require(outcome)
     #expect(built.rebuilt)
     #expect(built.glossary.uncategorized.count == 20000)
