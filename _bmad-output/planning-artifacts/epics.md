@@ -1199,6 +1199,14 @@ So that filenames are stable, predictable, and never collide with each other on 
 **When** the slug is computed
 **Then** NFKD decomposition strips accents; result is `cafe-resume`; slug source 1 succeeds (per AR-DATA-8 normalization steps)
 
+**Given** a calendar event title with dash punctuation or a non-ASCII space (e.g., `"Q3–Q4 Planning"` with an en dash, or `"a"` + U+00A0 + `"b"`)
+**When** the slug is computed
+**Then** every Unicode dash (Pd), space separator (Zs, Zl, Zp) and U+2212 becomes a separator before any stripping, so the words on either side stay apart; results are `q3-q4-planning` and `a-b`
+
+**Given** a calendar event title with letters that have no NFKD decomposition (e.g., `"Große Runde"` or `"Æther Œuvre"`)
+**When** the slug is computed
+**Then** a fixed transliteration table (not `CFStringTransform` or ICU, whose output varies by OS version) maps them to ASCII before NFKD; results are `grosse-runde` and `aether-oeuvre`
+
 **Given** a calendar event title with non-ASCII characters that decompose to nothing (e.g., `"北京会议"` CJK or `"🎉🎉🎉"` all-emoji)
 **When** the slug is computed
 **Then** NFKD + non-ASCII strip yields empty; resolver falls through to slug source 2 (per AR-DATA-8 fall-through rule)
