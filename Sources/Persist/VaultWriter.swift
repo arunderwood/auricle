@@ -44,8 +44,7 @@ public enum VaultWriter {
         vaultPath: URL,
         meetingsSubdir: String,
     ) throws -> URL {
-        try validateVaultPath(vaultPath)
-        let subdirURL = try resolveMeetingsSubdir(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
+        let subdirURL = try resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
         switch try collisionFreeTarget(markdown: markdown, meeting: meeting, in: subdirURL) {
         case let .existingCopy(url):
             return url
@@ -53,6 +52,17 @@ public enum VaultWriter {
             try AtomicWriter.write(Data(markdown.utf8), to: url)
             return url
         }
+    }
+
+    /// The folder every note for this configuration is published into:
+    /// validates `vaultPath` and resolves `meetingsSubdir` beneath it,
+    /// creating the subdirectory when it is missing. A caller that writes
+    /// through `writeExact` calls this first so the write meets the same
+    /// checks as `write`, and so lands in the configured folder rather than
+    /// wherever an earlier configuration put a note.
+    public static func resolveMeetingsDirectory(vaultPath: URL, meetingsSubdir: String) throws -> URL {
+        try validateVaultPath(vaultPath)
+        return try resolveMeetingsSubdir(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
     }
 
     /// Whether the file at `url` exists and holds exactly `markdown`'s UTF-8
@@ -64,10 +74,10 @@ public enum VaultWriter {
         return existing == Data(markdown.utf8)
     }
 
-    /// Writes `markdown` to an already-resolved, already-validated exact
-    /// target: no `vaultPath`/`meetingsSubdir` validation, no collision
-    /// detection. For a caller that has already picked the exact file it
-    /// wants written — e.g. `PersistStage`'s own rerun-filename construction
+    /// Writes `markdown` to an already-resolved exact target: no
+    /// `vaultPath`/`meetingsSubdir` validation (see `resolveMeetingsDirectory`),
+    /// no collision detection. For a caller that has already picked the exact
+    /// file it wants written — e.g. `PersistStage`'s own rerun-filename construction
     /// (Decision 2.4: rerun-suffix generation is a different axis than
     /// `FilenameResolver`'s ordinal and belongs to the persist stage, not
     /// here) — so persist never reaches past `VaultWriter` to call

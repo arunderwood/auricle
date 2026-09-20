@@ -9,8 +9,9 @@ import Yams
 /// ever shipped must stay readable.
 public enum FrontmatterReader {
     public enum ReadError: Error {
-        /// No `auricle.schema_version` to dispatch on -- either there's no
-        /// `auricle:` block at all, or the key is missing under it.
+        /// No `auricle.schema_version` to dispatch on -- the note has no
+        /// frontmatter block, or its block has no `auricle:` mapping, or the
+        /// key is missing under it.
         case notAnAuricleNote
         case schemaVersionTooOld(found: Int, oldestSupported: Int)
         case schemaVersionTooNew(found: Int, newestSupported: Int)
@@ -38,20 +39,23 @@ public enum FrontmatterReader {
         }
     }
 
-    /// The only schema version ever shipped (Story 2.1). Both bounds equal
-    /// `1` today; a future breaking change widens `newestSupportedSchemaVersion`
-    /// and adds a new parser, while `oldestSupportedSchemaVersion` only moves
-    /// if a version is ever formally desupported.
+    /// `oldestSupportedSchemaVersion` only moves if a version is ever formally
+    /// desupported. The newest bound is `FrontmatterSchema.current`, the
+    /// version the app writes, so widening what the app writes widens what
+    /// this reader accepts; the bump also needs a new parser alongside `parseV1`.
     private static let oldestSupportedSchemaVersion = 1
-    private static let newestSupportedSchemaVersion = 1
+    private static let newestSupportedSchemaVersion = FrontmatterSchema.current
 
     /// Pure: no file I/O. Throws `ReadError`, never a raw `YamlError`.
     public static func read(noteContents: String) throws -> FrontmatterV1 {
         let frontmatterYAML = try extractFrontmatterYAML(from: noteContents)
         let root = try composeRoot(from: frontmatterYAML)
 
-        guard let auricle = root["auricle"], let schemaVersion = auricle["schema_version"]?.int else {
+        guard let auricle = root["auricle"], let schemaVersionNode = auricle["schema_version"] else {
             throw ReadError.notAnAuricleNote
+        }
+        guard let schemaVersion = schemaVersionNode.int else {
+            throw ReadError.malformedFrontmatter(reason: "auricle.schema_version is present but not an integer scalar")
         }
         guard schemaVersion >= oldestSupportedSchemaVersion else {
             throw ReadError.schemaVersionTooOld(found: schemaVersion, oldestSupported: oldestSupportedSchemaVersion)
@@ -70,16 +74,32 @@ public enum FrontmatterReader {
     /// happens. The note body below the closing fence (headings, `> ` quote
     /// blocks, arbitrary prose) is never handed to the YAML parser, which
     /// would otherwise read at least part of it as a second document.
+    ///
+    /// Tolerates what editors add around the block: a leading UTF-8 BOM, and
+    /// trailing spaces or tabs on a fence line. A note whose first line is
+    /// not a fence has no frontmatter at all, so it is not one of ours; a
+    /// block that opens and never closes is damaged, so it is malformed.
     private static func extractFrontmatterYAML(from noteContents: String) throws -> String {
-        let normalized = noteContents.replacingOccurrences(of: "\r\n", with: "\n")
+        let normalized = withoutByteOrderMark(noteContents).replacingOccurrences(of: "\r\n", with: "\n")
         let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
-        guard lines.first == "---" else {
-            throw ReadError.malformedFrontmatter(reason: "note does not begin with a frontmatter fence")
+        guard let firstLine = lines.first, isFence(firstLine) else {
+            throw ReadError.notAnAuricleNote
         }
-        guard let closingFenceIndex = lines.dropFirst().firstIndex(of: "---") else {
+        guard let closingFenceIndex = lines.dropFirst().firstIndex(where: isFence) else {
             throw ReadError.malformedFrontmatter(reason: "frontmatter is missing its closing fence")
         }
         return lines[1 ..< closingFenceIndex].joined(separator: "\n")
+    }
+
+    private static func withoutByteOrderMark(_ text: String) -> String {
+        guard text.unicodeScalars.first == "\u{FEFF}" else {
+            return text
+        }
+        return String(text.unicodeScalars.dropFirst())
+    }
+
+    private static func isFence(_ line: Substring) -> Bool {
+        line.hasPrefix("---") && line.dropFirst(3).allSatisfy { $0 == " " || $0 == "\t" }
     }
 
     // MARK: - YAML composition
@@ -122,13 +142,14 @@ public enum FrontmatterReader {
         )
     }
 
-    /// Absent `attendees` decodes to `[]` (Decision 2.4's calendar-enrichment-
-    /// failed variant renders an empty list, not a missing key, but an
-    /// older/foreign note may omit it entirely). Present but not a sequence,
-    /// or a sequence with a non-string element, fails loud rather than
-    /// silently dropping data -- the same posture as the `meeting_id` guard.
+    /// Absent or null `attendees` decodes to `[]` (Decision 2.4's calendar-
+    /// enrichment-failed variant renders an empty list, not a missing key, but
+    /// an older/foreign note may omit it entirely, and an editor may leave the
+    /// key with no value). Present but not a sequence, or a sequence with a
+    /// non-string element, fails loud rather than silently dropping data --
+    /// the same posture as the `meeting_id` guard.
     private static func decodeAttendees(from root: Node) throws -> [String] {
-        guard let attendeesNode = root["attendees"] else {
+        guard let attendeesNode = root["attendees"], !isNull(attendeesNode) else {
             return []
         }
         guard let attendeesSequence = attendeesNode.sequence else {
@@ -142,16 +163,23 @@ public enum FrontmatterReader {
         }
     }
 
-    /// Absent `supersedes` decodes to `nil` (the common case: most notes are
-    /// not a re-publish). Present but not a scalar fails loud rather than
-    /// silently discarding lineage data.
+    /// Absent or null `supersedes` decodes to `nil` (the common case: most
+    /// notes are not a re-publish). Present but not a scalar fails loud rather
+    /// than silently discarding lineage data.
     private static func decodeSupersedes(from auricle: Node) throws -> String? {
-        guard let supersedesNode = auricle["supersedes"] else {
+        guard let supersedesNode = auricle["supersedes"], !isNull(supersedesNode) else {
             return nil
         }
         guard let value = supersedesNode.string else {
             throw ReadError.malformedFrontmatter(reason: "auricle.supersedes is present but not a string scalar")
         }
         return value
+    }
+
+    /// True for an empty value, `~`, or an unquoted `null`. `Node.null` only
+    /// recognizes plain-style scalars, so a quoted `"null"` -- a real string --
+    /// is not null. `Node.string` alone can't tell the two apart.
+    private static func isNull(_ node: Node) -> Bool {
+        node.null != nil
     }
 }
