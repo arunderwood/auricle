@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import GRDB
 
@@ -109,9 +110,10 @@ public actor StateStore {
     /// Meetings not yet in a terminal state, per `idx_meetings_state`'s
     /// partial-index predicate.
     public func fetchPending() async throws -> [Meeting] {
-        try await writer.read { db in
+        let terminal = PipelineState.terminal.map(\.rawValue)
+        return try await writer.read { db in
             try Meeting
-                .filter(sql: "state NOT IN ('verified','retention_expired','discarded')")
+                .filter(!terminal.contains(Column("state")))
                 .fetchAll(db)
         }
     }
@@ -228,11 +230,14 @@ public actor StateStore {
         }
     }
 
+    /// Oldest first. `id` breaks ties because `occurred_at` is whole seconds
+    /// wherever application code wrote it, so a `started` and a `completed` from
+    /// the same second differ only by `id`, which autoincrements in write order.
     public func fetchStageEvents(meetingID: String) async throws -> [StageEvent] {
         try await writer.read { db in
             try StageEvent
                 .filter(Column("meeting_id") == meetingID)
-                .order(Column("occurred_at"))
+                .order(Column("occurred_at"), Column("id"))
                 .fetchAll(db)
         }
     }

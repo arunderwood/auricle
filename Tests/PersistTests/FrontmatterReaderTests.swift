@@ -177,3 +177,112 @@ private func expectNotAnAuricleNote(reading noteContents: String) {
 @Test func anEmptyFrontmatterBlockThrowsNotAnAuricleNote() {
     expectNotAnAuricleNote(reading: "---\n---\n")
 }
+
+// MARK: - Editor-produced input
+
+@Test func aLeadingByteOrderMarkIsIgnored() throws {
+    let lfNote = FrontmatterRenderer.render(meeting: makeMeeting(supersedes: "2026-04-28-tuesday-sync-with-ben.md"))
+    let bomNote = "\u{FEFF}" + lfNote
+
+    #expect(bomNote.unicodeScalars.first == "\u{FEFF}")
+    #expect(try FrontmatterReader.read(noteContents: bomNote) == FrontmatterReader.read(noteContents: lfNote))
+}
+
+@Test func aByteOrderMarkOnACRLFNoteIsIgnored() throws {
+    let lfNote = FrontmatterRenderer.render(meeting: makeMeeting())
+    let bomCRLFNote = "\u{FEFF}" + lfNote.replacingOccurrences(of: "\n", with: "\r\n")
+
+    #expect(try FrontmatterReader.read(noteContents: bomCRLFNote) == FrontmatterReader.read(noteContents: lfNote))
+}
+
+@Test(arguments: [" ", "\t", "  \t "])
+func trailingWhitespaceOnTheOpeningFenceIsAccepted(trailing: String) throws {
+    let lfNote = FrontmatterRenderer.render(meeting: makeMeeting())
+    let padded = "---" + trailing + "\n" + lfNote.dropFirst("---\n".count)
+
+    #expect(try FrontmatterReader.read(noteContents: padded) == FrontmatterReader.read(noteContents: lfNote))
+}
+
+@Test(arguments: [" ", "\t", "  \t "])
+func trailingWhitespaceOnTheClosingFenceIsAccepted(trailing: String) throws {
+    let lfNote = FrontmatterRenderer.render(meeting: makeMeeting())
+    let padded = corrupting("\n---\n\n", with: "\n---" + trailing + "\n\n")
+
+    #expect(padded != lfNote)
+    #expect(try FrontmatterReader.read(noteContents: padded) == FrontmatterReader.read(noteContents: lfNote))
+}
+
+@Test func aLineThatOnlyStartsWithThreeDashesIsNotAClosingFence() {
+    expectMalformedFrontmatter(
+        reading: corrupting("\n---\n\n", with: "\n----\n\n"),
+        reasonContaining: "closing fence",
+    )
+}
+
+@Test(arguments: ["", "\n", "Just a plain note, no frontmatter.\n", "\n---\ntitle: x\n---\n", "# Heading\n\n---\n\nbody\n"])
+func aNoteWhoseFirstLineIsNotAFenceThrowsNotAnAuricleNote(noteContents: String) {
+    expectNotAnAuricleNote(reading: noteContents)
+}
+
+@Test func aFrontmatterBlockThatNeverClosesStaysMalformed() {
+    expectMalformedFrontmatter(reading: "---\ntitle: x\n", reasonContaining: "closing fence")
+}
+
+@Test func anAbsentSchemaVersionThrowsNotAnAuricleNote() {
+    expectNotAnAuricleNote(reading: corrupting("  schema_version: 1\n", with: ""))
+}
+
+@Test(arguments: [
+    "  schema_version: \"v2\"\n",
+    "  schema_version: v2\n",
+    "  schema_version: 2.0\n",
+    "  schema_version:\n",
+    "  schema_version: null\n",
+    "  schema_version: ~\n",
+    "  schema_version: true\n",
+])
+func aNonIntegerSchemaVersionThrowsMalformedFrontmatter(line: String) {
+    expectMalformedFrontmatter(
+        reading: corrupting("  schema_version: 1\n", with: line),
+        reasonContaining: "schema_version",
+    )
+}
+
+@Test(arguments: ["attendees:\n", "attendees: null\n", "attendees: ~\n", "attendees: Null\n"])
+func aNullAttendeesValueDecodesToAnEmptyArray(line: String) throws {
+    let rendered = corrupting("attendees:\n  - \"[[Ben]]\"\n", with: line)
+    let result = try FrontmatterReader.read(noteContents: rendered)
+
+    #expect(result.attendees == [])
+}
+
+@Test func aQuotedNullAttendeesValueIsAStringNotANull() {
+    let rendered = corrupting("attendees:\n  - \"[[Ben]]\"\n", with: "attendees: \"null\"\n")
+    expectMalformedFrontmatter(reading: rendered, reasonContaining: "not a sequence")
+}
+
+@Test(arguments: ["  supersedes:\n", "  supersedes: null\n", "  supersedes: ~\n", "  supersedes: NULL\n"])
+func aNullSupersedesValueDecodesToNil(line: String) throws {
+    let meeting = makeMeeting(supersedes: "2026-04-28-tuesday-sync-with-ben.md")
+    let rendered = corrupting(
+        "  supersedes: \"2026-04-28-tuesday-sync-with-ben.md\"\n",
+        in: meeting,
+        with: line,
+    )
+    let result = try FrontmatterReader.read(noteContents: rendered)
+
+    #expect(result.supersedes == nil)
+    #expect(result.meetingID == meeting.meetingID)
+}
+
+@Test func aQuotedNullSupersedesValueStaysTheStringNull() throws {
+    let meeting = makeMeeting(supersedes: "2026-04-28-tuesday-sync-with-ben.md")
+    let rendered = corrupting(
+        "  supersedes: \"2026-04-28-tuesday-sync-with-ben.md\"\n",
+        in: meeting,
+        with: "  supersedes: \"null\"\n",
+    )
+    let result = try FrontmatterReader.read(noteContents: rendered)
+
+    #expect(result.supersedes == "null")
+}
