@@ -113,19 +113,20 @@ func makeFixture(writeValidSummary: Bool = true) throws -> TestFixture {
 }
 
 /// Every test below calls `PersistStage.run` against the same fixture-owned
-/// `cacheDirectory`/`meetingsSubdir: "Meetings"`/`stateStore`/`stageRunner` —
-/// only `meetingID`/(rarely) `vaultPath`/`clock` vary per scenario.
+/// `cacheDirectory`/`stateStore`/`stageRunner` — only `meetingID`/(rarely)
+/// `vaultPath`/`meetingsSubdir`/`clock` vary per scenario.
 extension TestFixture {
     func run(
         meetingID: MeetingID,
         vaultPath: URL? = nil,
+        meetingsSubdir: String = "Meetings",
         clock: PersistStage.TimeSource = PersistStage.TimeSource(),
     ) async throws -> StageRunner.StageOutcome {
         try await PersistStage.run(
             meetingID: meetingID,
             cacheDirectory: cacheDirectory,
             vaultPath: vaultPath ?? self.vaultPath,
-            meetingsSubdir: "Meetings",
+            meetingsSubdir: meetingsSubdir,
             stateStore: store,
             stageRunner: runner,
             clock: clock,
@@ -135,6 +136,40 @@ extension TestFixture {
 
 func modificationDate(of url: URL) throws -> Date {
     try #require(FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+}
+
+func setModificationDate(_ date: Date, of url: URL) throws {
+    try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+}
+
+/// Plants a well-formed auricle note for `meetingID` at `url`, creating any
+/// missing parent folders. The body is fixed and differs from
+/// `validSummaryJSON`'s rendering, so a planted note never counts as "unchanged".
+func plantNote(meetingID: MeetingID, supersedes: String? = nil, at url: URL) throws {
+    let markdown = FrontmatterRenderer.render(meeting: MeetingForFrontmatter(
+        meetingID: meetingID,
+        title: "Planted note",
+        date: expectedLocalDate,
+        attendees: [],
+        schemaVersion: 1,
+        supersedes: supersedes,
+        needsAttribution: false,
+        needsCalendarEnrichment: false,
+        summary: "A planted note.",
+        actionItems: [],
+        decisions: [],
+        transcriptSegments: [],
+    ))
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(markdown.utf8).write(to: url)
+}
+
+/// The meeting row's stored note path, dropped as a crash after the vault
+/// write would leave it.
+func clearVaultNotePath(_ fixture: TestFixture, _ meetingID: MeetingID) throws {
+    try fixture.database.write { db in
+        try db.execute(sql: "UPDATE meetings SET vault_note_path = NULL WHERE id = ?", arguments: [meetingID.rawValue])
+    }
 }
 
 func requireCompleted(_ outcome: StageRunner.StageOutcome) throws {

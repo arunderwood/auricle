@@ -356,6 +356,85 @@ private func chmod(_ url: URL, _ permissions: Int) throws {
     #expect(!FileManager.default.fileExists(atPath: targetURL.path))
 }
 
+// MARK: - resolveMeetingsDirectory
+
+@Test func resolveMeetingsDirectoryReturnsTheExistingSubdirectory() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    let subdirURL = vaultPath.appendingPathComponent("Meetings")
+    try FileManager.default.createDirectory(at: subdirURL, withIntermediateDirectories: true)
+
+    let result = try VaultWriter.resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: "Meetings")
+
+    #expect(result.path == subdirURL.path)
+}
+
+@Test func resolveMeetingsDirectoryCreatesAMissingNestedSubdirectory() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    try FileManager.default.createDirectory(at: vaultPath, withIntermediateDirectories: true)
+
+    let result = try VaultWriter.resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: "inbox/Meetings")
+
+    var isDirectory: ObjCBool = false
+    #expect(result.path == vaultPath.appendingPathComponent("inbox/Meetings").path)
+    #expect(FileManager.default.fileExists(atPath: result.path, isDirectory: &isDirectory))
+    #expect(isDirectory.boolValue)
+}
+
+@Test func resolveMeetingsDirectoryThrowsVaultPathMissingAndCreatesNothing() {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("does-not-exist")
+
+    do {
+        _ = try VaultWriter.resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: "Meetings")
+        Issue.record("Expected resolveMeetingsDirectory to throw")
+    } catch let VaultWriter.WriteError.vaultPathMissing(path) {
+        #expect(path == vaultPath.path)
+    } catch {
+        Issue.record("Expected .vaultPathMissing, got \(error)")
+    }
+    #expect(!FileManager.default.fileExists(atPath: vaultPath.path))
+}
+
+@Test func resolveMeetingsDirectoryThrowsVaultPathNotWritableForAReadOnlyVault() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    try FileManager.default.createDirectory(at: vaultPath, withIntermediateDirectories: true)
+    try chmod(vaultPath, 0o500)
+
+    do {
+        _ = try VaultWriter.resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: "Meetings")
+        Issue.record("Expected resolveMeetingsDirectory to throw")
+    } catch let VaultWriter.WriteError.vaultPathNotWritable(path) {
+        #expect(path == vaultPath.path)
+    } catch {
+        Issue.record("Expected .vaultPathNotWritable, got \(error)")
+    }
+}
+
+@Test func resolveMeetingsDirectoryThrowsWhenTheSubdirectoryIsAFile() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let vaultPath = directory.appendingPathComponent("vault")
+    try FileManager.default.createDirectory(at: vaultPath, withIntermediateDirectories: true)
+    let subdirURL = vaultPath.appendingPathComponent("Meetings")
+    #expect(FileManager.default.createFile(atPath: subdirURL.path, contents: Data()))
+
+    do {
+        _ = try VaultWriter.resolveMeetingsDirectory(vaultPath: vaultPath, meetingsSubdir: "Meetings")
+        Issue.record("Expected resolveMeetingsDirectory to throw")
+    } catch let VaultWriter.WriteError.meetingsSubdirIsNotADirectory(path) {
+        #expect(path == subdirURL.path)
+    } catch {
+        Issue.record("Expected .meetingsSubdirIsNotADirectory, got \(error)")
+    }
+}
+
 // MARK: - Performance (NFR-P8)
 
 @Test func writes50KBPayloadWithinThePerformanceBudget() throws {
