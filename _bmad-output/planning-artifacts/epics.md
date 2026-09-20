@@ -2110,6 +2110,22 @@ So that the entire Epic 4 pipeline is invocable from one user-facing CLI verb (n
 **And** the tags array is `auricle/meeting`, `auricle/needs-attribution`, `auricle/needs-summary` for the `--publish-anyway` + failed-summarize case
 **And** the note omits the `## Action Items` and `## Decisions` sections entirely — not empty headings
 
+**Given** `auricle run <id> --publish-anyway` and a summarize failure after the calendar step (the summarizer call fails, or its output cannot be mapped into the artifact)
+**When** the `summarize` worker handles the failure
+**Then** it writes a stub `summary.json` through `CacheArtifactWriter`, so persist has an input for the `published_partial` note: `summary` empty, `action_items` and `decisions` empty, `needs_summary: true`
+**And** every other field is built as on the success path, because the stage holds each one before the summarizer call: `transcript_segments` and `needs_attribution` from `transcript.json` and `attribution.json`; `title`, `calendar_event_title`, `attendees`, `self_wikilink` and `needs_calendar_enrichment` from the calendar step and the capture start
+**And** no field is missing from the stub, and without a calendar match `attendees` is empty and `title` is the generic `Meeting at <capture time> <zone>` title, exactly as on the success path
+**And** the stage writes the stub, not a helper the run verb calls: the stage already holds those fields, and AR-PIPE-1 keeps `summarize` code in its subprocess, out of the CLI process
+**And** the stage learns of `--publish-anyway` from an optional `--publish-anyway` option on `InternalStageArguments` (beside `--vault-path`), which `SubprocessDispatcher` passes when `RunVerb` received the flag
+**And** the stage then completes into `persisting`, so persist runs under its usual active state, and records the failure's `error_class` in that event's `metadata_json`
+**And** a failure without `--publish-anyway`, a failure before the calendar step (unreadable transcript or attribution, missing capture start, segment extraction, prompt set) and a cancelled run write no stub and leave the meeting in `summarization_failed` as today, so a normal failure never leaves a stub behind for persist to publish later
+
+**Given** a `summary.json` written by the stub path, or by any earlier stage version
+**When** `PersistStage` reads it
+**Then** `SummaryArtifact` has a `needsSummary` flag beside `needsAttribution` and `needsCalendarEnrichment`, encoded as `needs_summary` and decoded as `false` when the key is absent, so a `summary.json` that predates the flag still decodes
+**And** `PersistStage` maps the flag to the `needsSummary` input of `MeetingForFrontmatter` from the criterion above, and otherwise reads the artifact exactly as before: a missing `summary.json` still fails as `summaryArtifactUnreadable`
+**And** persist completes the meeting into `published_partial` instead of `published` when `needsSummary` is true, which needs `published_partial` added to persist's allowed targets in `PipelineTransitions` (today `published` and `persist_failed`)
+
 **Given** the run verb reaches the persist stage after summarize
 **When** persist runs in-process (AR-PIPE-1; not through `__internal-stage`)
 **Then** the verb calls `PersistStage.run` with the meeting's cache directory (which holds `summary.json`) and the `vault_path` and `meetings_subdir` values from `Core/Config` (`Sources/Core/Config.swift`; set in `~/.auricle/config.toml`)
@@ -2139,6 +2155,10 @@ So that the entire Epic 4 pipeline is invocable from one user-facing CLI verb (n
 **When** I run integration tests against the binary
 **Then** `Tests/CLITests/RunVerbTests.swift` covers: bare `auricle run <id>` resume; `--from`/`--to`/`--only` permutations; `--force` against permanent fail-state; `--reattribute` preserves retention timer; `--publish-anyway` produces `auricle/needs-attribution` tag; flag conflicts rejected at parse time; SIGINT cancels and exits 130; a completed run leaves a note published at the configured vault path; `--reattribute` on a published meeting produces a `--rerun-` sibling whose frontmatter carries `auricle.supersedes`
 **And** `Tests/PersistTests/FrontmatterRendererTests.swift` includes a snapshot test for the `published_partial` variant: `auricle/needs-summary` and `auricle/needs-attribution` tags both present, no Action Items or Decisions sections
+**And** `Tests/SummarizeTests/SummarizeStageTests.swift` covers the stub on the `--publish-anyway` failure path only: a failed summarizer call writes a `summary.json` with `needs_summary: true`, empty summary, action items and decisions, and the segments, title and attendees the success path would build, and completes into `persisting`; a failure without the flag, a failure before the calendar step and a cancelled run write no stub and end in `summarization_failed`
+**And** `Tests/OrchestratorTests/SubprocessDispatcherTests.swift` covers the `--publish-anyway` option reaching the `summarize` worker's argument vector, and its absence when `RunVerb` did not receive the flag
+**And** `Tests/PersistTests/PersistStageTests.swift` covers the stub: persist publishes a note with `auricle/needs-summary`, no Action Items or Decisions sections, and completes into `published_partial`; a missing `summary.json` still fails as `summaryArtifactUnreadable`
+**And** a `Tests/CoreTests/` test decodes a `summary.json` without the `needs_summary` key as `needsSummary == false` and round-trips the key when present
 
 ---
 
@@ -2400,6 +2420,13 @@ So that capture state is canonically managed in SQLite and the partial-audio-on-
 **And** `meetings.capture_started_at` and `meetings.audio_cache_path` are set in the same transaction per AR-DATA-4 write-authority matrix
 **And** the `CaptureSession` from Story 5.2 + `WAVWriter` from Story 5.3 begin streaming
 
+**Given** `meetings.capture_started_at` is stored as a UTC instant
+**When** capture starts
+**Then** the same transaction also stores the IANA time zone identifier (`TimeZone.current.identifier`, for example `America/Los_Angeles`) in a new nullable `meetings` column, `capture_time_zone`, added by a new migration in this story per AR-DATA-5
+**And** the column stays NULL for every row no capture wrote, including Story 4.8's imported meetings and rows that predate the migration
+**And** persist and summarize format local dates and times in that zone (the note `date`, the filename date and `meeting-at-<HHMM>` slug, and the generic `Meeting at ... <zone>` title) and fall back to the current zone when the column is NULL or names an identifier the OS does not know
+**And** `PersistStage.TimeSource` already takes an injectable `timeZone`, and `SummarizeStage.run` takes `timeZone` too, so persist needs no signature change: the caller that builds them reads the column and passes the resolved zone
+
 **Given** the user clicks Stop
 **When** `CaptureStage.stop(meetingID:)` is called
 **Then** Txn B writes `meetings.capture_ended_at`, `meetings.duration_seconds`, `meetings.state = 'captured'`, `stage_events.completed` per AR-PIPE-3 two-transaction pattern
@@ -2420,6 +2447,7 @@ So that capture state is canonically managed in SQLite and the partial-audio-on-
 **Given** the test suite
 **When** I run `Tests/CaptureTests/CaptureStageTests.swift`
 **Then** tests cover: happy-path start/stop produces correct state transitions; permission-denied at start throws typed error and writes `capture_failed`; mid-capture revocation saves partial audio + fires notification + transitions to `capture_failed`; transient stream restart inline (3 fails in 30s threshold); idempotent stop (calling stop on already-stopped session is safe per NFR-R5)
+**And** the tests cover the zone: capture writes the identifier beside `capture_started_at`, the migration leaves existing rows NULL, and a NULL or unknown identifier resolves to the current zone
 
 ---
 
