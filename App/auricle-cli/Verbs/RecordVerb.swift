@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct RecordVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,14 +7,7 @@ struct RecordVerb: AsyncParsableCommand {
         abstract: "Start capture.",
     )
 
-    @Argument(help: "Meeting ID to use. A new one is generated if omitted.")
-    var id: String?
-
-    @Flag(help: "Reuse <id> even if captured audio already exists for it.")
-    var replace = false
-
-    @Flag(help: "Suppress stdout output; exit code only.")
-    var quiet = false
+    @OptionGroup var arguments: RecordArguments
 
     func run() async throws {
         try notYetImplemented("record")

@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct StatusVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,11 +7,7 @@ struct StatusVerb: AsyncParsableCommand {
         abstract: "Show a meeting's state, artifact paths, and retention status.",
     )
 
-    @Argument(help: "Meeting ID.")
-    var id: String
-
-    @Flag(help: "Output machine-readable JSON.")
-    var json = false
+    @OptionGroup var arguments: StatusArguments
 
     func run() async throws {
         try notYetImplemented("status")

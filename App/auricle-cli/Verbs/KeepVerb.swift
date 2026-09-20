@@ -1,4 +1,5 @@
 import ArgumentParser
+import Orchestrator
 
 struct KeepVerb: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -6,11 +7,7 @@ struct KeepVerb: AsyncParsableCommand {
         abstract: "Confirm a meeting note has been reviewed and arm its retention timer.",
     )
 
-    @Argument(help: "Meeting ID.")
-    var id: String
-
-    @Flag(help: "Suppress stdout output; exit code only.")
-    var quiet = false
+    @OptionGroup var arguments: KeepArguments
 
     func run() async throws {
         try notYetImplemented("keep")
