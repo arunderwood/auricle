@@ -170,21 +170,21 @@ import Testing
 /// matrix's own "Meeting row not found" row — implemented defensively in
 /// `PersistStage.publish` for exactly that case. It is not independently
 /// reachable through this public entry point, though: `StageRunner.run`'s
-/// own Txn A (unmodified Epic-1 infrastructure this story composes, never
-/// reimplements) writes a `stage_events` row for `meetingID` before `work`
-/// ever runs, and `stage_events.meeting_id` carries a foreign key against
-/// `meetings.id` — a truly-absent row fails that insert with a foreign-key
-/// `DatabaseError` first, so `publish`'s own guard is never reached for this
-/// input. This test documents that actual, real behavior rather than the
-/// matrix's `.failed(...)` framing.
-@Test func runThrowsDatabaseErrorWhenTheMeetingRowNeverExistedBecauseTxnARequiresItFirst() async throws {
+/// own Txn A writes before `work` ever runs, and a truly-absent row makes
+/// `StateStore.recordStageTransition` throw the typed
+/// `StateStoreError.meetingNotFound` first (its guarded UPDATE runs before
+/// the `stage_events` insert, so the foreign key never gets to reject it), so
+/// `publish`'s own guard is never reached for this input. This test documents
+/// that actual behavior rather than the matrix's `.failed(...)` framing.
+@Test func runThrowsMeetingNotFoundWhenTheMeetingRowNeverExistedBecauseTxnARequiresItFirst() async throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     let meetingID = MeetingID.generate() // Deliberately never inserted.
 
-    await #expect(throws: DatabaseError.self) {
+    await #expect(throws: StateStoreError.meetingNotFound(id: meetingID.rawValue)) {
         try await fixture.run(meetingID: meetingID)
     }
+    #expect(try await fixture.store.fetchStageEvents(meetingID: meetingID.rawValue).isEmpty)
 }
 
 // MARK: - VaultWriter failure propagation

@@ -38,7 +38,10 @@ public struct MeetingIDResolver {
         case "last":
             return dataSource.lastMeetingID().map(MeetingIDResolution.resolved) ?? .notFound
         default:
-            guard input.count >= Self.minimumPrefixLength else { return .notFound }
+            // ASCII only, checked before uppercasing: `ß` uppercases to `SS`,
+            // so a non-ASCII prefix would otherwise reach the data source as
+            // a longer string than the one the length check saw.
+            guard input.utf8.allSatisfy({ $0 < 0x80 }), input.count >= Self.minimumPrefixLength else { return .notFound }
             let matches = dataSource.meetingIDs(matchingPrefix: input.uppercased())
             switch matches.count {
             case 0:

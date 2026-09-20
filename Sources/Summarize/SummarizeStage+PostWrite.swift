@@ -30,15 +30,14 @@ extension SummarizeStage {
         await bestEffort("record_telemetry") {
             try await telemetryRecorder.record(
                 meetingID: meetingID,
-                patch: State.Telemetry(
-                    meetingID: meetingID.rawValue,
+                patch: SummarizeTelemetryPatch(
                     quoteValidationDropCount: outcome.summary.quoteValidationDropCount,
                     summarizationPath: "claude_api",
                     summarizationModel: config.modelIdentifier,
                     summarizationEffortBudget: config.effortLevel.rawValue,
                     costUSD: outcome.summary.cost.costUSD,
-                    groundingMethod: outcome.summary.groundingMethod.rawValue,
                     summarizationPromptSetHash: promptSetHash,
+                    groundingMethod: outcome.summary.groundingMethod.rawValue,
                 ),
             )
         }
@@ -55,14 +54,15 @@ extension SummarizeStage {
         }
     }
 
-    /// Fetches the row afresh rather than reusing the one read before the
-    /// stage started: `StageRunner` has moved `state` since, and writing the
-    /// old value back would undo that. A row that has vanished is left for
-    /// `StageRunner`'s own completion write to report.
+    /// Writes only the two calendar columns. A whole-row write would put back
+    /// the `state` the stage read before `StageRunner` moved it, and any column
+    /// another writer changed while the summarizer ran. A row that has vanished
+    /// is left for `StageRunner`'s own completion write to report.
     private static func refreshMeetingRow(for meetingID: MeetingID, with match: CalendarEnrichment.Match, in stateStore: StateStore) async throws {
-        guard var meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else { return }
-        meeting.title = match.title
-        meeting.calendarEventID = match.eventID
-        try await stateStore.updateMeeting(meeting)
+        do {
+            try await stateStore.setCalendarMatch(meetingID: meetingID.rawValue, title: match.title, calendarEventID: match.eventID)
+        } catch StateStoreError.meetingNotFound {
+            return
+        }
     }
 }

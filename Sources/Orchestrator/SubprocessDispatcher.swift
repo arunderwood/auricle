@@ -61,31 +61,50 @@ public struct SubprocessDispatcher: Sendable {
 
         let process = Process()
         process.executableURL = executableURL
-        var arguments = [
-            "__internal-stage",
-            stage.rawValue,
-            meetingID.rawValue,
-            "--worker-protocol-version", String(workerProtocolVersion),
-        ]
-        if let vaultPath = resolveVaultPath() {
-            arguments += ["--vault-path", vaultPath]
-        }
-        process.arguments = arguments
+        process.arguments = InternalStageArguments(
+            stage: stage.rawValue,
+            id: meetingID.rawValue,
+            workerProtocolVersion: workerProtocolVersion,
+            vaultPath: resolveVaultPath(),
+        ).arguments
         return process
     }
 
-    /// Builds and launches the subprocess. Callers that only need to observe
-    /// completion (rather than block on it) should read `process.terminationHandler`
-    /// or await `process.waitUntilExit()` on the result themselves — this
-    /// method's job is spawning, not supervising.
+    /// Builds and launches the subprocess. `onExit`, when given, is called
+    /// once with how the process ended. It is installed before `run()`, so
+    /// no exit can precede it, and it receives values only, never the
+    /// `Process`. It runs on a queue Foundation chooses, not the caller's. A
+    /// caller that wants to block on completion instead can `waitUntilExit()`
+    /// on the result.
     @discardableResult
     public func dispatch(
         stage: PipelineStage,
         meetingID: MeetingID,
         workerProtocolVersion: Int = Core.WorkerProtocolVersion.current,
+        onExit: (@Sendable (WorkerExit) -> Void)? = nil,
     ) throws -> Process {
         let process = try makeProcess(stage: stage, meetingID: meetingID, workerProtocolVersion: workerProtocolVersion)
+        if let onExit {
+            process.terminationHandler = { finished in
+                onExit(WorkerExit(stage: stage, meetingID: meetingID, status: finished.terminationStatus))
+            }
+        }
         try process.run()
         return process
+    }
+}
+
+/// How a dispatched worker ended. `status` is the exit code, or the signal
+/// number when the process was killed by a signal; either way non-zero means
+/// the worker did not finish its stage.
+public struct WorkerExit: Sendable, Equatable {
+    public let stage: PipelineStage
+    public let meetingID: MeetingID
+    public let status: Int32
+
+    public init(stage: PipelineStage, meetingID: MeetingID, status: Int32) {
+        self.stage = stage
+        self.meetingID = meetingID
+        self.status = status
     }
 }

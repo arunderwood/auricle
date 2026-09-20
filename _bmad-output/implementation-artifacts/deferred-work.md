@@ -225,6 +225,87 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - closes: `_bmad-output/implementation-artifacts/spec-2-4-persist-stage-entry-point-compose-renderer-writer-re-publish-semantics.md`, "A vault write that `meetings.vault_note_path` does not record makes the next publish write"
   resolution: `PersistStage.run` no longer takes `isRepublish`. A run is a re-publish exactly when `vaultNotePath` names an existing file. Output identical to a file already in the vault is reused, not duplicated. `republish` writes nothing when the stored note already holds the rendering, `nextRerunTarget` reuses a re-run candidate with the same bytes, and `VaultWriter.write` returns an existing candidate with the same bytes instead of taking the next ordinal (`Sources/Persist/PersistStage.swift`, `Sources/Persist/VaultWriter.swift`). A note the user edited never matches, so it gets a re-run sibling. Known limit: a retry on a later day names a new re-run date, so it does not reuse an earlier day's orphaned re-run.
 
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`
+  summary: The `schema_version` table is created by migration #1 but nothing ever inserts a row into it, despite its comment implying it is kept current.
+  evidence: GRDB's `DatabaseMigrator` tracks applied migrations in its own `grdb_migrations` table, not this app-level table. No INSERT into `schema_version` exists and nothing reads it. The table and its comment are copied verbatim from architecture.md's Decision 2.1 SQL, which the story's frozen intent required be reproduced exactly. Location `Sources/State/Migrations/Migration001_Initial.swift`. Severity low. Logged from the Story 1.4 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`
+  summary: `meetings.duration_seconds`'s comment claims a `CHECK (>= 0)` constraint that does not exist in the DDL, so negative durations are silently accepted.
+  evidence: The column is declared `duration_seconds INTEGER` with only a comment. No test inserts a negative value. Comment and column are copied verbatim from architecture.md's Decision 2.1 SQL ("Schema is exactly architecture.md:691-774's SQL" in the story's frozen intent). Settled by an architecture-level decision to add the constraint or strike the comment. Location `Sources/State/Migrations/Migration001_Initial.swift:36`. Severity medium. Logged from the Story 1.4 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`
+  summary: The terminal-state list `'verified','retention_expired','discarded'` is duplicated as independent raw strings in two places with no shared constant.
+  evidence: `idx_meetings_state`'s partial-index predicate (migration SQL) and `StateStore.fetchPending()`'s filter list the same three states independently, so an edit to one desyncs them. `fetchPending()`'s doc comment cross-references the index by name. The migration side must stay frozen-verbatim per architecture.md. Best resolved when a story next adds a terminal state. Location `Sources/State/StateStore.swift`, `Sources/State/Migrations/Migration001_Initial.swift`. Severity low. Logged from the Story 1.4 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`
+  summary: `sprint-status.yaml`'s `1-4-...` entry still read `backlog` although the story was implemented.
+  evidence: Same systemic gap the Story 1.2 entries describe: the workflow variant never referenced `sprint-status.yaml`, so syncing it was not fixable at the story level. Severity low. Logged from the Story 1.4 spec's `deferred` list (Epic 1 retro PL-3); `docs/loop-engineering-notes.md` documents it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold.md`
+  summary: `StateStore.recordStageTransition`'s `meetings` UPDATE has no guard against the meeting's state having changed since it was last read, creating a race between the stale-detection sweep and a stage's own completion.
+  evidence: The UPDATE was `UPDATE meetings SET state = ? WHERE id = ?`. The sweep reads a meeting through `fetchPending()` and writes its synthesized failure later, so a real Txn B landing in that window is overwritten by a failure. No production caller existed yet; Epic 3 and 4's stages were to be the first. Settled by optimistic-concurrency guarding before real stages call `StageRunner.run` concurrently. Location `Sources/State/StateStore.swift`, `Sources/Orchestrator/StageRunner.swift`. Severity medium. Logged from the Story 1.5 spec's `deferred` list (Epic 1 retro DR-1, PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold.md`
+  summary: `sprint-status.yaml`'s `1-4-...` and `1-5-...` entries both still read `backlog` although both stories were implemented and reviewed.
+  evidence: Same recurring gap as the Story 1.4 entry above. Severity low. Logged from the Story 1.5 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-telemetry-recorder-stageeventlogger-and-stagemetadata.md`
+  summary: `StageMetadata`'s Codable conformance wraps each case's payload under a case-name key, diverging from architecture.md's documented flat `metadata_json` shape.
+  evidence: `encode(to:)` writes `{"transcribe": {...}}`, not the flat `{"model_id": ...}` Decision 4.5 illustrates. The wrapper solves a real constraint: `capture` and `attribute` have content-identical empty placeholder payloads, undecodable without a discriminator key. epics.md's AC requires only the snake_case dialect. The transcribe and persist stages already encode their `*Meta` types directly, unwrapped. Settled by whichever story builds the first generic consumer of the JSON. Location `Sources/Telemetry/StageMetadata.swift`. Severity low. Logged from the Story 1.6 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-telemetry-recorder-stageeventlogger-and-stagemetadata.md`
+  summary: architecture.md's own `StageMetadata` Codable sketch lists only 6 cases, omitting `reviewDiarization`, although Decision 4.5 otherwise documents `reviewing_diarization` payloads.
+  evidence: A pre-existing inconsistency in the planning document (the sketch is near line 1216), not caused by the story, which follows epics.md's 7-case AC. Location `architecture.md` (Decision 4.5). Severity low. Logged from the Story 1.6 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-telemetry-recorder-stageeventlogger-and-stagemetadata.md`
+  summary: `sprint-status.yaml`'s Epic 1 entries (1-4, 1-5, 1-6) all still read `backlog` although all three stories were implemented and reviewed.
+  evidence: Same recurring gap as the Story 1.4 entry above. Severity low. Logged from the Story 1.6 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: Ordinary swift-argument-parser usage errors (missing required argument, unparseable flag, a missing subcommand) exit with the library's own usage-error code, not Decision 1.5's "1 = user error."
+  evidence: The framework owns its automatic parsing-failure path. Remapping it means re-implementing argument validation for every flag on every verb, and no AC asks for it. Observed by the Epic 1 retro: `auricle bogusverb` exits 64 and its usage text names the hidden `__bare-status` subcommand (BV-1). `WorkerExitCode.usage` names the 64 and a test pins that ArgumentParser reports it, so a change shows up; it does not remap it. Location all `App/auricle-cli/Verbs/*.swift`. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: `BareInvocation`'s tie-break order is unspecified if two meetings ever shared the same active state (e.g. both `recording`).
+  evidence: No tie-break rule existed in Decision 1.5 or the story's AC. Real but low-probability: normal capture leaves at most one meeting `recording`, so it surfaces after an unreconciled multi-meeting crash. Location `App/auricle-cli/Verbs/BareInvocation.swift`. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: A meeting in an active state other than the 3 `BareInvocation` checks (e.g. `transcribing`, `summarizing`, a `*_failed` state) falls through to "Nothing in flight.", which is misleading once real stages exist.
+  evidence: Was unreachable outside test fixtures when logged, and Decision 1.5's table specifies no message for these states. Real stages now run through `StageRunner`, so it is reachable (Epic 1 retro RV-4). Whichever story next touches `BareInvocation` should cover the full state set. Location `App/auricle-cli/Verbs/BareInvocation.swift`. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: None of the 10 stub verbs' declared flags are asserted by an automated test to parse under their intended kebab-case names.
+  evidence: Verified by hand that every flag parses, but a later typo surfaces only when a story reads the flag. Closing it needs test infrastructure for `App/auricle-cli`, which `swift test` does not cover. Location `App/auricle-cli/Verbs/*.swift`. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: `App/Project.swift`'s bundle-embedding fix (`productName`, `copyFiles`) has no automated regression check.
+  evidence: Reverting it would silently break every real subprocess dispatch while `swift test` stays green. Story 1.7 named Story 1.8 as owner, and Story 1.8's frontmatter says `deferred: []`; `scripts/check.sh` builds both schemes and asserts nothing about bundle contents (Epic 1 retro BV-2). Location `App/Project.swift`. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`
+  summary: `sprint-status.yaml`'s Epic 1 entries (1-4 through 1-7) all still read `backlog`.
+  evidence: Same recurring gap as the Story 1.4 entry above. Severity low. Logged from the Story 1.7 spec's `deferred` list (Epic 1 retro PL-3).
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`, "`sprint-status.yaml`'s `1-4-...` entry still read `backlog`"
+  resolution: Repaired on 2026-09-18 (Epic 3 retro): `sprint-status.yaml` reads `done` for stories 1-4 through 1-8. `AGENTS.md` names each story's own spec frontmatter `status` as the ground truth, because the build workflow does not update this file.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold.md`, "`sprint-status.yaml`'s `1-4-...` and `1-5-...` entries both still read `backlog`"
+  resolution: Same repair as the Story 1.4 entry: `sprint-status.yaml` reads `done` for stories 1-4 and 1-5.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-6-telemetry-recorder-stageeventlogger-and-stagemetadata.md`, "`sprint-status.yaml`'s Epic 1 entries (1-4, 1-5, 1-6)"
+  resolution: Same repair as the Story 1.4 entry: `sprint-status.yaml` reads `done` for stories 1-4 through 1-6.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`, "`sprint-status.yaml`'s Epic 1 entries (1-4 through 1-7)"
+  resolution: Same repair as the Story 1.4 entry: `sprint-status.yaml` reads `done` for stories 1-4 through 1-7.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold.md`, "`StateStore.recordStageTransition`'s `meetings` UPDATE has no guard"
+  resolution: `StateStore.recordStageTransition` takes `expectedState` and `expectedUpdatedAt` and adds them to the UPDATE's `WHERE`. A write that finds the row changed throws `StateStoreError.staleWrite` and lands nothing; `StageRunner.synthesizeFailure` always guards on the active state, and the sweep passes the `updated_at` it read. The `updated_at` guard is what catches a stage that completes into its own active state. `run`'s own two transactions stay unguarded by design, so a stage that finishes late still wins over a sweep failure. The whole-row `StateStore.updateMeeting` is deleted in favour of `setVaultNotePath` and `setCalendarMatch`. Tests: `StageRunnerStateGuardTests`, `StateStoreTests`.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-3-log-facade-with-sensitivity-tagging-and-redaction.md`, "No test exercises the public `Log.debug/.info/.warn/.error` entry points with a `.sensitive` field"
+  resolution: `Log` has an internal `init(category:sink:)` whose sink receives the level and the already-redacted message. `LogTests` drives `info`, `warn`, `error` (and `debug` in a debug build) with a `.sensitive` field and asserts the sink never receives the value. `StageRunner` takes the same `Log`, so its transition logging is tested the same way.
+
+- closes: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`, "`BareInvocation`'s tie-break order is unspecified"
+  resolution: `BareInvocationResolver` picks the newest meeting per state by reference timestamp, ties by the larger id, for `recording` as for the two `awaiting` states, and the hints name that meeting's id (`Sources/Core/BareInvocationStatus.swift`, `BareInvocationResolverTests`).
+
 - closes: `_bmad-output/implementation-artifacts/spec-2-1-frontmatterrenderer-data-to-markdown-with-all-schema-variants.md`, "Emoji and other code points above U+FFFF in a title are written as `\U0001F389`-style escapes"
   resolution: Accepted as a libyaml limit, and now tested. `aTitleWithCodePointsAboveTheBasicMultilingualPlaneRoundTripsAsAYAMLValue` (`Tests/PersistTests/FrontmatterRoundTripTests.swift`) renders `🎉 Launch é 北京` and asserts the parsed YAML value equals the input. The raw file text differs from the input and the value does not. The renderer is unchanged.
 
@@ -262,3 +343,11 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`
   summary: `SummaryArtifact` has no `meeting_id` or version field and does not declare `Sendable`, and the schema version is written in three places.
   evidence: `Sources/Core/SummaryArtifact.swift` decodes whatever `summary.json` holds, with no check that it belongs to the meeting. The frontmatter schema version is `PersistStage.frontmatterSchemaVersion`, the renderer's caller-supplied `schemaVersion`, and `FrontmatterReader`'s two bounds, so a writer bump without a reader bump would make the app's own reader reject its notes as too new. One shared constant, or a test that reads back a note rendered with `PersistStage`'s version, would prevent it. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-orchestrator-stagerunner-crashrecovery-retentionscheduler-scaffold.md`
+  summary: `RetentionScheduler` re-fires its handler for every due `pending` timer on every pass, because nothing marks a timer processed.
+  evidence: `StateStore.fetchDueRetentionTimers` returns every row with `status = 'pending'` and `fires_at <= asOf`, and no `StateStore` writer moves a row to `fired`. `RetentionSchedulerTests` says so in a comment ("nothing in this scaffold marks a row processed"). Story 8.5's acceptance criteria mark the row `fired` after the action and cover the error case, but do not say the scheduler claims the row before it calls the handler, so a slow handler or a second pass can act twice. The missing clause belongs in Story 8.5. Location `Sources/Orchestrator/RetentionScheduler.swift`, `Sources/State/StateStore.swift`. Severity low. Logged from the Epic 1 retro (DR-10).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-sqlite-schema-statestore-and-grdb-migrations-with-full-telemetry-counter-columns.md`
+  summary: Timestamp precision is mixed, so two `stage_events` written inside one second have no defined order.
+  evidence: The `meetings_updated_at` trigger stamps `%Y-%m-%dT%H:%M:%fZ` (milliseconds), while application code writes whole seconds through `ISO8601UTC`. `StateStore.fetchStageEvents` orders by `occurred_at` alone, with no `id` tiebreak, so a `started` and a `completed` event in the same second come back in an undefined order. `ISO8601UTC.date(from:)` reads both forms. No SQL compares the two forms yet, so nothing is wrong today; the first query that does would be. Settled by ordering on `occurred_at, id`, and by choosing one precision when a story first compares them. Location `Sources/State/StateStore.swift`, `Sources/State/Migrations/Migration001_Initial.swift`. Severity low. Logged from the Epic 1 retro (DR-11).

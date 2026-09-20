@@ -22,6 +22,18 @@ public enum StateStoreError: Error, Sendable, Equatable {
     /// a `Double` field holding `NaN` or infinity is the known trigger,
     /// since JSON has no representation for either.
     case invalidTelemetryPatch
+    /// A guarded write found the row no longer in the state it was read in,
+    /// or no longer carrying the `updated_at` it was read with: another writer
+    /// got there first, so nothing was written.
+    case staleWrite(id: String)
+    /// A process that never creates the database found no file to open.
+    case databaseNotFound
+    /// The file exists but is empty or holds fewer migrations than this
+    /// binary registers. Only the GUI migrates.
+    case schemaNotMigrated
+    /// The file holds a migration this binary does not register: a newer
+    /// binary has migrated it.
+    case schemaSuperseded
 }
 
 public actor StateStore {
@@ -46,11 +58,27 @@ public actor StateStore {
 
     /// Subprocess path: `DatabaseQueue`-backed. Subprocesses never migrate
     /// (architecture.md's write-authority matrix: `schema_version.*` is
-    /// written only by `GRDB.DatabaseMigrator` on GUI launch) — `path`
-    /// defaults to the same production location every process shares.
+    /// written only by `GRDB.DatabaseMigrator` on GUI launch) and fail fast
+    /// instead (architecture.md:809): a missing file throws `databaseNotFound`
+    /// and a file that is not at exactly this binary's schema throws
+    /// `schemaNotMigrated` or `schemaSuperseded`, before anything is created or
+    /// written. `path` defaults to the same production location every process
+    /// shares, looked up without creating it.
     public static func subprocess(path: String? = nil) throws -> StateStore {
-        let resolvedPath = try path ?? DatabasePoolFactory.productionDatabasePath()
+        let resolvedPath = try path ?? DatabasePoolFactory.lookUpProductionDatabasePath()
+        _ = try DatabasePoolFactory.makeVerifiedQueue(path: resolvedPath)
         let queue = try DatabasePoolFactory.makeQueue(path: resolvedPath)
+        return StateStore(writer: queue)
+    }
+
+    /// Path for a command that only reports state (the bare `auricle` status).
+    /// It never creates the database, its directory or a journal mode, and
+    /// never migrates; the checks are `subprocess`'s. Nothing stops a caller
+    /// from writing through the store it returns, so a caller that only reads
+    /// keeps to its own word.
+    public static func reader(path: String? = nil) throws -> StateStore {
+        let resolvedPath = try path ?? DatabasePoolFactory.lookUpProductionDatabasePath()
+        let queue = try DatabasePoolFactory.makeVerifiedQueue(path: resolvedPath)
         return StateStore(writer: queue)
     }
 
@@ -88,9 +116,28 @@ public actor StateStore {
         }
     }
 
-    public func updateMeeting(_ meeting: Meeting) async throws {
+    /// Column-scoped writers, not a whole-row update: a caller holding an older
+    /// `Meeting` snapshot would write every column back, `state` included, and
+    /// undo any transition made since. `recordStageTransition` is the only
+    /// writer of `meetings.state`.
+    public func setVaultNotePath(meetingID: String, path: String) async throws {
         try await writer.write { db in
-            try meeting.update(db)
+            try db.execute(sql: "UPDATE meetings SET vault_note_path = ? WHERE id = ?", arguments: [path, meetingID])
+            guard db.changesCount > 0 else {
+                throw StateStoreError.meetingNotFound(id: meetingID)
+            }
+        }
+    }
+
+    public func setCalendarMatch(meetingID: String, title: String, calendarEventID: String) async throws {
+        try await writer.write { db in
+            try db.execute(
+                sql: "UPDATE meetings SET title = ?, calendar_event_id = ? WHERE id = ?",
+                arguments: [title, calendarEventID, meetingID],
+            )
+            guard db.changesCount > 0 else {
+                throw StateStoreError.meetingNotFound(id: meetingID)
+            }
         }
     }
 
@@ -115,10 +162,19 @@ public actor StateStore {
     /// folded together, since Txn A must be durable *before* the stage's
     /// `work` closure runs.
     ///
-    /// Parameters are raw `String`s, not `PipelineState`/`PipelineStage`:
-    /// this actor doesn't depend on `Orchestrator`, so it can't reference
-    /// those types even if it wanted to. Callers convert via `.rawValue` at
-    /// the boundary.
+    /// `expectedState` and `expectedUpdatedAt`, when given, are part of the
+    /// UPDATE's `WHERE`: the write lands only if the row is still in that state
+    /// and still carries that `updated_at`. `state` alone cannot tell a
+    /// finished stage from a running one when a stage completes into its own
+    /// active state, so a writer that acts on a snapshot it read earlier
+    /// passes the `updated_at` it read; the `meetings_updated_at` trigger
+    /// stamps it on every UPDATE, same-state ones included. A write that finds
+    /// a row but not a match throws `staleWrite` and lands nothing; one that
+    /// finds no row throws `meetingNotFound`. Both roll the event back.
+    ///
+    /// Parameters are raw `String`s, not `PipelineState`/`PipelineStage`, so
+    /// this file owns no knowledge of the state machine; callers convert via
+    /// `.rawValue` at the boundary.
     @discardableResult
     public func recordStageTransition(
         meetingID: String,
@@ -130,8 +186,33 @@ public actor StateStore {
         errorMessage: String? = nil,
         metadataJSON: String? = nil,
         metadataSchemaVersion: Int? = nil,
+        expectedState: String? = nil,
+        expectedUpdatedAt: String? = nil,
     ) async throws -> StageEvent {
         try await writer.write { db in
+            // The UPDATE runs before the insert: with foreign keys on, an
+            // event for a meeting that does not exist fails the insert with a
+            // raw constraint error, which would hide `meetingNotFound`.
+            var sql = "UPDATE meetings SET state = ? WHERE id = ?"
+            var arguments: StatementArguments = [targetState, meetingID]
+            if let expectedState {
+                sql += " AND state = ?"
+                arguments += [expectedState]
+            }
+            if let expectedUpdatedAt {
+                sql += " AND updated_at = ?"
+                arguments += [expectedUpdatedAt]
+            }
+            try db.execute(sql: sql, arguments: arguments)
+            guard db.changesCount > 0 else {
+                let rowExists = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS (SELECT 1 FROM meetings WHERE id = ?)",
+                    arguments: [meetingID],
+                ) ?? false
+                throw rowExists ? StateStoreError.staleWrite(id: meetingID) : StateStoreError.meetingNotFound(id: meetingID)
+            }
+
             var stageEvent = StageEvent(
                 meetingID: meetingID,
                 stage: stage,
@@ -143,16 +224,6 @@ public actor StateStore {
                 metadataSchemaVersion: metadataSchemaVersion,
             )
             try stageEvent.insert(db)
-            try db.execute(sql: "UPDATE meetings SET state = ? WHERE id = ?", arguments: [targetState, meetingID])
-            // With foreign keys unenforced (e.g. an in-memory test queue
-            // with no `PRAGMA foreign_keys = ON`), a nonexistent `meetingID`
-            // would otherwise let the `stage_events` insert above succeed
-            // while this UPDATE silently matches zero rows. Throwing here
-            // rolls back the whole `writer.write` transaction, so the event
-            // insert never lands either — the pair stays atomic.
-            guard db.changesCount > 0 else {
-                throw StateStoreError.meetingNotFound(id: meetingID)
-            }
             return stageEvent
         }
     }

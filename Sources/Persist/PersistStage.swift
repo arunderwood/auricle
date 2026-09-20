@@ -132,7 +132,7 @@ public enum PersistStage {
     ) async throws -> StageRunner.StageOutcome {
         let artifact = try readSummaryArtifact(cacheDirectory: cacheDirectory)
 
-        guard var meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
+        guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
             throw PersistError.meetingNotFound(meetingID: meetingID)
         }
         guard
@@ -159,8 +159,7 @@ public enum PersistStage {
             clock: clock,
         )
 
-        meeting.vaultNotePath = writtenURL.path
-        try await stateStore.updateMeeting(meeting)
+        try await stateStore.setVaultNotePath(meetingID: meetingID.rawValue, path: writtenURL.path)
 
         return .completed(targetState: .published, metadataJSON: encodeMetadataJSON(vaultNotePath: writtenURL.path))
     }

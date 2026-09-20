@@ -14,25 +14,50 @@ import Telemetry
 /// `activeState`, architecturally identical to a subprocess crash between
 /// the two transactions, and is exactly what `synthesizeFailure` (via the
 /// stale-detection sweep) and `CrashRecovery` exist to reconcile later.
+///
+/// `run`'s own two transactions are unguarded: a stage that finishes late
+/// still wins over a sweep-synthesized failure, and the state it was
+/// entered from is unconstrained after a re-dispatch. Only
+/// `synthesizeFailure` acts on a snapshot it did not just write, so only it
+/// guards its write.
 public actor StageRunner {
     private let stateStore: StateStore
     private let stageEventLogger: StageEventLogger
     private let now: @Sendable () -> Date
-    private let log = Log(category: "orchestrator")
+    let log: Log
 
     public init(
         stateStore: StateStore,
         stageEventLogger: StageEventLogger,
         now: @escaping @Sendable () -> Date = { Date() },
+        log: Log = Log(category: "orchestrator"),
     ) {
         self.stateStore = stateStore
         self.stageEventLogger = stageEventLogger
         self.now = now
+        self.log = log
     }
 
     public enum StageOutcome: Sendable {
         case completed(targetState: PipelineState, metadataJSON: String? = nil)
         case failed(targetState: PipelineState, errorClass: String, errorMessage: String? = nil, metadataJSON: String? = nil)
+
+        public var targetState: PipelineState {
+            switch self {
+            case let .completed(targetState, _), let .failed(targetState, _, _, _):
+                targetState
+            }
+        }
+    }
+
+    /// `run` refused a transition `PipelineTransitions` does not allow.
+    public enum TransitionError: Error, Sendable, Equatable {
+        /// `(stage, activeState)` has no table entry, so nothing was written.
+        case unsupportedStage(stage: PipelineStage, activeState: PipelineState)
+        /// The work returned an outcome targeting a state outside the pair's
+        /// entry. Txn A had already committed; Txn B was not written, so the
+        /// meeting is left in `activeState` as if the stage had crashed.
+        case targetNotAllowed(stage: PipelineStage, activeState: PipelineState, targetState: PipelineState)
     }
 
     /// Why `synthesizeFailure` is transitioning a meeting out from under a
@@ -66,17 +91,31 @@ public actor StageRunner {
         activeState: PipelineState,
         work: @Sendable () async throws -> StageOutcome,
     ) async throws -> StageOutcome {
+        guard let allowedTargets = PipelineTransitions.allowedTargets(stage: stage, activeState: activeState) else {
+            logRejectedTransition("stage has no transition table entry for its active state", meetingID: meetingID, stage: stage, activeState: activeState)
+            throw TransitionError.unsupportedStage(stage: stage, activeState: activeState)
+        }
+
+        // `now()` is read exactly twice per run: here, and once after `work`.
+        // The gap between them is `duration_ms`.
+        let startedAt = now()
         try await stageEventLogger.record(event: StageEventRecord(
             meetingID: meetingID,
             stage: stage,
             kind: .started,
-            occurredAt: ISO8601UTC.string(from: now()),
+            occurredAt: ISO8601UTC.string(from: startedAt),
             targetState: activeState,
             metadataJSON: "{}",
         ))
+        logTransition(meetingID: meetingID, stage: stage, kind: .started, state: activeState)
 
         let outcome = try await work()
-        let occurredAt = ISO8601UTC.string(from: now())
+        let finishedAt = now()
+
+        try requireAllowed(outcome.targetState, in: allowedTargets, stage: stage, meetingID: meetingID, activeState: activeState)
+
+        let occurredAt = ISO8601UTC.string(from: finishedAt)
+        let durationMS = max(0, Int((finishedAt.timeIntervalSince(startedAt) * 1000).rounded()))
 
         switch outcome {
         case let .completed(targetState, metadataJSON):
@@ -86,8 +125,10 @@ public actor StageRunner {
                 kind: .completed,
                 occurredAt: occurredAt,
                 targetState: targetState,
+                durationMS: durationMS,
                 metadataJSON: metadataJSON,
             ))
+            logTransition(meetingID: meetingID, stage: stage, kind: .completed, state: targetState, durationMS: durationMS)
         case let .failed(targetState, errorClass, errorMessage, metadataJSON):
             try await stageEventLogger.record(event: StageEventRecord(
                 meetingID: meetingID,
@@ -95,11 +136,35 @@ public actor StageRunner {
                 kind: .failed,
                 occurredAt: occurredAt,
                 targetState: targetState,
+                durationMS: durationMS,
                 errorMessage: errorMessage,
                 metadataJSON: buildFailedMetadataJSON(errorClass: errorClass, mergingInto: metadataJSON),
             ))
+            logTransition(meetingID: meetingID, stage: stage, kind: .failed, state: targetState, durationMS: durationMS, errorClass: errorClass)
         }
         return outcome
+    }
+
+    /// The outcome's target must be in the pair's table entry. Txn A has
+    /// already committed, so a rejection leaves the meeting in `activeState`
+    /// as a crashed stage would, and the log line is the only trace of why.
+    private func requireAllowed(
+        _ targetState: PipelineState,
+        in allowedTargets: Set<PipelineState>,
+        stage: PipelineStage,
+        meetingID: MeetingID,
+        activeState: PipelineState,
+    ) throws {
+        guard allowedTargets.contains(targetState) else {
+            logRejectedTransition(
+                "stage returned an outcome outside its transition table entry; recording nothing",
+                meetingID: meetingID,
+                stage: stage,
+                activeState: activeState,
+                targetState: targetState,
+            )
+            throw TransitionError.targetNotAllowed(stage: stage, activeState: activeState, targetState: targetState)
+        }
     }
 
     // MARK: - Stale-detection synthesis
@@ -124,7 +189,7 @@ public actor StageRunner {
         .published: 30,
     ]
 
-    private struct StaleTransition {
+    struct StaleTransition {
         let targetState: PipelineState
         let errorClass: String
     }
@@ -138,7 +203,7 @@ public actor StageRunner {
     /// `published_partial` is a distinct, unrelated trigger (only
     /// `--publish-anyway` + no summarize output) and never fires for a stuck
     /// notify.
-    private static func staleTransition(for activeState: PipelineState) -> StaleTransition? {
+    static func staleTransition(for activeState: PipelineState) -> StaleTransition? {
         switch activeState {
         case .transcribing:
             StaleTransition(targetState: .transcriptionFailed, errorClass: "stale_active_state")
@@ -164,11 +229,20 @@ public actor StageRunner {
     /// target. Performs no cache-dir writes: `reviewingDiarization`'s
     /// `diarization_suggestions.json` stub is deferred to the story that
     /// implements the real `ReviewDiarization` stage.
+    ///
+    /// The write is conditional on the meeting still being in `activeState`,
+    /// and, when `expectedUpdatedAt` is given, still carrying that `updated_at`.
+    /// A caller that decided on a snapshot passes the `updated_at` it read:
+    /// a stage that completes into its own active state leaves `state`
+    /// unchanged, so the timestamp is what tells a finished stage from a
+    /// running one. A lost race throws `StateStoreError.staleWrite` with
+    /// nothing written.
     public func synthesizeFailure(
         meetingID: MeetingID,
         stage: PipelineStage,
         activeState: PipelineState,
         reason: StaleFailureReason,
+        expectedUpdatedAt: String? = nil,
     ) async throws {
         guard let transition = Self.staleTransition(for: activeState) else {
             throw SynthesizeFailureError.noStaleTransition(activeState: activeState)
@@ -182,7 +256,10 @@ public actor StageRunner {
             targetState: transition.targetState,
             errorMessage: reason.errorMessage,
             metadataJSON: buildFailedMetadataJSON(errorClass: transition.errorClass, mergingInto: nil),
+            expectedState: activeState,
+            expectedUpdatedAt: expectedUpdatedAt,
         ))
+        logTransition(meetingID: meetingID, stage: stage, kind: .failed, state: transition.targetState, errorClass: transition.errorClass)
     }
 
     /// One pass of the periodic stale-detection sweep (architecture.md:1062):
@@ -192,10 +269,20 @@ public actor StageRunner {
     /// this story ships the sweep's mechanism, not a live foreground/
     /// backgrounded timer loop (no App target exists yet to drive one; the
     /// interval a future composition root uses is its own concern).
+    ///
+    /// Each failure is written against the `updated_at` the sweep read, so a
+    /// real transition that lands between the read and the write wins: the
+    /// meeting is left alone and its id is left out of the result.
     @discardableResult
     public func sweepStaleActiveStates(now: Date? = nil) async throws -> [MeetingID] {
         let asOf = now ?? self.now()
         let candidates = try await stateStore.fetchPending()
+        return await sweep(candidates: candidates, asOf: asOf)
+    }
+
+    /// The sweep over an already-read candidate list, so a test can hand it a
+    /// snapshot that a real write has since overtaken.
+    func sweep(candidates: [Meeting], asOf: Date) async -> [MeetingID] {
         var transitioned: [MeetingID] = []
 
         for meeting in candidates {
@@ -229,12 +316,18 @@ public actor StageRunner {
                     stage: stage,
                     activeState: activeState,
                     reason: .staleActiveState(budgetSeconds: budgetSeconds),
+                    expectedUpdatedAt: meeting.updatedAt,
                 )
                 log.info("stale-detection sweep synthesized failure", [
                     "meetingID": .publicSafe(meetingID),
                     "activeState": .publicSafe(activeState.rawValue),
                 ])
                 transitioned.append(meetingID)
+            } catch StateStoreError.staleWrite {
+                log.info("stale-detection sweep found the meeting had moved since it was read; leaving it as it is", [
+                    "meetingID": .publicSafe(meetingID),
+                    "activeState": .publicSafe(activeState.rawValue),
+                ])
             } catch {
                 log.warn("stale-detection sweep failed to synthesize a failure; continuing with remaining candidates", [
                     "meetingID": .publicSafe(meetingID),
@@ -263,7 +356,7 @@ public actor StageRunner {
                 object = decoded
             } else {
                 log.warn("caller-supplied metadataJSON was not a JSON object; discarding it before folding in error_class", [
-                    "metadataJSON": .publicSafe(existing),
+                    "metadataJSON": .sensitive(existing),
                 ])
             }
         }

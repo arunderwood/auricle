@@ -19,84 +19,172 @@ private func makeMeeting(id: String) -> Meeting {
     Meeting(id: id, state: "summarizing", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z")
 }
 
-@Test func firstWriteForAMeetingCreatesASparseRowWithOnlyThosePatchColumnsSet() async throws {
+private func makeRecorder(for id: MeetingID) async throws -> (store: StateStore, recorder: TelemetryRecorder) {
     let store = try makeStore()
-    let id = meetingID("TR01")
     try await store.insertMeeting(makeMeeting(id: id.rawValue))
-    let recorder = TelemetryRecorder(stateStore: store)
+    return (store, TelemetryRecorder(stateStore: store))
+}
 
-    try await recorder.record(meetingID: id, patch: State.Telemetry(
-        meetingID: id.rawValue,
+// MARK: - One patch type per writer
+
+@Test func aSummarizePatchWritesOnlyTheSummarizeWritersColumns() async throws {
+    let id = meetingID("TR01")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: SummarizeTelemetryPatch(
+        quoteValidationDropCount: 2,
         summarizationPath: "claude_api",
         summarizationModel: "claude-opus-5",
+        summarizationEffortBudget: "high",
         costUSD: 0.32,
+        summarizationPromptSetHash: String(repeating: "ab", count: 32),
+        groundingMethod: "substring",
     ))
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
-    #expect(fetched.summarizationPath == "claude_api")
-    #expect(fetched.summarizationModel == "claude-opus-5")
-    #expect(fetched.costUSD == 0.32)
-    #expect(fetched.diarizationSuggestionsCount == nil)
-    #expect(fetched.timeToVaultNoteSeconds == nil)
+    #expect(fetched == State.Telemetry(
+        meetingID: id.rawValue,
+        quoteValidationDropCount: 2,
+        summarizationPath: "claude_api",
+        summarizationModel: "claude-opus-5",
+        summarizationEffortBudget: "high",
+        costUSD: 0.32,
+        groundingMethod: "substring",
+        summarizationPromptSetHash: String(repeating: "ab", count: 32),
+    ))
 }
 
-@Test func secondWriteToDifferentColumnsLeavesTheFirstWritersColumnsIntact() async throws {
-    let store = try makeStore()
+@Test func aTranscribePatchWritesOnlyTheWEREstimate() async throws {
     let id = meetingID("TR02")
-    try await store.insertMeeting(makeMeeting(id: id.rawValue))
-    let recorder = TelemetryRecorder(stateStore: store)
+    let (store, recorder) = try await makeRecorder(for: id)
 
-    try await recorder.record(meetingID: id, patch: State.Telemetry(
+    try await recorder.record(meetingID: id, patch: TranscribeTelemetryPatch(transcriptionWEREstimate: 0.08))
+
+    #expect(try await store.fetchTelemetry(meetingID: id.rawValue) == State.Telemetry(meetingID: id.rawValue, transcriptionWEREstimate: 0.08))
+}
+
+@Test func aReviewDiarizationPatchWritesOnlyTheReviewersColumns() async throws {
+    let id = meetingID("TR03")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: ReviewDiarizationTelemetryPatch(
+        diarizationSuggestionsCount: 5,
+        diarizationReviewCostUSD: 0.01,
+        diarizationReviewModel: "claude-haiku-4-5",
+    ))
+
+    #expect(try await store.fetchTelemetry(meetingID: id.rawValue) == State.Telemetry(
         meetingID: id.rawValue,
+        diarizationSuggestionsCount: 5,
+        diarizationReviewCostUSD: 0.01,
+        diarizationReviewModel: "claude-haiku-4-5",
+    ))
+}
+
+@Test func anAttributePatchWritesOnlyTheCompletionPathAndTheAppliedAndRejectedCounts() async throws {
+    let id = meetingID("TR04")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: AttributeTelemetryPatch(
+        attributionCompletionPath: "inline_ui",
+        diarizationSuggestionsAppliedCount: 3,
+        diarizationSuggestionsRejectedCount: 2,
+    ))
+
+    #expect(try await store.fetchTelemetry(meetingID: id.rawValue) == State.Telemetry(
+        meetingID: id.rawValue,
+        attributionCompletionPath: "inline_ui",
+        diarizationSuggestionsAppliedCount: 3,
+        diarizationSuggestionsRejectedCount: 2,
+    ))
+}
+
+@Test func aNotifyPatchWritesOnlyTheTwoTimings() async throws {
+    let id = meetingID("TR05")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: NotifyTelemetryPatch(timeToAttributionReadySeconds: 95, timeToVaultNoteSeconds: 610))
+
+    #expect(try await store.fetchTelemetry(meetingID: id.rawValue) == State.Telemetry(
+        meetingID: id.rawValue,
+        timeToAttributionReadySeconds: 95,
+        timeToVaultNoteSeconds: 610,
+    ))
+}
+
+@Test func aRetentionPatchWritesOnlyTheSnapshotStatus() async throws {
+    let id = meetingID("TR06")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: RetentionTelemetryPatch(audioRetentionStatusAtSnapshot: "deleted_after_grace"))
+
+    #expect(try await store.fetchTelemetry(meetingID: id.rawValue) == State.Telemetry(
+        meetingID: id.rawValue,
+        audioRetentionStatusAtSnapshot: "deleted_after_grace",
+    ))
+}
+
+@Test func everyPatchYieldsARecordWithNoOtherColumnSet() {
+    let id = meetingID("TR07")
+    let empty = State.Telemetry(meetingID: id.rawValue)
+
+    #expect(SummarizeTelemetryPatch().telemetry(for: id) == empty)
+    #expect(TranscribeTelemetryPatch().telemetry(for: id) == empty)
+    #expect(ReviewDiarizationTelemetryPatch().telemetry(for: id) == empty)
+    #expect(AttributeTelemetryPatch().telemetry(for: id) == empty)
+    #expect(NotifyTelemetryPatch().telemetry(for: id) == empty)
+    #expect(RetentionTelemetryPatch().telemetry(for: id) == empty)
+}
+
+// MARK: - Writers stay out of each other's columns
+
+@Test func aSecondWritersPatchLeavesTheFirstWritersColumnsIntact() async throws {
+    let id = meetingID("TR08")
+    let (store, recorder) = try await makeRecorder(for: id)
+
+    try await recorder.record(meetingID: id, patch: SummarizeTelemetryPatch(
         summarizationPath: "claude_api",
         summarizationModel: "claude-opus-5",
         costUSD: 0.32,
     ))
-    try await recorder.record(meetingID: id, patch: State.Telemetry(
-        meetingID: id.rawValue,
+    try await recorder.record(meetingID: id, patch: ReviewDiarizationTelemetryPatch(
         diarizationSuggestionsCount: 5,
-        diarizationSuggestionsAppliedCount: 3,
         diarizationReviewModel: "claude-haiku-4-5",
     ))
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
-    // The first writer's columns, from the earlier UPSERT, are untouched.
     #expect(fetched.summarizationPath == "claude_api")
     #expect(fetched.summarizationModel == "claude-opus-5")
     #expect(fetched.costUSD == 0.32)
-    // The second writer's columns are now present alongside them.
     #expect(fetched.diarizationSuggestionsCount == 5)
-    #expect(fetched.diarizationSuggestionsAppliedCount == 3)
     #expect(fetched.diarizationReviewModel == "claude-haiku-4-5")
 }
 
-@Test func aThirdWriteOverwritingAnAlreadySetColumnReplacesOnlyThatColumn() async throws {
-    let store = try makeStore()
-    let id = meetingID("TR03")
-    try await store.insertMeeting(makeMeeting(id: id.rawValue))
-    let recorder = TelemetryRecorder(stateStore: store)
+@Test func theSameWritersLaterPatchReplacesOnlyTheColumnItSets() async throws {
+    let id = meetingID("TR09")
+    let (store, recorder) = try await makeRecorder(for: id)
 
-    try await recorder.record(meetingID: id, patch: State.Telemetry(meetingID: id.rawValue, costUSD: 0.10))
-    try await recorder.record(meetingID: id, patch: State.Telemetry(meetingID: id.rawValue, quoteValidationDropCount: 1))
-    try await recorder.record(meetingID: id, patch: State.Telemetry(meetingID: id.rawValue, costUSD: 0.45))
+    try await recorder.record(meetingID: id, patch: SummarizeTelemetryPatch(costUSD: 0.10))
+    try await recorder.record(meetingID: id, patch: SummarizeTelemetryPatch(quoteValidationDropCount: 1))
+    try await recorder.record(meetingID: id, patch: SummarizeTelemetryPatch(costUSD: 0.45))
 
     let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
     #expect(fetched.costUSD == 0.45)
     #expect(fetched.quoteValidationDropCount == 1)
 }
 
-@Test func recordStampsTheMeetingIDParameterEvenIfThePatchsOwnFieldDiffers() async throws {
+@Test func theRowIsKeyedByTheMeetingIDPassedToRecord() async throws {
     let store = try makeStore()
-    let id = meetingID("TR04")
-    try await store.insertMeeting(makeMeeting(id: id.rawValue))
+    let first = meetingID("TR10")
+    let second = meetingID("TR11")
+    try await store.insertMeeting(makeMeeting(id: first.rawValue))
+    try await store.insertMeeting(makeMeeting(id: second.rawValue))
     let recorder = TelemetryRecorder(stateStore: store)
 
-    try await recorder.record(
-        meetingID: id,
-        patch: State.Telemetry(meetingID: "wrong-id-should-be-overwritten", costUSD: 0.05),
-    )
+    try await recorder.record(meetingID: second, patch: SummarizeTelemetryPatch(costUSD: 0.05))
 
-    let fetched = try #require(try await store.fetchTelemetry(meetingID: id.rawValue))
-    #expect(fetched.meetingID == id.rawValue)
+    #expect(try await store.fetchTelemetry(meetingID: first.rawValue) == nil)
+    let fetched = try #require(try await store.fetchTelemetry(meetingID: second.rawValue))
+    #expect(fetched.meetingID == second.rawValue)
     #expect(fetched.costUSD == 0.05)
 }

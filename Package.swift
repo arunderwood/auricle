@@ -63,7 +63,11 @@ let package = Package(
         ),
         .target(name: "State", dependencies: ["Core", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/State"),
         .target(name: "Telemetry", dependencies: ["Core", "State", .product(name: "GRDB", package: "GRDB.swift")], path: "Sources/Telemetry"),
-        .target(name: "Orchestrator", dependencies: ["Core", "State", "Telemetry", "Permissions"], path: "Sources/Orchestrator"),
+        .target(
+            name: "Orchestrator",
+            dependencies: ["Core", "State", "Telemetry", "Permissions", .product(name: "ArgumentParser", package: "swift-argument-parser")],
+            path: "Sources/Orchestrator",
+        ),
         .target(name: "Permissions", dependencies: ["Core"], path: "Sources/Permissions"),
 
         // === Capture ===
@@ -124,7 +128,11 @@ let package = Package(
         .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport", "ClaudeSummarizer"], path: "Tests/CoreTests"),
         .testTarget(name: "StateTests", dependencies: ["State", "TestSupport"], path: "Tests/StateTests"),
         .testTarget(name: "TelemetryTests", dependencies: ["Telemetry", "TestSupport"], path: "Tests/TelemetryTests"),
-        .testTarget(name: "OrchestratorTests", dependencies: ["Orchestrator", "TestSupport"], path: "Tests/OrchestratorTests"),
+        .testTarget(
+            name: "OrchestratorTests",
+            dependencies: ["Orchestrator", "TestSupport", .product(name: "ArgumentParser", package: "swift-argument-parser")],
+            path: "Tests/OrchestratorTests",
+        ),
         .testTarget(name: "PermissionsTests", dependencies: ["Permissions", "TestSupport"], path: "Tests/PermissionsTests"),
         .testTarget(name: "CaptureTests", dependencies: ["Capture", "TestSupport"], path: "Tests/CaptureTests"),
         // Interface-only target — protocol declarations only; tests minimal/none. AR-PAT-1.

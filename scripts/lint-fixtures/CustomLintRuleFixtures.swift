@@ -30,12 +30,18 @@ func atomicWriterBypassFixture(data: Data, text: String, url: URL, path: String)
     _ = FileManager().createFile(atPath: path, contents: nil) // expect: atomic_writer_bypass
 }
 
-/// Exercises the os.Logger(subsystem:category:) bypass, not just the legacy
-/// os_log( free function — Log.swift itself is built on Logger, so this is
-/// the pattern that actually matters.
+/// Exercises both alternatives of the rule: the os.Logger(subsystem:category:)
+/// bypass, which matters most because Log.swift itself is built on Logger, and
+/// the legacy os_log( free function. Narrowing either alternative would leave
+/// the other marked line firing, so each needs its own line.
 func logFacadeBypassFixture() {
     let logger = Logger(subsystem: "com.auricle.app", category: "probe") // expect: log_facade_bypass
     logger.info("test")
+    os_log("probe") // expect: log_facade_bypass
+}
+
+func printBypassFixture() {
+    print("probe") // expect: print_bypass
 }
 
 func transcriptDecodeBypassFixture() {

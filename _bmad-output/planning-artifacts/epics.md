@@ -166,7 +166,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **NFR-R7 [MVP]:** Quote-grounding validation is a hard gate: 100% of action items and decisions in published notes have a `source_transcript_quote` that survives validation. Items failing the check are dropped silently before persistence (logged at info level).
 - **NFR-R8 [MVP]:** auricle handles the macOS Notification permission being revoked at any time without crashing — pipeline still completes, notification simply fails to deliver, meeting moves to "awaiting verification" state visible in the main window.
 - **NFR-R9 [MVP]:** auricle handles the Anthropic API being unreachable by retrying with exponential backoff up to a configurable timeout (default 5 minutes); on persistent failure, the meeting is marked `summarization_failed` in pending state, not lost.
-- **NFR-R10 [MVP]:** auricle's local SQLite state file is checkpointed on every state transition; corruption recovery is by replay from on-disk artifacts rather than from backup.
+- **NFR-R10 [MVP]:** auricle's local SQLite state file is checkpointed on quit, plus SQLite's automatic checkpoint; corruption recovery is by replay from on-disk artifacts rather than from backup.
 
 #### Security (NFR-S1–NFR-S9)
 
@@ -261,7 +261,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 #### Persistence & Data Contracts (Decision Group 2)
 
 - **AR-DATA-1:** Single SQLite database at `~/Library/Application Support/com.auricle.app/auricle.sqlite3` accessed via GRDB.swift; WAL mode enabled in migration #1. Five tables: `schema_version`, `meetings`, `stage_events`, `retention_timers`, `telemetry`. `meetings.id` is a 26-char ULID (Crockford base32). All timestamps ISO8601 UTC with `Z` suffix.
-- **AR-DATA-2:** GRDB concurrency: GUI uses `DatabasePool`; subprocesses use `DatabaseQueue`. WAL persistence sticky in file header. Cross-process safety via WAL + POSIX advisory locks. `Configuration.busyMode = .timeout(5.0)`. `PRAGMA foreign_keys = ON`. GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit and on every state transition. Subprocesses do not checkpoint.
+- **AR-DATA-2:** GRDB concurrency: GUI uses `DatabasePool`; subprocesses use `DatabaseQueue`. WAL persistence sticky in file header. Cross-process safety via WAL + POSIX advisory locks. `Configuration.busyMode = .timeout(5.0)`. `PRAGMA foreign_keys = ON`. GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit; between quits SQLite's automatic checkpoint bounds the WAL. Subprocesses issue no explicit checkpoint.
 - **AR-DATA-3:** Reactive observation: `GRDB.ValueObservation` is in-process only — does not see external writes. GUI must use file-watch (`DispatchSource.makeFileSystemObjectSource` on `db.sqlite3-wal`, 100ms debounce) for cross-process observation.
 - **AR-DATA-4:** Write-authority matrix per Decision 2.1 — every column has exactly one writer (GUI capture stage / subprocess executing the stage / GUI verify stage / GUI retention scheduler / Reviewer subprocess / GUI Attribute stage). Telemetry UPSERT writers are partitioned: subprocess writes count/cost/model; GUI writes applied/rejected. No column has two writers.
 - **AR-DATA-5:** Migrations via `GRDB.DatabaseMigrator` — forward-only, identified by string ID, never reordered or removed. Schema version bumps only when a table structure changes.
@@ -534,7 +534,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 | NFR-R7 (quote-grounding hard gate, 100%) | Epic 3 | `QuoteValidator` drops failing items pre-persist |
 | NFR-R8 (Notification permission revoked → graceful degradation) | Epic 8 | Compensating surfaces in Epic 6 banner + Epic 9 doctor |
 | NFR-R9 (Anthropic API unreachable → exponential backoff + fail-state) | Epic 3 | `summarization_failed` transient state |
-| NFR-R10 (SQLite checkpointing on every state transition) | Epic 1 | GUI checkpoint policy |
+| NFR-R10 (SQLite checkpointed on quit, plus SQLite's automatic checkpoint) | Epic 1 (policy), Epic 6 Story 6.9 (the quit-time call) | GUI checkpoint policy |
 | **Security (S)** | | |
 | NFR-S1 (Keychain-only secrets) | Epic 3 (Anthropic key) + Epic 5 (initial Keychain plumbing if needed during onboarding) | `KeychainAPIKey`, `GoogleOAuthFlow` |
 | NFR-S2 (self-managed code-signing) | Epic 9 | Moved here from Epic 1 per Winston |
@@ -869,6 +869,7 @@ So that no downstream story reinvents file I/O, ID generation, transcript canoni
 **And** `CanonicalTranscript` enforces NFC Unicode normalization, LF line endings, no leading/trailing whitespace per line, and `<Speaker_N>: ` prefix at utterance start
 **And** character offsets are UTF-8 byte offsets into the NFC-normalized representation (auricle's internal convention; no API contract depends on it per AR-SUM-4)
 **And** `Tests/CoreTests/CanonicalTranscriptContractTests.swift` is the canonical build-time invariant test for AR-SUM-4 (extended with cross-strategy assertions in Epic 3)
+**And** as built, `CanonicalTranscript` did not land in this story: the story's token-budget split gate deferred it, and it landed in Story 3.1 (`Sources/Core/CanonicalTranscript.swift`)
 
 **Given** the `Core` target
 **When** I declare a `Codable` type for a cache-dir artifact (snake_case dialect)
@@ -882,6 +883,7 @@ So that no downstream story reinvents file I/O, ID generation, transcript canoni
 **And** tilde expansion + symlink resolution happens once at config load; the canonical absolute path is what's stored
 **And** secrets (Anthropic API key, Google OAuth refresh token) are NEVER read from or written to this file (Keychain-only per NFR-S1)
 **And** config changes take effect on next pipeline invocation without app restart (NFR-M6) — verified by a test that mutates config and observes the next read
+**And** as built, `Config` did not land in this story either: it landed in the Epic 3 follow-through (`Sources/Core/Config.swift`) and reads `vault_path`, `meetings_subdir` and the Google Calendar client keys only. Story 9.1 owns the remaining FR58 keys and symlink normalization
 
 **Given** the `Core` target
 **When** I declare a typed Swift error
@@ -962,7 +964,8 @@ So that every subsequent epic can read/write state without ever needing a schema
 **Then** `DatabasePoolFactory` returns a GRDB `DatabasePool` (concurrent reads with own writes) per AR-DATA-2
 **And** when a subprocess opens the database, the factory returns a `DatabaseQueue` (single writer) per AR-DATA-2
 **And** `Configuration.busyMode = .timeout(5.0)` is set on every opener
-**And** the GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit and on every state transition; subprocesses do NOT checkpoint
+**And** the GUI runs `PRAGMA wal_checkpoint(TRUNCATE)` on app quit; subprocesses issue no explicit checkpoint
+**And** the clause was first written as a checkpoint on every state transition, and NFR-R10 was reworded (Epic 1 retro, 2026-09-19) to a checkpoint on quit plus SQLite's automatic checkpoint, since SQLite checkpoints the WAL by itself once it passes its page threshold and the practical risk is unbounded WAL growth, not data loss. As built, nothing in `Sources/` or `App/` runs `wal_checkpoint`: the quit-time call is Story 6.9's
 
 **Given** the `State` target
 **When** I import GRDB
@@ -1002,6 +1005,7 @@ So that no stage code path bypasses telemetry, no subprocess crash leaves the ch
 **Then** `StageRunner.synthesizeFailure(meetingID:reason:)` is called per AR-FAIL-2
 **And** for `reviewing_diarization` stale specifically, the synthesized transition is the **benign-timeout passthrough** to `awaiting_attribution` (empty stub `diarization_suggestions.json` written, `stage_events.failed` row with `error_class='ai_reviewer_timeout'`) — NOT a `*_failed` transition (per Decision 4.2)
 **And** for other active states the synthesized transition is to the corresponding `*_failed` state with `error_class='stale_active_state'`
+**And** as built, this story ships the sweep's mechanism (`StageRunner.sweepStaleActiveStates`, called directly with an injected clock) and no timer loop; the 10s and 60s driver moved to Story 6.9, together with the launch-time `CrashRecovery.reconcile()` call and the `RetentionScheduler` start (Epic 1 retro SR-4)
 
 **Given** the `Orchestrator` target
 **When** the app launches
@@ -1124,7 +1128,7 @@ So that conformance to the architectural patterns is mechanical, not memorial.
 
 **Epic 1 summary:**
 - **8 stories** sized for single dev-agent completion each
-- **All FRs covered:** FR11 (Story 1.5 — crash isolation), FR12 binding scaffold (Story 1.7), FR14 (Story 1.5 — idempotent re-run via two-transaction pattern), FR59 (Story 1.2 — config persistence), FR61 (Story 1.3 — Log facade), FR62 (Story 1.5 — CrashRecovery), FR66 (Story 1.4 — telemetry SQLite)
+- **All FRs covered:** FR11 (Story 1.5 — crash isolation), FR12 binding scaffold (Story 1.7), FR14 (Story 1.5 — idempotent re-run via two-transaction pattern), FR59 (Story 1.2 — config persistence; as built, `Config` landed after Epic 1 and covers three keys, see Story 1.2's As-built notes), FR61 (Story 1.3 — Log facade), FR62 (Story 1.5 — CrashRecovery), FR66 (Story 1.4 — telemetry SQLite)
 - **All architectural commitments addressed:** AR-INIT-1–5 (Story 1.1), AR-PIPE-1–5 (Stories 1.4, 1.5), AR-PIPE-6 scaffold + AR-PIPE-7 + AR-PIPE-8 (Story 1.7), AR-DATA-1–5 (Story 1.4), AR-FAIL-1 + AR-FAIL-2 (Story 1.5), AR-PAT-1–10 (Story 1.8 + woven throughout)
 - **Story 1 blocker (Amelia), partly resolved:** the wedge-validation telemetry counter columns are wired into the `telemetry` table in Story 1.4, except `summarization_prompt_set_hash`, which migration #4 (Story 3.7) added along with `grounding_method`
 - **No future-story dependencies:** every story is independently completable in sequence; later stories build on earlier ones but no story in this epic requires a future story to function
@@ -2915,10 +2919,27 @@ So that the lifecycle mental model "background, not invisible" per UX spec Step 
 **When** the user invokes Cmd-Q (or `auricle` quits via Apple menu → Quit)
 **Then** `applicationShouldTerminate(_:)` runs the graceful exit sequence: stop any active capture (calls `CaptureStage.stop(meetingID:)` for the in-flight meeting); SQLite WAL checkpoint per AR-DATA-2; persist any in-flight `attribution.json` debounced writes per UX-DR58; flush logs
 **And** the in-flight meeting state is persisted to SQLite before the process exits (verified by relaunching auricle and observing the meeting in the expected state)
+**And** the quit-time checkpoint is the only WAL checkpoint the app issues itself; between quits SQLite's automatic checkpoint applies (NFR-R10 as reworded)
 
 **Given** the app launches after a graceful Cmd-Q with an in-flight meeting
 **When** `Orchestrator/CrashRecovery.swift` runs (Story 1.5)
 **Then** the meeting's persisted state determines recovery — for example, if it was `transcribing` at quit time, the orchestrator re-dispatches the transcribe stage idempotently per AR-PIPE-3
+
+**Given** the app launches, after a graceful quit or not
+**When** `AppDelegate` finishes launching
+**Then** it runs `CrashRecovery.reconcile()` once and starts `RetentionScheduler` per FR46
+**And** the stale-detection sweep starts with the app and runs every 10s while the app is foreground and every 60s while it is backgrounded (AR-FAIL-2)
+**And** the sweep loop and the reconcile and scheduler wiring live in `Sources/Orchestrator`, so `swift test` reaches them; `AppDelegate` only starts them
+
+**Given** a meeting sits in an active `_ing` state and both `reconcile()` and the sweep examine it
+**When** each decides whether the meeting is stuck
+**Then** both use one stuck test: the meeting's age (`now - meetings.updated_at`) against the state's budget (AR-FAIL-2), plus a liveness check that no worker still holds the meeting
+**And** a meeting that is younger than its budget, or whose worker is alive, is left alone by both: `reconcile()` does not re-dispatch it and the sweep does not fail it, so a worker that outlived its GUI is never raced by a second one
+
+**Given** a `transcribing` meeting
+**When** the sweep computes its budget
+**Then** the budget scales with the audio's length at 2× NFR-P3's rate, which is 2s of budget per minute of audio and 60s for a 30-minute file, instead of a fixed 60s that a longer recording would outrun while healthy
+**And** the other states keep their fixed budgets from AR-FAIL-2
 
 **Given** the app is in the Dock with no main window open
 **When** any stage produces a notification (Epic 8)
@@ -2926,7 +2947,7 @@ So that the lifecycle mental model "background, not invisible" per UX spec Step 
 
 **Given** the test suite
 **When** I run `Tests/AppTests/AppLifecycleTests.swift`
-**Then** tests cover: window close while capture active → capture continues + Dock icon remains; Cmd-Q during capture → graceful stop + state persists; relaunch after Cmd-Q with in-flight state → CrashRecovery picks up correctly; notification fires when window is closed
+**Then** tests cover: window close while capture active → capture continues + Dock icon remains; Cmd-Q during capture → graceful stop + state persists; relaunch after Cmd-Q with in-flight state → CrashRecovery picks up correctly; launch runs `reconcile()` and starts `RetentionScheduler`; the sweep cadence is 10s foreground and 60s backgrounded; `reconcile()` and the sweep give one verdict on the same meeting, and neither touches one that is under budget or has a live worker; the `transcribing` budget grows with audio length; notification fires when window is closed
 
 ---
 

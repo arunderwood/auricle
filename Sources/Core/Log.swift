@@ -42,11 +42,24 @@ public struct Log: Sendable {
     static let redactionMarker = "<redacted>"
 
     let category: String
-    private let logger: Logger
+    /// Receives the already-redacted message. Production writes it to
+    /// `Logger` as `.public`, which is safe only because redaction has
+    /// happened by the time this is called.
+    private let sink: @Sendable (OSLogType, String) -> Void
 
     public init(category: String) {
         self.category = category
-        logger = Logger(subsystem: Log.subsystem, category: category)
+        let logger = Logger(subsystem: Log.subsystem, category: category)
+        sink = { level, message in
+            logger.log(level: level, "\(message, privacy: .public)")
+        }
+    }
+
+    /// Replaces the `Logger` call, so a test sees exactly what would have
+    /// reached the unified log without parsing `log show` output.
+    init(category: String, sink: @escaping @Sendable (OSLogType, String) -> Void) {
+        self.category = category
+        self.sink = sink
     }
 
     /// Stripped in release builds: the body — including field redaction and
@@ -72,8 +85,8 @@ public struct Log: Sendable {
         emit(.error, message, fields)
     }
 
-    /// Single choke point for the "redact, then hand `Logger` an already-safe
-    /// `.public` string" step every level above shares — so that invariant is
+    /// Single choke point for the "redact, then hand the sink an already-safe
+    /// string" step every level above shares — so that invariant is
     /// enforced once, not re-stated at each call site.
     ///
     /// `message` is a `StaticString`, not a `String`: `StaticString` doesn't
@@ -82,8 +95,7 @@ public struct Log: Sendable {
     /// review-dependent mistake. Every runtime value is forced through
     /// `fields`, where `LogSensitivity` is mandatory.
     private func emit(_ level: OSLogType, _ message: StaticString, _ fields: [String: LogSensitivity]) {
-        let built = Log.buildMessage(String(describing: message), fields)
-        logger.log(level: level, "\(built, privacy: .public)")
+        sink(level, Log.buildMessage(String(describing: message), fields))
     }
 
     /// Pure message-building step, kept separate from the `Logger` calls

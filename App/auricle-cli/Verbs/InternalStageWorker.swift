@@ -18,72 +18,65 @@ import WhisperKitTranscriber
 // not a user-facing verb — `shouldDisplay: false` keeps it out of `auricle
 // help` and shell-completion scripts, and it is explicitly exempt from the
 // NFR-I7 binding-contract guarantee every other verb carries.
+//
+// The command line is `InternalStageArguments`, the same type
+// `SubprocessDispatcher` builds its argument vector from, and validating it is
+// that type's job; this command only wires dependencies and turns an exit
+// status into a process exit.
 struct InternalStageWorker: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "__internal-stage",
+        commandName: InternalStageArguments.commandName,
         shouldDisplay: false,
     )
 
-    @Argument(help: "Pipeline stage to run.")
-    var stage: String
-
-    @Argument(help: "Meeting ID.")
-    var id: String
-
-    @Option(help: "Protocol version the dispatching process was built against.")
-    var workerProtocolVersion: Int
-
-    @Option(help: "Obsidian vault whose page names and wikilinks become the summarize stage's glossary.")
-    var vaultPath: String?
+    @OptionGroup var arguments: InternalStageArguments
 
     func run() async throws {
-        switch InternalStageValidator.validate(stage: stage, workerProtocolVersion: workerProtocolVersion) {
-        case .valid:
-            switch PipelineStage(rawValue: stage) {
+        switch arguments.decide() {
+        case let .exit(status):
+            try finish(status, prefixed: false)
+
+        case let .run(stage, meetingID):
+            switch stage {
             case .transcribe:
-                try await runTranscribe()
+                try await runTranscribe(meetingID: meetingID)
             case .summarize:
-                try await runSummarize()
+                try await runSummarize(meetingID: meetingID)
             default:
-                try notYetImplemented("__internal-stage")
+                try notYetImplemented(InternalStageArguments.commandName)
             }
+        }
+    }
 
-        case let .unknownStage(stage):
-            writeStderr("__internal-stage: unrecognized stage '\(stage)'.")
-            throw ExitCode(1)
+    /// Writes the status's message, if any, and exits non-zero unless it is a
+    /// success. A message from a worker gets the command-name prefix; the one
+    /// from argument validation is already a complete line.
+    private func finish(_ status: WorkerExitStatus, prefixed: Bool) throws {
+        if let message = status.message {
+            writeStderr(prefixed ? "\(InternalStageArguments.commandName): \(message)" : message)
+        }
+        if status.code != WorkerExitCode.success {
+            throw ExitCode(status.code)
+        }
+    }
 
-        case let .protocolVersionMismatch(mismatch):
-            if let json = try? JSONEncoder().encode(mismatch),
-               let jsonString = String(data: json, encoding: .utf8) {
-                writeStderr(jsonString)
-            } else {
-                writeStderr(
-                    "__internal-stage: worker protocol version mismatch "
-                        + "(expected \(mismatch.expected), received \(mismatch.received)).",
-                )
-            }
-            throw ExitCode(2)
+    /// Opens the state store the way every worker does. A typed store error
+    /// names its case, and any other names its type only.
+    private func openStateStore() throws -> StateStore {
+        do {
+            return try StateStore.subprocess()
+        } catch {
+            let cause = (error as? StateStoreError).map { String(describing: $0) } ?? String(describing: type(of: error))
+            writeStderr("\(InternalStageArguments.commandName): could not open the state store (\(cause)).")
+            throw ExitCode(WorkerExitCode.stateError)
         }
     }
 
     /// Builds the concrete transcriber and hands it to `TranscribeWorker`,
     /// which owns the ordering and the exit codes so `swift test` reaches
-    /// them. The id is parsed before anything else, so a malformed one never
-    /// opens the state store.
-    private func runTranscribe() async throws {
-        guard let meetingID = MeetingID(ulid: id) else {
-            writeStderr("__internal-stage: '\(id)' is not a valid meeting ID.")
-            throw ExitCode(1)
-        }
-
-        let stateStore: StateStore
-        do {
-            stateStore = try StateStore.subprocess()
-        } catch {
-            writeStderr("__internal-stage: could not open the state store (\(type(of: error))).")
-            throw ExitCode(2)
-        }
-
+    /// them.
+    private func runTranscribe(meetingID: MeetingID) async throws {
+        let stateStore = try openStateStore()
         let config = TranscriberConfig()
         let modelStore = WhisperKitModelStore()
         let exit = await TranscribeWorker.run(
@@ -94,12 +87,7 @@ struct InternalStageWorker: AsyncParsableCommand {
             config: config,
             ensureModel: { await Self.provisionModelIfMissing(modelStore, config: config) },
         )
-        if let message = exit.message {
-            writeStderr("__internal-stage: \(message)")
-        }
-        if exit.code != 0 {
-            throw ExitCode(exit.code)
-        }
+        try finish(exit, prefixed: true)
     }
 
     /// The one line written says a download is starting and, if it fails,
@@ -115,50 +103,20 @@ struct InternalStageWorker: AsyncParsableCommand {
         }
     }
 
-    /// Wires `SummarizeStage`'s dependencies and hands it the meeting. The
-    /// id is parsed before anything else so a malformed one never opens the
-    /// state store; the stage's own outcome, not this function, decides the
-    /// exit code.
-    private func runSummarize() async throws {
-        guard let meetingID = MeetingID(ulid: id) else {
-            writeStderr("__internal-stage: '\(id)' is not a valid meeting ID.")
-            throw ExitCode(1)
-        }
-
-        let stateStore: StateStore
-        do {
-            stateStore = try StateStore.subprocess()
-        } catch {
-            writeStderr("__internal-stage: could not open the state store (\(type(of: error))).")
-            throw ExitCode(2)
-        }
-
-        let orchestrator = ShippedSummarization.orchestrator()
-
-        let outcome: StageRunner.StageOutcome
-        do {
-            outcome = try await SummarizeStage.run(
-                meetingID: meetingID,
-                stateStore: stateStore,
-                stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
-                telemetryRecorder: TelemetryRecorder(stateStore: stateStore),
-                orchestrator: orchestrator,
-                glossary: vaultGlossary(),
-                config: SummarizerConfig(),
-                calendarSource: calendarSource(),
-            )
-        } catch StateStoreError.meetingNotFound {
-            writeStderr("__internal-stage: no meeting with ID \(meetingID).")
-            throw ExitCode(3)
-        } catch {
-            writeStderr("__internal-stage: summarize could not record its progress (\(type(of: error))).")
-            throw ExitCode(2)
-        }
-
-        let exitCode = SummarizeStage.exitCode(for: outcome)
-        if exitCode != 0 {
-            throw ExitCode(exitCode)
-        }
+    /// Wires `SummarizeStage`'s dependencies and hands the meeting to
+    /// `SummarizeWorker`, which owns the mapping from the stage's result to an
+    /// exit status.
+    private func runSummarize(meetingID: MeetingID) async throws {
+        let stateStore = try openStateStore()
+        let exit = await SummarizeWorker.run(
+            meetingID: meetingID,
+            stateStore: stateStore,
+            orchestrator: ShippedSummarization.orchestrator(),
+            glossary: vaultGlossary(),
+            config: SummarizerConfig(),
+            calendarSource: calendarSource(),
+        )
+        try finish(exit, prefixed: true)
     }
 
     /// Empty when no vault path was given or the vault cannot be read: a
@@ -166,7 +124,7 @@ struct InternalStageWorker: AsyncParsableCommand {
     /// one line written names the failure's type only, because a path is the
     /// user's own and does not belong in a log.
     private func vaultGlossary() -> Glossary {
-        guard let vaultPath else { return Glossary() }
+        guard let vaultPath = arguments.vaultPath else { return Glossary() }
         let url = URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath, isDirectory: true)
         return VaultGlossaryBuilder(vaultPath: url).buildOrEmpty { error in
             writeStderr("__internal-stage: continuing without a vault glossary (\(type(of: error))).")

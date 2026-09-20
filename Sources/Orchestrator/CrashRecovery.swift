@@ -16,6 +16,8 @@ import State
 /// dispatched as `summarize`, because that would repeat a paid summarization.
 public struct CrashRecovery: Sendable {
     public enum Outcome: Sendable, Equatable {
+        /// The worker was launched, not that it succeeded: its exit status
+        /// arrives later through `onWorkerExit`.
         case redispatched(MeetingID, PipelineStage)
         case loggedOnly(MeetingID, PipelineState)
     }
@@ -31,13 +33,47 @@ public struct CrashRecovery: Sendable {
     /// detected and logged.
     private static let logOnlyActiveStates: Set<PipelineState> = [.attributing, .persisting, .published]
 
+    private static let log = Log(category: "orchestrator")
+
     private let stateStore: StateStore
     private let dispatcher: SubprocessDispatcher
-    private let log = Log(category: "orchestrator")
+    private let onWorkerExit: @Sendable (WorkerExit) -> Void
 
-    public init(stateStore: StateStore, dispatcher: SubprocessDispatcher) {
+    /// `onWorkerExit` is called once per re-dispatched worker, on a queue
+    /// Foundation chooses, so a fast worker can report before `reconcile()` has
+    /// returned. Left `nil` it warns about a non-zero status: a worker that
+    /// fails at argument parsing would otherwise look the same as one that
+    /// finished.
+    public init(
+        stateStore: StateStore,
+        dispatcher: SubprocessDispatcher,
+        onWorkerExit: (@Sendable (WorkerExit) -> Void)? = nil,
+    ) {
+        self.init(stateStore: stateStore, dispatcher: dispatcher, onWorkerExit: onWorkerExit, log: Self.log)
+    }
+
+    /// `log` is where the default observer warns; a test passes its own to see
+    /// what the default does.
+    init(
+        stateStore: StateStore,
+        dispatcher: SubprocessDispatcher,
+        onWorkerExit: (@Sendable (WorkerExit) -> Void)?,
+        log: Log,
+    ) {
         self.stateStore = stateStore
         self.dispatcher = dispatcher
+        self.onWorkerExit = onWorkerExit ?? { Self.warnOnNonzeroExit($0, to: log) }
+    }
+
+    /// Only the stage, the meeting id and the status are logged: the worker's
+    /// stderr is not captured, and a status is all this can know.
+    static func warnOnNonzeroExit(_ exit: WorkerExit, to log: Log) {
+        guard exit.status != 0 else { return }
+        log.warn("a re-dispatched worker exited with a non-zero status", [
+            "meetingID": .publicSafe(exit.meetingID),
+            "stage": .publicSafe(exit.stage.rawValue),
+            "status": .publicSafe(exit.status),
+        ])
     }
 
     @discardableResult
@@ -52,7 +88,7 @@ public struct CrashRecovery: Sendable {
             else { continue }
 
             guard let meetingID = MeetingID(ulid: meeting.id) else {
-                log.warn("crash recovery found a candidate meeting whose id failed ULID validation; skipping", [
+                Self.log.warn("crash recovery found a candidate meeting whose id failed ULID validation; skipping", [
                     "rawID": .publicSafe(meeting.id),
                     "state": .publicSafe(state.rawValue),
                 ])
@@ -60,7 +96,7 @@ public struct CrashRecovery: Sendable {
             }
 
             if Self.logOnlyActiveStates.contains(state) {
-                log.info("crash recovery found meeting in an active state with no automatic subprocess re-dispatch", [
+                Self.log.info("crash recovery found meeting in an active state with no automatic subprocess re-dispatch", [
                     "meetingID": .publicSafe(meetingID),
                     "state": .publicSafe(state.rawValue),
                 ])
@@ -71,14 +107,14 @@ public struct CrashRecovery: Sendable {
             guard let stage = ActiveStageInFlight.stage(for: state) else { continue }
 
             do {
-                try dispatcher.dispatch(stage: stage, meetingID: meetingID)
-                log.info("crash recovery re-dispatched stuck stage", [
+                try dispatcher.dispatch(stage: stage, meetingID: meetingID, onExit: onWorkerExit)
+                Self.log.info("crash recovery re-dispatched stuck stage", [
                     "meetingID": .publicSafe(meetingID),
                     "stage": .publicSafe(stage.rawValue),
                 ])
                 outcomes.append(.redispatched(meetingID, stage))
             } catch {
-                log.warn("crash recovery failed to re-dispatch a stuck stage; continuing with remaining candidates", [
+                Self.log.warn("crash recovery failed to re-dispatch a stuck stage; continuing with remaining candidates", [
                     "meetingID": .publicSafe(meetingID),
                     "stage": .publicSafe(stage.rawValue),
                 ])

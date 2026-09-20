@@ -14,14 +14,22 @@ struct BareInvocation: AsyncParsableCommand {
         shouldDisplay: false,
     )
 
+    /// A reading open, so a status command never creates the database or its
+    /// directory and never migrates it. No database file means the app has not
+    /// run yet and there are no meetings, which is the true answer to "what is
+    /// in flight". Any other failure, a schema that is not current included,
+    /// keeps the error and exit 2.
     func run() async throws {
         let pending: [Meeting]
         do {
-            let stateStore = try StateStore.production()
+            let stateStore = try StateStore.reader()
             pending = try await stateStore.fetchPending()
+        } catch StateStoreError.databaseNotFound {
+            print(BareInvocationStatus.nothingInFlight.message)
+            return
         } catch {
             writeStderr("Couldn't read meeting state: \(error).")
-            throw ExitCode(2)
+            throw ExitCode(WorkerExitCode.stateError)
         }
 
         let summaries = pending.map {
@@ -32,15 +40,6 @@ struct BareInvocation: AsyncParsableCommand {
             )
         }
 
-        switch BareInvocationResolver.resolve(pending: summaries) {
-        case let .recording(id, elapsed):
-            print("Recording \(id) — \(elapsed)")
-        case .awaitingAttribution:
-            print("Last meeting awaiting attribution: auricle attribute current")
-        case .awaitingVerification:
-            print("Last meeting awaiting your review: auricle keep last")
-        case .nothingInFlight:
-            print("Nothing in flight.")
-        }
+        print(BareInvocationResolver.resolve(pending: summaries).message)
     }
 }

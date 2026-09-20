@@ -32,27 +32,63 @@ private func makeTestDirectory() -> URL {
     #expect(mode == 0o600)
 }
 
-@Test func killedBeforeRenameLeavesTempFileAndNoPartialTarget() throws {
+private struct SimulatedKill: Error {}
+
+/// Runs the real writer and aborts it at the instant a kill would leave a full
+/// temp file and an untouched target: after the temp file is closed, before
+/// the rename.
+@Test func killedBeforeRenameLeavesTheCompleteTempFileAndNoTarget() throws {
     let directory = makeTestDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let target = directory.appendingPathComponent("artifact.json")
     let tempURL = AtomicWriter.temporaryURL(for: target)
+    let newData = Data("complete".utf8)
 
-    // Simulates a kill after the temp write but before the rename: perform
-    // only the first phase of AtomicWriter.write's sequence by writing
-    // directly to the well-known temp path, without renaming.
-    try Data("partial".utf8).write(to: tempURL)
+    #expect(throws: SimulatedKill.self) {
+        try AtomicWriter.perform(newData, to: target, permissions: nil) { throw SimulatedKill() }
+    }
 
-    #expect(FileManager.default.fileExists(atPath: tempURL.path))
+    #expect(try Data(contentsOf: tempURL) == newData)
     #expect(!FileManager.default.fileExists(atPath: target.path))
 
-    // The caller's next run retries with a normal write, which succeeds and
-    // cleans up the leftover temp file.
-    let finalData = Data("complete".utf8)
-    try AtomicWriter.write(finalData, to: target)
-
-    #expect(try Data(contentsOf: target) == finalData)
+    // The next run's normal write replaces the leftover and cleans it up.
+    try AtomicWriter.write(newData, to: target)
+    #expect(try Data(contentsOf: target) == newData)
     #expect(!FileManager.default.fileExists(atPath: tempURL.path))
+}
+
+@Test func killedBeforeRenameLeavesAnExistingTargetReadingTheOldData() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let target = directory.appendingPathComponent("artifact.json")
+    let tempURL = AtomicWriter.temporaryURL(for: target)
+    let oldData = Data("old".utf8)
+    let newData = Data("new, and longer than the old contents".utf8)
+    try AtomicWriter.write(oldData, to: target)
+
+    #expect(throws: SimulatedKill.self) {
+        try AtomicWriter.perform(newData, to: target, permissions: nil) { throw SimulatedKill() }
+    }
+
+    #expect(try Data(contentsOf: target) == oldData)
+    #expect(try Data(contentsOf: tempURL) == newData)
+}
+
+@Test func theHookRunsAfterTheTempFileIsCompleteAndBeforeTheTargetChanges() throws {
+    let directory = makeTestDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let target = directory.appendingPathComponent("artifact.json")
+    let tempURL = AtomicWriter.temporaryURL(for: target)
+    try AtomicWriter.write(Data("old".utf8), to: target)
+
+    var observed: (temp: Data, target: Data)?
+    try AtomicWriter.perform(Data("new".utf8), to: target, permissions: nil) {
+        observed = try (Data(contentsOf: tempURL), Data(contentsOf: target))
+    }
+
+    #expect(observed?.temp == Data("new".utf8))
+    #expect(observed?.target == Data("old".utf8))
+    #expect(try Data(contentsOf: target) == Data("new".utf8))
 }
 
 @Test func rerunOverwritesAtomically() throws {

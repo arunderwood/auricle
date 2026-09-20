@@ -27,6 +27,26 @@ private let crockfordAlphabet = Set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
     #expect(ULIDFormat.isValid(ulid.lowercased()))
 }
 
+/// `ß` uppercases to `SS`, so 13 of them are 26 UTF-8 bytes that expand into 26
+/// alphabet characters once uppercased. The byte count alone cannot bound the
+/// character count for non-ASCII input.
+@Test func isValidRejectsNonASCIIThatUppercasesIntoTheAlphabet() {
+    let sharpS = String(repeating: "\u{DF}", count: 13)
+
+    #expect(sharpS.utf8.count == 26)
+    #expect(sharpS.uppercased() == String(repeating: "S", count: 26))
+    #expect(!ULIDFormat.isValid(sharpS))
+    #expect(MeetingID(ulid: sharpS) == nil)
+}
+
+@Test func isValidRejectsANonASCIICharacterAmongValidOnes() {
+    let ulid = ULIDFormat.generate()
+    let withAccent = String(ulid.dropLast(2)) + "\u{E9}"
+
+    #expect(withAccent.utf8.count == 26)
+    #expect(!ULIDFormat.isValid(withAccent))
+}
+
 @Test func laterTimestampSortsAfterEarlierTimestamp() {
     let earlier = ULIDFormat.generate(now: Date(timeIntervalSince1970: 1_700_000_000))
     let later = ULIDFormat.generate(now: Date(timeIntervalSince1970: 1_700_000_100))

@@ -636,7 +636,7 @@ The vault is the user's long-lived working memory. Reliability of vault writes a
 - **NFR-R7 [MVP]:** Quote-grounding validation is a hard gate: 100% of action items and decisions in published notes have a `source_transcript_quote` that survives a literal substring match against the transcript. Items failing the check are dropped silently before persistence (logged at info level for inspection).
 - **NFR-R8 [MVP]:** auricle handles the macOS Notification permission being revoked at any time without crashing — pipeline still completes, notification simply fails to deliver, meeting moves to "awaiting verification" state visible in the main window.
 - **NFR-R9 [MVP]:** auricle handles the Anthropic API being unreachable (offline, rate limit, server error) by retrying with exponential backoff up to a configurable timeout (default 5 minutes); on persistent failure, the meeting is marked `summarization_failed` in pending state, not lost.
-- **NFR-R10 [MVP]:** auricle's local SQLite state file is checkpointed on every state transition; corruption recovery is by replay from on-disk artifacts (transcripts, summaries, notes) rather than from backup.
+- **NFR-R10 [MVP]:** auricle's local SQLite state file is checkpointed on quit, plus SQLite's automatic checkpoint; corruption recovery is by replay from on-disk artifacts (transcripts, summaries, notes) rather than from backup.
 
 ### Security
 

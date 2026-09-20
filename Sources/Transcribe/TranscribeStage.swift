@@ -17,11 +17,6 @@ import TranscriberInterface
 /// concrete transcriber, no diarizer, and nothing about how a transcript was
 /// produced beyond the `CanonicalTranscript` it gets back.
 public enum TranscribeStage {
-    /// The process exit code for a failure a fresh process may not repeat
-    /// (`EX_TEMPFAIL` in `sysexits.h`). It is what tells the caller a retry
-    /// is worth making.
-    public static let retryableExitCode: Int32 = 75
-
     private static let audioArtifactName = "audio.wav"
     private static let transcriptArtifactName = "transcript.json"
     private static let transcriptSchemaVersion = 1
@@ -59,14 +54,15 @@ public enum TranscribeStage {
         }
     }
 
-    /// 0 on success, `retryableExitCode` for a failure a fresh process might
-    /// not repeat, and 2 (Decision 1.5's state error) for every other one.
+    /// `WorkerExitCode.success` on success, `retryable` for a failure a fresh
+    /// process might not repeat, and `stateError` (Decision 1.5) for every
+    /// other one.
     public static func exitCode(for outcome: StageRunner.StageOutcome) -> Int32 {
         switch outcome {
         case .completed:
-            0
+            WorkerExitCode.success
         case let .failed(_, errorClass, _, _):
-            TranscribeStageError.retryableErrorClasses.contains(errorClass) ? retryableExitCode : 2
+            TranscribeStageError.retryableErrorClasses.contains(errorClass) ? WorkerExitCode.retryable : WorkerExitCode.stateError
         }
     }
 

@@ -314,8 +314,8 @@ private func chmod(_ url: URL, _ permissions: Int) throws {
     let tempURL = AtomicWriter.temporaryURL(for: targetURL)
 
     // Simulates a kill after AtomicWriter's temp write but before its
-    // rename: write directly to the well-known temp path, the same pattern
-    // AtomicWriterTests.swift uses to exercise AtomicWriter's own recovery.
+    // rename: write directly to the well-known temp path, which is the state
+    // a kill at that instant leaves behind.
     try Data("partial".utf8).write(to: tempURL)
     #expect(FileManager.default.fileExists(atPath: tempURL.path))
     #expect(!FileManager.default.fileExists(atPath: targetURL.path))

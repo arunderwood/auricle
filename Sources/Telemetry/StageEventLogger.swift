@@ -21,6 +21,10 @@ public enum StageEventKind: String, Sendable, Equatable {
 /// `StageMetadata` → JSON encoding at its own call site (Decision 4.5's
 /// "typed at the call site" step); this logger's job is routing the result
 /// to the right `StateStore` write, not re-deriving it.
+///
+/// `expectedState` and `expectedUpdatedAt` make the state write conditional
+/// (`StateStore.recordStageTransition`): a writer acting on a snapshot it read
+/// earlier passes what it read, and loses cleanly if the meeting has moved.
 public struct StageEventRecord: Sendable {
     public var meetingID: MeetingID
     public var stage: PipelineStage
@@ -30,6 +34,8 @@ public struct StageEventRecord: Sendable {
     public var durationMS: Int?
     public var errorMessage: String?
     public var metadataJSON: String?
+    public var expectedState: PipelineState?
+    public var expectedUpdatedAt: String?
 
     public init(
         meetingID: MeetingID,
@@ -40,6 +46,8 @@ public struct StageEventRecord: Sendable {
         durationMS: Int? = nil,
         errorMessage: String? = nil,
         metadataJSON: String? = nil,
+        expectedState: PipelineState? = nil,
+        expectedUpdatedAt: String? = nil,
     ) {
         self.meetingID = meetingID
         self.stage = stage
@@ -49,6 +57,8 @@ public struct StageEventRecord: Sendable {
         self.durationMS = durationMS
         self.errorMessage = errorMessage
         self.metadataJSON = metadataJSON
+        self.expectedState = expectedState
+        self.expectedUpdatedAt = expectedUpdatedAt
     }
 }
 
@@ -76,6 +86,10 @@ public actor StageEventLogger {
         /// sets one anyway is asking for a state change this event kind
         /// cannot perform, so it's rejected rather than silently dropped.
         case unexpectedTargetState(kind: StageEventKind)
+        /// `retried` writes no state, so there is nothing for an expected
+        /// state or `updated_at` to guard. Rejected rather than ignored, so a
+        /// caller that believes it is guarding something finds out.
+        case unexpectedStateGuard(kind: StageEventKind)
     }
 
     private let stateStore: StateStore
@@ -100,10 +114,15 @@ public actor StageEventLogger {
                 errorMessage: event.errorMessage,
                 metadataJSON: event.metadataJSON,
                 metadataSchemaVersion: Self.currentMetadataSchemaVersion,
+                expectedState: event.expectedState?.rawValue,
+                expectedUpdatedAt: event.expectedUpdatedAt,
             )
         case .retried:
             guard event.targetState == nil else {
                 throw RecordError.unexpectedTargetState(kind: event.kind)
+            }
+            guard event.expectedState == nil, event.expectedUpdatedAt == nil else {
+                throw RecordError.unexpectedStateGuard(kind: event.kind)
             }
             try await stateStore.insertStageEvent(
                 StageEvent(

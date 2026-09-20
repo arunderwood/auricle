@@ -1,4 +1,4 @@
-import Core
+@testable import Core
 import Foundation
 import GRDB
 @testable import Orchestrator
@@ -191,4 +191,82 @@ private func makeStubDispatcher() throws -> (dispatcher: SubprocessDispatcher, c
 
     let summarizingID = try #require(MeetingID(ulid: summarizing))
     #expect(outcomes == [.redispatched(summarizingID, .summarize)])
+}
+
+// MARK: - The worker's exit status
+
+/// The worker blocks until the test lets it go, so `reconcile()` having already
+/// returned while it runs proves reconcile does not wait on the process.
+@Test(arguments: [2 as Int32, 64])
+func reconcileObservesTheWorkersNonzeroExitAfterReturningAtOnce(exitCode: Int32) async throws {
+    let store = try makeStore()
+    let gate = FileManager.default.temporaryDirectory.appendingPathComponent("gate-\(UUID().uuidString)")
+    let stub = try makeStubExecutable(exitCode: exitCode, waitingFor: gate)
+    defer {
+        try? FileManager.default.removeItem(at: stub)
+        try? FileManager.default.removeItem(at: gate)
+    }
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stub }, resolveVaultPath: { nil })
+    let id = meetingIDString("CR07")
+    try await store.insertMeeting(makeMeeting(id: id, state: "transcribing"))
+    let collector = WorkerExitCollector()
+    let recovery = CrashRecovery(stateStore: store, dispatcher: dispatcher, onWorkerExit: collector.add)
+
+    let outcomes = try await recovery.reconcile()
+
+    let meetingID = try #require(MeetingID(ulid: id))
+    #expect(outcomes == [.redispatched(meetingID, .transcribe)])
+    #expect(collector.exits.isEmpty)
+
+    FileManager.default.createFile(atPath: gate.path, contents: nil)
+
+    #expect(await waitUntil { collector.exits.count == 1 })
+    #expect(collector.exits == [WorkerExit(stage: .transcribe, meetingID: meetingID, status: exitCode)])
+}
+
+@Test func theDefaultObserverWarnsForANonzeroStatusOnly() throws {
+    let recorder = LogRecorder()
+    let id = try #require(MeetingID(ulid: meetingIDString("CR08")))
+
+    CrashRecovery.warnOnNonzeroExit(WorkerExit(stage: .summarize, meetingID: id, status: 0), to: recorder.log)
+    #expect(recorder.records.isEmpty)
+
+    CrashRecovery.warnOnNonzeroExit(WorkerExit(stage: .summarize, meetingID: id, status: 64), to: recorder.log)
+    #expect(recorder.records.map(\.level) == [.default])
+    #expect(recorder.records[0].message.contains("status=64"))
+    #expect(recorder.records[0].message.contains("stage=summarize"))
+    #expect(recorder.records[0].message.contains("meetingID=\(id)"))
+}
+
+/// The default observer is what every real caller gets: nothing constructs a
+/// `CrashRecovery` with an observer yet. A worker that fails at argument
+/// parsing exits 64, and without this it would look like one that finished.
+@Test func reconcileWithNoObserverWarnsWhenTheReDispatchedWorkerExitsNonzero() async throws {
+    let store = try makeStore()
+    let stub = try makeStubExecutable(exitCode: 64)
+    defer { try? FileManager.default.removeItem(at: stub) }
+    let dispatcher = SubprocessDispatcher(resolveExecutablePath: { stub }, resolveVaultPath: { nil })
+    let id = meetingIDString("CR10")
+    try await store.insertMeeting(makeMeeting(id: id, state: "summarizing"))
+    let recorder = LogRecorder()
+
+    _ = try await CrashRecovery(stateStore: store, dispatcher: dispatcher, onWorkerExit: nil, log: recorder.log).reconcile()
+
+    #expect(await waitUntil { recorder.records.contains { $0.level == .default } })
+    let warning = try #require(recorder.records.first { $0.level == .default })
+    #expect(warning.message.contains("status=64"))
+    #expect(warning.message.contains("stage=summarize"))
+    #expect(warning.message.contains("meetingID=\(id)"))
+}
+
+@Test func reconcileWithNoObserverStillRedispatchesAndReturns() async throws {
+    let store = try makeStore()
+    let (dispatcher, cleanup) = try makeStubDispatcher()
+    defer { cleanup() }
+    let id = meetingIDString("CR09")
+    try await store.insertMeeting(makeMeeting(id: id, state: "summarizing"))
+
+    let outcomes = try await CrashRecovery(stateStore: store, dispatcher: dispatcher).reconcile()
+
+    #expect(outcomes.count == 1)
 }
