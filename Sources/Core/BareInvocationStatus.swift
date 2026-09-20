@@ -20,18 +20,35 @@ public struct PendingMeetingSummary: Sendable, Equatable {
     }
 }
 
-/// The four outcomes `auricle`'s bare invocation (Decision 1.5) can print,
-/// in `BareInvocationResolver.resolve`'s priority order. The two `awaiting`
-/// cases carry the id of the meeting the hint is about, so the command it
-/// suggests acts on that meeting and not on whichever the resolver's
-/// `current` and `last` keywords happen to name.
+/// What `auricle`'s bare invocation (Decision 1.5) can print, one case per
+/// pending state it reports, in `BareInvocationResolver.resolve`'s priority
+/// order. Every case but `recording` and `nothingInFlight` carries the id of
+/// the meeting the line is about, so a command it suggests acts on that meeting
+/// and not on whichever the resolver's `current` and `last` keywords happen to
+/// name.
 public enum BareInvocationStatus: Sendable, Equatable {
     case recording(id: String, elapsed: String)
     case awaitingAttribution(id: String)
     case awaitingVerification(id: String)
+    case captureFailed(id: String)
+    case transcriptionFailed(id: String)
+    case summarizationFailed(id: String)
+    case persistFailed(id: String)
+    case publishedPartial(id: String)
+    case captured(id: String)
+    case transcribing(id: String)
+    case reviewingDiarization(id: String)
+    case attributing(id: String)
+    case summarizing(id: String)
+    case persisting(id: String)
+    case published(id: String)
     case nothingInFlight
 
-    /// The one line the bare command prints.
+    /// The one line the bare command prints. A recovery command appears only
+    /// where architecture.md documents one for the state (Decisions 1.5, 4.1):
+    /// `run <id>` resumes a transient failure, `run <id> --force` overrides a
+    /// permanent one, and `run <id> --reattribute` is the way out of
+    /// `published_partial`.
     public var message: String {
         switch self {
         case let .recording(id, elapsed):
@@ -40,6 +57,30 @@ public enum BareInvocationStatus: Sendable, Equatable {
             "Last meeting awaiting attribution: auricle attribute \(id)"
         case let .awaitingVerification(id):
             "Last meeting awaiting your review: auricle keep \(id)"
+        case let .captureFailed(id):
+            "Capture failed for \(id) — after investigating, retry: auricle run \(id) --force"
+        case let .transcriptionFailed(id):
+            "Transcription failed for \(id) — after investigating, retry: auricle run \(id) --force"
+        case let .summarizationFailed(id):
+            "Summarization failed for \(id) — resume: auricle run \(id)"
+        case let .persistFailed(id):
+            "Writing the vault note failed for \(id) — resume: auricle run \(id)"
+        case let .publishedPartial(id):
+            "Published \(id) with placeholder speaker names and no summary — fix it in Obsidian, or: auricle run \(id) --reattribute"
+        case let .captured(id):
+            "Captured \(id) — transcription not started"
+        case let .transcribing(id):
+            "Transcribing \(id)"
+        case let .reviewingDiarization(id):
+            "Reviewing speaker labels for \(id)"
+        case let .attributing(id):
+            "Attributing \(id) — waiting on you"
+        case let .summarizing(id):
+            "Summarizing \(id)"
+        case let .persisting(id):
+            "Writing the vault note for \(id)"
+        case let .published(id):
+            "Published \(id) — review notification pending"
         case .nothingInFlight:
             "Nothing in flight."
         }
@@ -47,34 +88,59 @@ public enum BareInvocationStatus: Sendable, Equatable {
 }
 
 public enum BareInvocationResolver {
-    /// Checks, in order, for a meeting `recording` → `awaiting_attribution`
-    /// → `awaiting_verification`, falling back to `nothingInFlight` —
-    /// Decision 1.5's bare-invocation priority, and Story 1.7's own
-    /// boundary on it. Within a state the newest meeting wins, so a stranded
-    /// older meeting never masks a newer one.
+    /// The states the bare command reports after `recording`, most important
+    /// first, each with the case that carries its meeting's id. Decision 1.5
+    /// (and Story 1.7's boundary on it) orders only `recording`,
+    /// `awaiting_attribution` and `awaiting_verification`. Every other state
+    /// ranks behind those three and never displaces them: a meeting that needs
+    /// an action (a failure, a partial publish) before one that is moving on
+    /// its own, and each group in pipeline order. `silent` is a benign halt,
+    /// and the three other states left out are terminal
+    /// (`StateStore.fetchPending` never returns them), so none of the four is
+    /// in flight.
+    private static let reported: [(state: PipelineState, status: @Sendable (String) -> BareInvocationStatus)] = [
+        (.awaitingAttribution, BareInvocationStatus.awaitingAttribution),
+        (.awaitingVerification, BareInvocationStatus.awaitingVerification),
+        (.captureFailed, BareInvocationStatus.captureFailed),
+        (.transcriptionFailed, BareInvocationStatus.transcriptionFailed),
+        (.summarizationFailed, BareInvocationStatus.summarizationFailed),
+        (.persistFailed, BareInvocationStatus.persistFailed),
+        (.publishedPartial, BareInvocationStatus.publishedPartial),
+        (.captured, BareInvocationStatus.captured),
+        (.transcribing, BareInvocationStatus.transcribing),
+        (.reviewingDiarization, BareInvocationStatus.reviewingDiarization),
+        (.attributing, BareInvocationStatus.attributing),
+        (.summarizing, BareInvocationStatus.summarizing),
+        (.persisting, BareInvocationStatus.persisting),
+        (.published, BareInvocationStatus.published),
+    ]
+
+    /// Reports `recording` first, then the first state in `reported` that has
+    /// a pending meeting, and `nothingInFlight` when none does. Within a state
+    /// the newest meeting wins, so a stranded older meeting never masks a newer
+    /// one. A state string `PipelineState` does not know is never matched.
     public static func resolve(
         pending: [PendingMeetingSummary],
         now: Date = Date(),
     ) -> BareInvocationStatus {
-        if let recording = newest(in: pending, state: "recording") {
+        if let recording = newest(in: pending, state: .recording) {
             return .recording(
                 id: recording.id,
                 elapsed: elapsed(since: recording.referenceTimestamp, now: now),
             )
         }
-        if let awaitingAttribution = newest(in: pending, state: "awaiting_attribution") {
-            return .awaitingAttribution(id: awaitingAttribution.id)
-        }
-        if let awaitingVerification = newest(in: pending, state: "awaiting_verification") {
-            return .awaitingVerification(id: awaitingVerification.id)
+        for (state, status) in reported {
+            if let meeting = newest(in: pending, state: state) {
+                return status(meeting.id)
+            }
         }
         return .nothingInFlight
     }
 
     /// Newest by `referenceTimestamp`, ties by the larger id. ULIDs sort by
     /// creation time, so the larger id is the later-created meeting.
-    private static func newest(in pending: [PendingMeetingSummary], state: String) -> PendingMeetingSummary? {
-        pending.filter { $0.state == state }.max { isOlder($0, than: $1) }
+    private static func newest(in pending: [PendingMeetingSummary], state: PipelineState) -> PendingMeetingSummary? {
+        pending.filter { $0.state == state.rawValue }.max { isOlder($0, than: $1) }
     }
 
     /// Timestamps are compared as instants: one with fractional seconds and

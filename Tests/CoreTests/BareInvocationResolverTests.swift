@@ -136,9 +136,120 @@ private func summary(id: String, state: String, referenceTimestamp: String = "19
     #expect(BareInvocationResolver.resolve(pending: [unparseable, early]) == .awaitingAttribution(id: "01AAAA"))
 }
 
-@Test func theMessageRendersEachStatusWithTheMeetingsOwnID() {
-    #expect(BareInvocationStatus.recording(id: "01REC", elapsed: "1m 4s").message == "Recording 01REC — 1m 4s")
-    #expect(BareInvocationStatus.awaitingAttribution(id: "01ATTR").message == "Last meeting awaiting attribution: auricle attribute 01ATTR")
-    #expect(BareInvocationStatus.awaitingVerification(id: "01KEEP").message == "Last meeting awaiting your review: auricle keep 01KEEP")
+// MARK: - Every pending state has a line
+
+private let meetingID = "01MEETING"
+private let clock = Date(timeIntervalSince1970: 65)
+
+/// The states the bare command reports, in the order it prefers them, each with
+/// the line it prints for a meeting `01MEETING` recording since the epoch.
+private let reportedStates: [(state: PipelineState, message: String)] = [
+    (.recording, "Recording 01MEETING — 1m 5s"),
+    (.awaitingAttribution, "Last meeting awaiting attribution: auricle attribute 01MEETING"),
+    (.awaitingVerification, "Last meeting awaiting your review: auricle keep 01MEETING"),
+    (.captureFailed, "Capture failed for 01MEETING — after investigating, retry: auricle run 01MEETING --force"),
+    (.transcriptionFailed, "Transcription failed for 01MEETING — after investigating, retry: auricle run 01MEETING --force"),
+    (.summarizationFailed, "Summarization failed for 01MEETING — resume: auricle run 01MEETING"),
+    (.persistFailed, "Writing the vault note failed for 01MEETING — resume: auricle run 01MEETING"),
+    (.publishedPartial, "Published 01MEETING with placeholder speaker names and no summary — fix it in Obsidian, or: auricle run 01MEETING --reattribute"),
+    (.captured, "Captured 01MEETING — transcription not started"),
+    (.transcribing, "Transcribing 01MEETING"),
+    (.reviewingDiarization, "Reviewing speaker labels for 01MEETING"),
+    (.attributing, "Attributing 01MEETING — waiting on you"),
+    (.summarizing, "Summarizing 01MEETING"),
+    (.persisting, "Writing the vault note for 01MEETING"),
+    (.published, "Published 01MEETING — review notification pending"),
+]
+
+/// `silent` is a benign halt and the rest are terminal, so none is in flight.
+private let unreportedStates: [PipelineState] = [.silent, .verified, .retentionExpired, .discarded]
+
+@Test func everyPipelineStateIsEitherReportedOrNamedAsNotInFlight() {
+    let covered = Set(reportedStates.map(\.state)).union(unreportedStates)
+
+    #expect(covered == Set(PipelineState.allCases))
+    #expect(reportedStates.count + unreportedStates.count == PipelineState.allCases.count)
+}
+
+@Test(arguments: reportedStates)
+func eachReportedStatePrintsItsOwnLine(state: PipelineState, message: String) {
+    let pending = [summary(id: meetingID, state: state.rawValue)]
+
+    #expect(BareInvocationResolver.resolve(pending: pending, now: clock).message == message)
+}
+
+@Test(arguments: unreportedStates)
+func aStateThatIsNotInFlightFallsThroughToNothingInFlight(state: PipelineState) {
+    let pending = [summary(id: meetingID, state: state.rawValue)]
+
+    #expect(BareInvocationResolver.resolve(pending: pending, now: clock) == .nothingInFlight)
+}
+
+@Test func aStateNameThePipelineDoesNotKnowIsNotReported() {
+    let pending = [summary(id: meetingID, state: "from_a_newer_schema")]
+
+    #expect(BareInvocationResolver.resolve(pending: pending, now: clock) == .nothingInFlight)
+}
+
+@Test func nothingInFlightPrintsItsFixedLine() {
     #expect(BareInvocationStatus.nothingInFlight.message == "Nothing in flight.")
+}
+
+// MARK: - Priority across states
+
+/// Dropping the state that was reported each time must reveal the next one down,
+/// however the meetings arrive: that pins the whole order, not just neighbours.
+@Test func statesAreReportedInPriorityOrder() {
+    let pending = reportedStates.map { summary(id: "01-\($0.state.rawValue)", state: $0.state.rawValue) }
+
+    for (index, expected) in reportedStates.enumerated() {
+        let remaining = pending.dropFirst(index)
+        for arrangement in [Array(remaining), Array(remaining.reversed())] {
+            let message = BareInvocationResolver.resolve(pending: arrangement, now: clock).message
+            #expect(message.contains("01-\(expected.state.rawValue)"), "expected \(expected.state) to lead")
+        }
+    }
+}
+
+@Test func aFailureOutranksAMeetingThatIsStillMoving() {
+    let pending = [
+        summary(id: "01MOVING", state: "summarizing"),
+        summary(id: "01FAILED", state: "persist_failed"),
+    ]
+
+    #expect(BareInvocationResolver.resolve(pending: pending) == .persistFailed(id: "01FAILED"))
+}
+
+@Test func failuresAreReportedInPipelineOrder() {
+    let pending = [
+        summary(id: "01PERSIST", state: "persist_failed", referenceTimestamp: "2026-05-04T09:00:00Z"),
+        summary(id: "01CAPTURE", state: "capture_failed", referenceTimestamp: "2026-05-01T09:00:00Z"),
+        summary(id: "01SUMMARY", state: "summarization_failed", referenceTimestamp: "2026-05-03T09:00:00Z"),
+    ]
+
+    #expect(BareInvocationResolver.resolve(pending: pending) == .captureFailed(id: "01CAPTURE"))
+}
+
+// MARK: - Newest per state, for the states added beyond the documented three
+
+@Test(arguments: reportedStates.map(\.state).dropFirst(3))
+func theNewestMeetingWinsWithinAnyState(state: PipelineState) {
+    let pending = [
+        summary(id: "01OLDER", state: state.rawValue, referenceTimestamp: "2026-01-01T09:00:00Z"),
+        summary(id: "01NEWER", state: state.rawValue, referenceTimestamp: "2026-01-02T09:00:00Z"),
+        summary(id: "01MIDDLE", state: state.rawValue, referenceTimestamp: "2026-01-01T12:00:00Z"),
+    ]
+
+    #expect(BareInvocationResolver.resolve(pending: pending).message.contains("01NEWER"))
+}
+
+@Test(arguments: reportedStates.map(\.state).dropFirst(3))
+func equalTimestampsBreakTheTieByTheLargerIDInAnyState(state: PipelineState) {
+    let pending = [
+        summary(id: "01AAAA", state: state.rawValue, referenceTimestamp: "2026-01-01T09:00:00Z"),
+        summary(id: "01CCCC", state: state.rawValue, referenceTimestamp: "2026-01-01T09:00:00Z"),
+        summary(id: "01BBBB", state: state.rawValue, referenceTimestamp: "2026-01-01T09:00:00Z"),
+    ]
+
+    #expect(BareInvocationResolver.resolve(pending: pending).message.contains("01CCCC"))
 }
