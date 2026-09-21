@@ -17,8 +17,10 @@ public enum AttributionStage {
         /// `--batch`, with the raw `--speakers` value if one was given. With
         /// none, the existing `attribution.json` speakers map is reused.
         case batch(speakers: String?)
-        /// Every speaker keeps its `Speaker_N` placeholder and both correction
-        /// arrays are empty. The path behind `auricle run --publish-anyway`.
+        /// Publishes with whatever `attribution.json` already holds: saved names
+        /// and corrections stay, and every other speaker keeps its `Speaker_N`
+        /// placeholder. With no file, all speakers are placeholders and both
+        /// correction arrays are empty. The path behind `auricle run --publish-anyway`.
         case publishAnyway
     }
 
@@ -129,8 +131,17 @@ public enum AttributionStage {
 
         switch mode {
         case .publishAnyway:
-            let speakers = Dictionary(uniqueKeysWithValues: labels.map { ($0, $0) })
-            return Plan(file: AttributionFile(speakers: speakers), completionPath: publishAnywayPath, speakerCount: labels.count, namedCount: 0)
+            let saved = inputs.existing?.speakers ?? [:]
+            let speakers = Dictionary(uniqueKeysWithValues: labels.map { label in
+                let value = saved[label] ?? ""
+                return (label, SpeakerNaming.bareName(value).isEmpty ? label : value)
+            })
+            let file = AttributionFile(
+                speakers: speakers,
+                segmentOverrides: inputs.existing?.segmentOverrides ?? [],
+                segmentSplits: inputs.existing?.segmentSplits ?? [],
+            )
+            return Plan(file: file, completionPath: publishAnywayPath, speakerCount: labels.count, namedCount: named(speakers))
 
         case let .batch(raw?):
             let speakers: [String: String]
