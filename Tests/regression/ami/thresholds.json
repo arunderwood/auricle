@@ -1,0 +1,6 @@
+{
+  "max_wer": 0.4,
+  "max_realtime_factor": 0.2,
+  "max_cost_usd": 0.2,
+  "min_item_recall": 0.35
+}
