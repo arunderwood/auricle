@@ -133,6 +133,23 @@ private extension Harness {
     }
 }
 
+/// The bold speaker at the head of each paragraph under `## Transcript`.
+private func transcriptSpeakers(in note: String) -> [String] {
+    note.split(separator: "\n").compactMap { line -> String? in
+        guard line.hasPrefix("**"), let end = line.range(of: ":** ") else { return nil }
+        return String(line[line.index(line.startIndex, offsetBy: 2) ..< end.lowerBound])
+    }
+}
+
+/// Every transcript utterance is labelled Speaker_1, so the speakers in the
+/// note can only have come from the diarization join.
+private func expectSpeakersFromDiarization(in note: String, transcript: CanonicalTranscript, scenario: Scenario) {
+    #expect(Set(transcript.utterances.map(\.speakerLabel)) == ["Speaker_1"])
+    let expected = scenario.lines.map { line in scenario.speakerNames?[line.speaker] ?? "[[\(line.speaker)]]" }
+    #expect(transcriptSpeakers(in: note) == expected)
+    #expect(note.contains("auricle/needs-attribution") == (scenario.speakerNames == nil))
+}
+
 @Test(arguments: [oneToOne, fourWayPublishAnyway])
 private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(scenario: Scenario) async throws {
     let harness = try await Harness(scenario: scenario)
@@ -144,8 +161,7 @@ private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(sce
     meetingID = id
     let imported = try #require(await harness.store.fetchMeeting(id: id.rawValue))
     #expect(imported.state == PipelineState.captured.rawValue)
-    let audioPath = try #require(imported.audioCachePath)
-    #expect(FileManager.default.fileExists(atPath: audioPath))
+    #expect(try FileManager.default.fileExists(atPath: #require(imported.audioCachePath)))
 
     try await harness.attribute(id, names: scenario.speakerNames)
 
@@ -196,6 +212,8 @@ private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(sce
     let telemetry = try #require(await harness.store.fetchTelemetry(meetingID: id.rawValue))
     #expect(telemetry.groundingMethod == "substring")
     #expect(telemetry.quoteValidationDropCount == 2)
+
+    expectSpeakersFromDiarization(in: note, transcript: transcript, scenario: scenario)
 
     // Attribution outcome.
     #expect(telemetry.attributionCompletionPath == (scenario.speakerNames == nil ? "publish_anyway" : "cli_speakers_flag"))

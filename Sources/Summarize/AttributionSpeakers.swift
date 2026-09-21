@@ -1,4 +1,6 @@
+import Attribute
 import Core
+import DiarizerInterface
 import Foundation
 
 /// Reads the speaker names out of `attribution.json` for the summarize stage.
@@ -20,7 +22,9 @@ enum AttributionSpeakers {
     ///
     /// An empty or whitespace-only value is dropped: the schema defines it as
     /// "render as the `Speaker_N` placeholder" (Decision 5.4), so it must count
-    /// as unmapped rather than surface as a blank speaker.
+    /// as unmapped rather than surface as a blank speaker. A `Speaker_N` value
+    /// is the same thing spelled out: `--publish-anyway` writes each speaker
+    /// mapped to itself, and that names nobody.
     static func read(in cacheDirectory: URL) throws -> [String: String]? {
         let url = cacheDirectory.appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -33,7 +37,37 @@ enum AttributionSpeakers {
         } catch {
             throw SummarizeStageError.attributionUndecodable
         }
-        return speakers.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return speakers.filter {
+            let value = $0.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !value.isEmpty && !UtteranceSpeakers.isPlaceholder(value)
+        }
+    }
+
+    private static let diarizationFileName = "diarization.json"
+
+    /// The speaker of each utterance, joined from `diarization.json` and the
+    /// whole of `attribution.json` (see `UtteranceSpeakers`). `nil` when there
+    /// is no `diarization.json` to join through, so the caller falls back to
+    /// each utterance's own label. A file that exists but cannot be decoded
+    /// throws, as `read` does.
+    static func utteranceSpeakers(in cacheDirectory: URL, utteranceCount: Int) throws -> [String?]? {
+        let url = cacheDirectory.appendingPathComponent(diarizationFileName)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        let diarization: DiarizationArtifact
+        do {
+            diarization = try JSONDecoder().decode(DiarizationArtifact.self, from: Data(contentsOf: url))
+        } catch {
+            throw SummarizeStageError.diarizationUndecodable
+        }
+        let file: AttributionFile?
+        do {
+            file = try AttributionFile.read(in: cacheDirectory)
+        } catch {
+            throw SummarizeStageError.attributionUndecodable
+        }
+        return UtteranceSpeakers.resolve(utteranceCount: utteranceCount, diarization: diarization, file: file)
     }
 
     /// The names attribution gave its speakers, brackets stripped, each once,
