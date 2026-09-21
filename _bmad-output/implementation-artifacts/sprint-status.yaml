@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-20-2026 18:15
+last_updated: 09-20-2026 19:59
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -440,7 +440,7 @@ action_items:
     action: "Decide whether publish-anyway keeps a saved attribution draft and whether
       a published_partial note fires the notifier (F5, F7)"
     owner: "maintainer"
-    status: open
+    status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-39-triage-the-small-findings-in-f6-and-the"
     epic: 4
