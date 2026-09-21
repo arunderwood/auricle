@@ -15,11 +15,29 @@ import SpeakerKit
 /// `SpeakerKitModelStore` resolves, and a folder that does not hold them is
 /// refused with `DiarizerError.modelUnavailable` before SpeakerKit is involved.
 public actor WhisperKitDiarizer: DiarizerStrategy {
+    /// A loaded diarization model: the one thing `WhisperKitDiarizer` needs
+    /// from SpeakerKit, so a test can stand in for it without models on disk.
+    protocol Engine: Sendable {
+        func diarize(samples: [Float]) async throws -> [SpeakerSegment]
+    }
+
+    /// Loads the model a resolved folder holds. Every failure is reported as
+    /// `DiarizerError.modelLoadFailed`.
+    typealias Loader = @Sendable (SpeakerKitModelStore.ResolvedModel) async throws -> any Engine
+
     /// `SpeakerKit` is not `Sendable`. The box carries it out of the task that
     /// loads it; the actor is the only thing that ever uses it.
-    private struct LoadedModel: @unchecked Sendable {
-        let modelFolder: URL
+    private struct KitEngine: Engine, @unchecked Sendable {
         let kit: SpeakerKit
+
+        func diarize(samples: [Float]) async throws -> [SpeakerSegment] {
+            try await kit.diarize(audioArray: samples, options: WhisperKitDiarizer.diarizationOptions).segments
+        }
+    }
+
+    private struct LoadedModel: Sendable {
+        let modelFolder: URL
+        let engine: any Engine
     }
 
     private struct PendingLoad {
@@ -28,6 +46,7 @@ public actor WhisperKitDiarizer: DiarizerStrategy {
     }
 
     private let store: SpeakerKitModelStore
+    private let loader: Loader
     private var loaded: LoadedModel?
     private var pendingLoad: PendingLoad?
 
@@ -36,7 +55,12 @@ public actor WhisperKitDiarizer: DiarizerStrategy {
     public private(set) var modelLoadCount = 0
 
     public init(store: SpeakerKitModelStore = SpeakerKitModelStore()) {
+        self.init(store: store, loader: Self.loadSpeakerKit)
+    }
+
+    init(store: SpeakerKitModelStore, loader: @escaping Loader) {
         self.store = store
+        self.loader = loader
     }
 
     public func diarize(
@@ -54,13 +78,13 @@ public actor WhisperKitDiarizer: DiarizerStrategy {
         let resolved = try store.resolve(modelFolder: config.modelFolder)
         let model = try await loadedModel(for: resolved)
 
-        let result: DiarizationResult
+        let segments: [SpeakerSegment]
         do {
-            result = try await model.kit.diarize(audioArray: samples, options: Self.diarizationOptions)
+            segments = try await model.engine.diarize(samples: samples)
         } catch {
             throw DiarizerError.diarizationFailed
         }
-        return DiarizationArtifactBuilder.build(raw: Self.rawSegments(from: result.segments), utteranceTimings: utteranceTimings)
+        return DiarizationArtifactBuilder.build(raw: Self.rawSegments(from: segments), utteranceTimings: utteranceTimings)
     }
 
     // MARK: - Model loading
@@ -73,7 +97,8 @@ public actor WhisperKitDiarizer: DiarizerStrategy {
             return try await pendingLoad.task.value
         }
 
-        let task = Task { try await Self.load(resolved) }
+        let loader = loader
+        let task = Task { try await LoadedModel(modelFolder: resolved.modelFolder, engine: loader(resolved)) }
         pendingLoad = PendingLoad(modelFolder: resolved.modelFolder, task: task)
         do {
             let model = try await task.value
@@ -87,9 +112,9 @@ public actor WhisperKitDiarizer: DiarizerStrategy {
         }
     }
 
-    private static func load(_ resolved: SpeakerKitModelStore.ResolvedModel) async throws -> LoadedModel {
+    private static func loadSpeakerKit(_ resolved: SpeakerKitModelStore.ResolvedModel) async throws -> any Engine {
         do {
-            return try await LoadedModel(modelFolder: resolved.modelFolder, kit: SpeakerKit(kitConfig(for: resolved)))
+            return try await KitEngine(kit: SpeakerKit(kitConfig(for: resolved)))
         } catch {
             throw DiarizerError.modelLoadFailed
         }
