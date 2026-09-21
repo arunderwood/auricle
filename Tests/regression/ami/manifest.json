@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "license": "CC BY 4.0",
+  "attribution": "AMI Meeting Corpus, https://groups.inf.ed.ac.uk/ami/corpus/. See NOTICE.md.",
+  "url_template": "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus/{id}/audio/{id}.Mix-Headset.wav",
+  "meetings": [
+    {
+      "id": "ES2002a",
+      "sha256": "9c76866990fcc8b84006dc32d273ad99df439090b748ebe72103bb78c3216ee7",
+      "bytes": 40724524,
+      "audio_seconds": 1272.64,
+      "attendees": 4,
+      "reference": "Tests/SummarizeTests/Fixtures/eval/ami-es2002a"
+    },
+    {
+      "id": "ES2002b",
+      "sha256": "977fbf6cd473cfb1984b41755762eea4d7ffdad3fb15adcfdebcb8842163ec66",
+      "bytes": 72952194,
+      "audio_seconds": 2279.75,
+      "attendees": 4,
+      "reference": "Tests/SummarizeTests/Fixtures/eval/ami-es2002b"
+    },
+    {
+      "id": "ES2003a",
+      "sha256": "41cf861afafc20e70061c6cc82b2cb1c620d630be6d13361da928f04fc00beea",
+      "bytes": 36472536,
+      "audio_seconds": 1139.77,
+      "attendees": 4,
+      "reference": "Tests/SummarizeTests/Fixtures/eval/ami-es2003a"
+    },
+    {
+      "id": "ES2003b",
+      "sha256": "71ba1c132d1957bd9b20f4c0ccae8b05ebf2399302b451897624a6de9611032f",
+      "bytes": 67514072,
+      "audio_seconds": 2109.81,
+      "attendees": 4,
+      "reference": "Tests/SummarizeTests/Fixtures/eval/ami-es2003b"
+    }
+  ]
+}
