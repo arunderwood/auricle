@@ -2279,7 +2279,7 @@ So that scope creep doesn't dilute the Pipeline Validation milestone, CI guards 
 
 **Given** Part B, the live run
 **When** the maintainer runs `Tests/scripts/run-epic4-exit-criteria.sh` against `$AURICLE_EXIT_FIXTURES`
-**Then** the directory holds at least 5 recordings (at least one 1:1, at least two with 4 or more attendees) plus each recording's expected speaker mapping and expected item list
+**Then** the directory holds at least 5 recordings (at least two with 4 or more attendees; a 1:1 is deferred beyond Epic 4, see `deferred-work.md`) plus each recording's expected speaker mapping and expected item list
 **And** for each recording the script runs `auricle __internal-import`, then `auricle run <id> --publish-anyway` (or `--speakers` per the mapping), and asserts exit 0, a vault note at the expected path with schema-valid frontmatter, and grounded quotes as in Part A
 **And** it asserts `meetings.verified_at` is NULL by reading the `meetings` table with `sqlite3`, because `auricle status <id>` is a stub until Story 9.6
 **And** across the set at least 80% of expected action items and decisions survive grounding, or the script fails with "Epic 4 exit criteria not met: <metric> = <value>"

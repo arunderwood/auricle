@@ -459,3 +459,7 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
   summary: A `published_partial` meeting does not reach notify or `awaiting_verification`; the runner prints the note path instead.
   evidence: `PipelineTransitions` allows notify only under `published`. Story 4.7 resumes `published_partial` at summarize, and a successful re-run reaches `awaiting_verification`. Whether a partial note is announced by the notifier is still a product decision (see the earlier deferred entry on `published_partial` and notify). Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-10-exit-criteria-gate-ci-pipeline-test-live-run.md`
+  summary: Story 4.10 Part B no longer requires a 1:1 recording; the exit set needs at least 5 recordings with at least two of 4 or more attendees. A 1:1 exit fixture is deferred beyond Epic 4.
+  evidence: The maintainer declared 1:1s out of scope for the Epic 4 exit. No public source has one (every AMI scenario meeting has four speakers), so the gate would otherwise wait on a private recording. The 2-speaker path is still covered by Part A's one-to-one scenario, which uses stubs and not real audio.

@@ -11,7 +11,7 @@ Aggregates only, under opaque labels. No transcript text, no quotes and no title
 - Run at: _not run_
 - Revision: _not run_
 - `diarization_review.enabled`: _not run_
-- Fixture set: _N_ recordings (_n_ 1:1, _n_ with 4 or more attendees). Changing the set needs a rationale in the PR description.
+- Fixture set: _N_ recordings (_n_ with 4 or more attendees). No 1:1 is required: it is deferred beyond Epic 4. Changing the set needs a rationale in the PR description.
 
 ## Per fixture
 
