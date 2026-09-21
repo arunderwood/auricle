@@ -15,11 +15,11 @@ import Telemetry
 /// the two transactions, and is exactly what `synthesizeFailure` (via the
 /// stale-detection sweep) and `CrashRecovery` exist to reconcile later.
 ///
-/// `run`'s own two transactions are unguarded: a stage that finishes late
-/// still wins over a sweep-synthesized failure, and the state it was
-/// entered from is unconstrained after a re-dispatch. Only
-/// `synthesizeFailure` acts on a snapshot it did not just write, so only it
-/// guards its write.
+/// `run`'s Txn B is unguarded: a stage that finishes late still wins over a
+/// sweep-synthesized failure. Txn A is guarded only when the caller passes
+/// `expectedState`, the state it read before choosing to run the stage: a
+/// caller that dispatches on an operator's request must not move a meeting
+/// that has since left that state.
 public actor StageRunner {
     private let stateStore: StateStore
     private let stageEventLogger: StageEventLogger
@@ -89,6 +89,7 @@ public actor StageRunner {
         stage: PipelineStage,
         meetingID: MeetingID,
         activeState: PipelineState,
+        expectedState: PipelineState? = nil,
         work: @Sendable () async throws -> StageOutcome,
     ) async throws -> StageOutcome {
         guard let allowedTargets = PipelineTransitions.allowedTargets(stage: stage, activeState: activeState) else {
@@ -106,6 +107,7 @@ public actor StageRunner {
             occurredAt: ISO8601UTC.string(from: startedAt),
             targetState: activeState,
             metadataJSON: "{}",
+            expectedState: expectedState,
         ))
         logTransition(meetingID: meetingID, stage: stage, kind: .started, state: activeState)
 

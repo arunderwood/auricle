@@ -16,6 +16,11 @@ import Telemetry
 /// class, never a `*_failed` state: the review is an aid, and the meeting
 /// must not stall on it.
 ///
+/// The suggestions file is written once per diarization: a real review that
+/// is already on disk is kept, so a re-run neither pays for a second review
+/// nor replaces the first. An empty stub is not a review and is rewritten. A
+/// new `diarization.json` removes the file (`DiarizationDependents`).
+///
 /// It depends on the `DiarizationReviewerStrategy` protocol only, and never
 /// opens `transcript.json` or `diarization.json` for write.
 public enum ReviewDiarizationStage {
@@ -23,7 +28,7 @@ public enum ReviewDiarizationStage {
 
     private static let transcriptArtifactName = "transcript.json"
     private static let diarizationArtifactName = "diarization.json"
-    private static let suggestionsArtifactName = "diarization_suggestions.json"
+    private static let suggestionsArtifactName = DiarizationDependents.suggestionsFileName
     private static let log = Log(category: "review-diarization-stage")
 
     /// Throws `StateStoreError.meetingNotFound` when `meetingID` has no row,
@@ -41,7 +46,7 @@ public enum ReviewDiarizationStage {
         }
         return try await stageRunner.run(stage: .reviewDiarization, meetingID: meetingID, activeState: .reviewingDiarization) {
             let outcome = await review(meetingID: meetingID, reviewer: reviewer, settings: settings)
-            await recordTelemetry(for: outcome, meetingID: meetingID, recorder: telemetryRecorder)
+            await recordTelemetry(for: outcome, meetingID: meetingID, stateStore: stateStore, recorder: telemetryRecorder)
             return outcome.stageOutcome
         }
     }
@@ -66,6 +71,13 @@ public enum ReviewDiarizationStage {
     }
 
     private static func review(meetingID: MeetingID, reviewer: any DiarizationReviewerStrategy, settings: ReviewDiarizationSettings) async -> ReviewOutcome {
+        if let kept = existingReview(for: meetingID) {
+            let meta = ReviewDiarizationMeta(
+                modelID: kept.cost.modelID, inputTokens: 0, outputTokens: 0, costUSD: 0,
+                suggestionsCount: kept.suggestions.count, reviewSkipped: false,
+            )
+            return ReviewOutcome(stageOutcome: .completed(targetState: .awaitingAttribution, metadataJSON: encode(meta)), telemetry: nil)
+        }
         guard settings.enabled else {
             let meta = meta(modelID: flagOffModelID, skipped: true)
             return writeStub(meetingID: meetingID, modelID: flagOffModelID, meta: meta, failure: nil)
@@ -111,6 +123,18 @@ public enum ReviewDiarizationStage {
                 diarizationReviewModel: result.cost.modelID,
             ),
         )
+    }
+
+    /// The suggestions file when it holds a review that ran: one that read at
+    /// least one segment. Every stub reads none.
+    private static func existingReview(for meetingID: MeetingID) -> AIReviewerResult<DiarizationSuggestion>? {
+        guard
+            let directory = try? CacheArtifactWriter.cacheDirectory(for: meetingID),
+            let data = try? Data(contentsOf: directory.appendingPathComponent(suggestionsArtifactName)),
+            let result = try? JSONDecoder().decode(AIReviewerResult<DiarizationSuggestion>.self, from: data),
+            result.reviewedSegmentCount > 0
+        else { return nil }
+        return result
     }
 
     private static func meta(modelID: String, skipped: Bool) -> ReviewDiarizationMeta {
@@ -171,9 +195,18 @@ public enum ReviewDiarizationStage {
 
     /// Best-effort: the review is already on disk, and a telemetry failure
     /// must not turn it into a failed stage.
-    private static func recordTelemetry(for result: ReviewOutcome, meetingID: MeetingID, recorder: TelemetryRecorder) async {
-        guard let patch = result.telemetry else { return }
+    ///
+    /// Spend already recorded is never lowered: a stub adds nothing to it, and
+    /// a second paid review adds to it. `diarization_review_model` follows the
+    /// review that was paid for.
+    private static func recordTelemetry(for result: ReviewOutcome, meetingID: MeetingID, stateStore: StateStore, recorder: TelemetryRecorder) async {
+        guard var patch = result.telemetry else { return }
         do {
+            let recorded = try await stateStore.fetchTelemetry(meetingID: meetingID.rawValue)?.diarizationReviewCostUSD ?? 0
+            if recorded > 0 {
+                guard let paid = patch.diarizationReviewCostUSD, paid > 0 else { return }
+                patch.diarizationReviewCostUSD = recorded + paid
+            }
             try await recorder.record(meetingID: meetingID, patch: patch)
         } catch {
             log.warn("recording review telemetry failed", ["error": .publicSafe(String(reflecting: type(of: error)))])

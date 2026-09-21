@@ -66,7 +66,7 @@ public enum AttributionStage {
         }
         let plan = try makePlan(meetingID: meetingID, mode: mode, glossary: glossary)
 
-        return try await stageRunner.run(stage: .attribute, meetingID: meetingID, activeState: .attributing) {
+        return try await stageRunner.run(stage: .attribute, meetingID: meetingID, activeState: .attributing, expectedState: state) {
             if let file = plan.file {
                 do {
                     try file.write(for: meetingID)

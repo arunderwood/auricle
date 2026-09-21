@@ -62,6 +62,35 @@ public enum RunStage: String, CaseIterable, Sendable, Comparable {
         }
     }
 
+    /// The states this stage can begin from: the state the stage before it
+    /// leaves, its own active or failed state, and the finished states a
+    /// deliberate re-run starts from. `transcribe` is the one stage that
+    /// starts anywhere, because it discards everything after it.
+    ///
+    /// Not a rule of the state machine: `StageRunner` runs a stage under
+    /// whichever active state it is given. It is what stops `--from` and
+    /// `--only` naming a stage the meeting has not reached.
+    public var entryStates: Set<PipelineState> {
+        switch self {
+        case .transcribe:
+            Set(PipelineState.allCases)
+        case .reviewDiarization:
+            [.transcribing, .reviewingDiarization, .awaitingAttribution]
+        case .attribute:
+            [.awaitingAttribution, .attributing, .awaitingVerification, .published, .publishedPartial]
+        case .summarize:
+            [.summarizing, .summarizationFailed, .persistFailed, .awaitingVerification, .published, .publishedPartial]
+        case .persist:
+            [.persisting, .persistFailed]
+        case .notify:
+            [.published, .publishedPartial]
+        }
+    }
+
+    var entryStateList: String {
+        entryStates.map(\.rawValue).sorted().joined(separator: ", ")
+    }
+
     private var order: Int {
         Self.allCases.firstIndex(of: self) ?? 0
     }
@@ -107,6 +136,8 @@ public enum RunRefusal: Error, Equatable, Sendable {
     case notPublished(PipelineState)
     /// `--to` names a stage before the one the run starts at.
     case toPrecedesStart(to: RunStage, start: RunStage)
+    /// The stage the run starts at cannot begin from the meeting's state.
+    case cannotStart(stage: RunStage, state: PipelineState)
 
     public var message: String {
         switch self {
@@ -118,6 +149,8 @@ public enum RunRefusal: Error, Equatable, Sendable {
             "--reattribute needs a published meeting; this one is in state \(state.rawValue)."
         case let .toPrecedesStart(to, start):
             "--to \(to.rawValue) comes before \(start.rawValue), where this run starts."
+        case let .cannotStart(stage, state):
+            "\(stage.rawValue) cannot start from state \(state.rawValue); it starts from \(stage.entryStateList)."
         }
     }
 }
@@ -155,6 +188,9 @@ public struct RunPlan: Sendable, Equatable {
             stages = RunStage.allCases.filter { $0 >= start && $0 <= end }
         } else {
             stages = []
+        }
+        if let first = stages.first, !first.entryStates.contains(state) {
+            return .failure(.cannotStart(stage: first, state: state))
         }
         return .success(RunPlan(stages: stages, publishAnyway: options.publishAnyway))
     }

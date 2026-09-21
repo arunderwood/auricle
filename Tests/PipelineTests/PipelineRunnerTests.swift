@@ -356,3 +356,39 @@ func aPermanentFailureIsRefusedNamingForce(state: PipelineState) async throws {
     #expect(result.exitCode == 130)
     #expect(try await fixture.meeting().state == "persisting")
 }
+
+// MARK: - State guards
+
+@Test(arguments: [
+    (RunStage.notify, PipelineState.awaitingAttribution),
+    (.persist, .captured),
+    (.summarize, .awaitingAttribution),
+])
+func anOnlyStageTheMeetingHasNotReachedIsRefusedAndWritesNothing(stage: RunStage, state: PipelineState) async throws {
+    let fixture = try await PipelineFixture(state: state)
+    defer { fixture.cleanUp() }
+    let launcher = ScriptedLauncher(fixture.simulatedWorkers())
+
+    let result = await fixture.run(RunOptions(only: stage), launcher: launcher)
+
+    #expect(result.exitCode == 1)
+    let message = try #require(result.message)
+    #expect(message.contains(stage.rawValue) && message.contains(state.rawValue))
+    #expect(launcher.stages.isEmpty)
+    #expect(try await fixture.meeting().state == state.rawValue)
+    #expect(try await fixture.events().isEmpty)
+    #expect(fixture.notifier.paths.value.isEmpty)
+}
+
+@Test func aStageThatLeavesTheMeetingWhereTheNextCannotStartStopsTheRun() async throws {
+    let fixture = try await PipelineFixture(state: .captured)
+    defer { fixture.cleanUp() }
+    let launcher = ScriptedLauncher { _, _ in .exited(0) }
+
+    let result = await fixture.run(RunOptions(), launcher: launcher)
+
+    #expect(result.exitCode == 1)
+    #expect(try #require(result.message).contains("review-diarization cannot start from state captured"))
+    #expect(launcher.stages == [.transcribe])
+    #expect(try await fixture.meeting().state == "captured")
+}

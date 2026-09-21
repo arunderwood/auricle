@@ -12,9 +12,10 @@ public enum NotifyStage {
         notifier: any Notifier,
         stateStore: StateStore,
         stageRunner: StageRunner,
+        expectedState: PipelineState? = nil,
         log: Log = Log(category: "notifications"),
     ) async throws -> StageRunner.StageOutcome {
-        try await stageRunner.run(stage: .notify, meetingID: meetingID, activeState: .published) {
+        try await stageRunner.run(stage: .notify, meetingID: meetingID, activeState: .published, expectedState: expectedState) {
             let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue)
             if let vaultPath = meeting?.vaultNotePath {
                 await notifier.fire(meetingID: meetingID, title: title, vaultPath: vaultPath)

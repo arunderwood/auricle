@@ -148,15 +148,31 @@ public struct PipelineRunner: Sendable {
     // MARK: - Stages
 
     /// `nil` when the stage completed and the run should continue.
+    ///
+    /// The state is read again before every stage, not only before the first:
+    /// a stage that failed to leave the meeting where the next one starts must
+    /// stop the run, not run the next stage against the wrong state. An
+    /// in-process stage carries what it read into its `started` write, which
+    /// then lands only if the meeting is still there. A subprocess stage runs
+    /// in another process, so its check is the read alone.
     private func execute(_ stage: RunStage, meetingID: MeetingID, plan: RunPlan, options: RunOptions) async throws -> RunResult? {
+        guard let meeting = try await environment.stateStore.fetchMeeting(id: meetingID.rawValue) else {
+            return RunResult(exitCode: WorkerExitCode.meetingNotFound, message: "no meeting has the given ID.")
+        }
+        guard let state = PipelineState(rawValue: meeting.state) else {
+            return RunResult(exitCode: WorkerExitCode.stateError, message: "the meeting is in an unrecognized state.")
+        }
+        guard stage.entryStates.contains(state) else {
+            return RunResult(exitCode: WorkerExitCode.callerError, message: RunRefusal.cannotStart(stage: stage, state: state).message)
+        }
         switch stage.execution {
         case .subprocess:
-            try await runWorker(stage, meetingID: meetingID, plan: plan)
+            return try await runWorker(stage, meetingID: meetingID, plan: plan)
         case .inProcess:
             switch stage {
-            case .attribute: try await runAttribute(meetingID: meetingID, plan: plan, options: options)
-            case .persist: try await runPersist(meetingID: meetingID)
-            default: try await runNotify(meetingID: meetingID)
+            case .attribute: return try await runAttribute(meetingID: meetingID, plan: plan, options: options)
+            case .persist: return try await runPersist(meetingID: meetingID, expectedState: state)
+            default: return try await runNotify(meetingID: meetingID, meeting: meeting, expectedState: state)
             }
         }
     }
@@ -225,7 +241,7 @@ public struct PipelineRunner: Sendable {
         }
     }
 
-    private func runPersist(meetingID: MeetingID) async throws -> RunResult? {
+    private func runPersist(meetingID: MeetingID, expectedState: PipelineState) async throws -> RunResult? {
         guard let vaultPath = environment.vaultPath else {
             return RunResult(exitCode: WorkerExitCode.callerError, message: "vault_path is not set in ~/.auricle/config.toml.")
         }
@@ -237,6 +253,7 @@ public struct PipelineRunner: Sendable {
             stateStore: environment.stateStore,
             stageRunner: stageRunner,
             clock: environment.clock,
+            expectedState: expectedState,
         )
         guard case let .failed(_, errorClass, _, _) = outcome else { return nil }
         return RunResult(exitCode: WorkerExitCode.stateError, message: "persist failed (\(errorClass)); re-run to retry it.")
@@ -244,10 +261,7 @@ public struct PipelineRunner: Sendable {
 
     /// A `published_partial` meeting is not notified: it awaits a summary, not
     /// verification, so the note path is printed instead.
-    private func runNotify(meetingID: MeetingID) async throws -> RunResult? {
-        guard let meeting = try await environment.stateStore.fetchMeeting(id: meetingID.rawValue) else {
-            return RunResult(exitCode: WorkerExitCode.meetingNotFound, message: "no meeting has the given ID.")
-        }
+    private func runNotify(meetingID: MeetingID, meeting: Meeting, expectedState: PipelineState) async throws -> RunResult? {
         if meeting.state == PipelineState.publishedPartial.rawValue {
             return nil
         }
@@ -257,12 +271,15 @@ public struct PipelineRunner: Sendable {
             notifier: environment.notifier,
             stateStore: environment.stateStore,
             stageRunner: stageRunner,
+            expectedState: expectedState,
         )
         return nil
     }
+}
 
-    // MARK: - Ending
+// MARK: - Ending
 
+extension PipelineRunner {
     private func finished(_ meetingID: MeetingID) async -> RunResult {
         guard
             let meeting = try? await environment.stateStore.fetchMeeting(id: meetingID.rawValue),
@@ -322,7 +339,10 @@ public struct PipelineRunner: Sendable {
     }
 
     private func stateFailure(_ error: Error) -> RunResult {
-        RunResult(
+        if case StateStoreError.staleWrite = error {
+            return RunResult(exitCode: WorkerExitCode.stateError, message: "the meeting changed state before the stage could start; nothing was written.")
+        }
+        return RunResult(
             exitCode: WorkerExitCode.stateError,
             message: "could not record its progress (\(String(reflecting: type(of: error)))).",
         )

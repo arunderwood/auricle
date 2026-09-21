@@ -5,6 +5,7 @@ import GRDB
 import Orchestrator
 @testable import ReviewDiarization
 @testable import State
+import Telemetry
 import Testing
 
 private let enabledSettings = ReviewDiarizationSettings(enabled: true, modelID: "claude-haiku-4-5", timeoutSeconds: 5)
@@ -317,5 +318,90 @@ private func expectBenignFailure(_ outcome: StageRunner.StageOutcome, fixture: R
     let telemetry = try #require(await fixture.telemetry())
     #expect(telemetry.diarizationSuggestionsCount == 0)
     #expect(telemetry.diarizationReviewCostUSD == 0)
+    #expect(telemetry.diarizationReviewModel == "claude-haiku-4-5")
+}
+
+// MARK: - Re-runs
+
+@Test func aRealReviewOnDiskIsKeptAndNotPaidForAgain() async throws {
+    let fixture = try await ReviewFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    let first = StubReviewer(.succeed(stubResult(suggestions: [stubSuggestion("a")])))
+    _ = try await fixture.run(reviewer: first, settings: enabledSettings)
+    let kept = try Data(contentsOf: fixture.url("diarization_suggestions.json"))
+    let second = StubReviewer(.succeed(stubResult(suggestions: [stubSuggestion("b"), stubSuggestion("c")])))
+
+    let outcome = try await fixture.run(reviewer: second, settings: enabledSettings)
+
+    #expect(await second.callCount == 0)
+    #expect(try Data(contentsOf: fixture.url("diarization_suggestions.json")) == kept)
+    guard case .completed(.awaitingAttribution, _) = outcome else {
+        Issue.record("expected completed, got \(outcome)")
+        return
+    }
+    let telemetry = try #require(await fixture.telemetry())
+    #expect(telemetry.diarizationReviewCostUSD == 0.03)
+    #expect(telemetry.diarizationReviewModel == "claude-haiku-4-5")
+    #expect(telemetry.diarizationSuggestionsCount == 1)
+}
+
+@Test func aFlagOffRerunKeepsARealReviewAndItsCost() async throws {
+    let fixture = try await ReviewFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    _ = try await fixture.run(reviewer: StubReviewer(.succeed(stubResult(suggestions: [stubSuggestion("a")]))), settings: enabledSettings)
+
+    _ = try await fixture.run(reviewer: StubReviewer(.succeed(stubResult(suggestions: []))), settings: ReviewDiarizationSettings(enabled: false))
+
+    #expect(try fixture.readSuggestions().suggestions.count == 1)
+    let telemetry = try #require(await fixture.telemetry())
+    #expect(telemetry.diarizationReviewCostUSD == 0.03)
+    #expect(telemetry.diarizationReviewModel == "claude-haiku-4-5")
+}
+
+@Test func aStubIsReviewedAgainOnceTheFlagIsOn() async throws {
+    let fixture = try await ReviewFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    _ = try await fixture.run(reviewer: StubReviewer(.succeed(stubResult(suggestions: []))), settings: ReviewDiarizationSettings(enabled: false))
+    let reviewer = StubReviewer(.succeed(stubResult(suggestions: [stubSuggestion("a")])))
+
+    _ = try await fixture.run(reviewer: reviewer, settings: enabledSettings)
+
+    #expect(await reviewer.callCount == 1)
+    #expect(try fixture.readSuggestions().suggestions.count == 1)
+    #expect(try await fixture.telemetry()?.diarizationReviewCostUSD == 0.03)
+}
+
+@Test func aStubRunNeverLowersSpendThatWasRecorded() async throws {
+    let fixture = try await ReviewFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    try await fixture.recorder.record(
+        meetingID: fixture.meetingID,
+        patch: ReviewDiarizationTelemetryPatch(diarizationSuggestionsCount: 0, diarizationReviewCostUSD: 0.05, diarizationReviewModel: "claude-haiku-4-5"),
+    )
+
+    _ = try await fixture.run(reviewer: StubReviewer(.succeed(stubResult(suggestions: []))), settings: ReviewDiarizationSettings(enabled: false))
+
+    let telemetry = try #require(await fixture.telemetry())
+    #expect(telemetry.diarizationReviewCostUSD == 0.05)
+    #expect(telemetry.diarizationReviewModel == "claude-haiku-4-5")
+}
+
+@Test func aSecondPaidReviewAddsToTheRecordedSpend() async throws {
+    let fixture = try await ReviewFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs()
+    try await fixture.recorder.record(
+        meetingID: fixture.meetingID,
+        patch: ReviewDiarizationTelemetryPatch(diarizationSuggestionsCount: 0, diarizationReviewCostUSD: 0.05, diarizationReviewModel: "old-model"),
+    )
+
+    _ = try await fixture.run(reviewer: StubReviewer(.succeed(stubResult(suggestions: [stubSuggestion("a")]))), settings: enabledSettings)
+
+    let telemetry = try #require(await fixture.telemetry())
+    #expect(abs((telemetry.diarizationReviewCostUSD ?? 0) - 0.08) < 1e-9)
     #expect(telemetry.diarizationReviewModel == "claude-haiku-4-5")
 }

@@ -99,9 +99,10 @@ public enum PersistStage {
         stateStore: StateStore,
         stageRunner: StageRunner,
         clock: TimeSource = TimeSource(),
+        expectedState: PipelineState? = nil,
     ) async throws -> StageRunner.StageOutcome {
         let vaultLocation = VaultLocation(vaultPath: vaultPath, meetingsSubdir: meetingsSubdir)
-        return try await stageRunner.run(stage: .persist, meetingID: meetingID, activeState: .persisting) {
+        return try await stageRunner.run(stage: .persist, meetingID: meetingID, activeState: .persisting, expectedState: expectedState) {
             do {
                 return try await publish(
                     meetingID: meetingID,

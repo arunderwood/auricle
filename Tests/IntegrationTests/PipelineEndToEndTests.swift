@@ -123,6 +123,16 @@ private func quotes(under heading: String, in note: String) -> [String] {
     return result
 }
 
+private extension Harness {
+    /// A mapping is written against a diarization, so it can only follow one.
+    func attribute(_ id: MeetingID, names: [String: String]?) async throws {
+        guard let names else { return }
+        let first = await runner().run(meetingID: id, options: RunOptions(to: .reviewDiarization))
+        #expect(first == RunResult(exitCode: 0))
+        try AttributionFile(speakers: names).write(for: id)
+    }
+}
+
 /// The bold speaker at the head of each paragraph under `## Transcript`.
 private func transcriptSpeakers(in note: String) -> [String] {
     note.split(separator: "\n").compactMap { line -> String? in
@@ -153,9 +163,7 @@ private func aReferenceRecordingReachesAwaitingVerificationWithAGroundedNote(sce
     #expect(imported.state == PipelineState.captured.rawValue)
     #expect(try FileManager.default.fileExists(atPath: #require(imported.audioCachePath)))
 
-    if let names = scenario.speakerNames {
-        try AttributionFile(speakers: names).write(for: id)
-    }
+    try await harness.attribute(id, names: scenario.speakerNames)
 
     // Run
     let result = await harness.runner().run(meetingID: id, options: RunOptions(publishAnyway: scenario.speakerNames == nil))
