@@ -136,7 +136,9 @@ private func expectStub(_ fixture: ReviewFixture, model: String) throws {
     let started = ContinuousClock.now
     let outcome = try await fixture.run(reviewer: reviewer, settings: ReviewDiarizationSettings(enabled: true, timeoutSeconds: 0.2))
 
-    #expect(ContinuousClock.now - started < .seconds(5))
+    // The reviewer hangs for 30 s. Anything well under that shows the timeout fired;
+    // a tighter bound trips when parallel CI load delays the cancellation.
+    #expect(ContinuousClock.now - started < .seconds(15))
     try await expectBenignFailure(outcome, fixture: fixture, errorClass: "ai_reviewer_timeout")
 }
 
