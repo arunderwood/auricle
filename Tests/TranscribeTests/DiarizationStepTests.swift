@@ -234,3 +234,100 @@ func aDiarizerFailureFailsTheTranscribeRowWithItsClassAndExitCode(error: Diarize
 private func raw(_ speaker: Int, _ start: Double, _ end: Double) -> RawSpeakerSegment {
     RawSpeakerSegment(speaker: speaker, startSeconds: start, endSeconds: end)
 }
+
+// MARK: - Resume
+
+/// Fails its first `failures` calls, then succeeds, and counts its calls.
+private actor FlakyDiarizer: DiarizerStrategy {
+    private var failures: Int
+    private(set) var receivedTimings: [[UtteranceTiming]] = []
+
+    init(failures: Int) {
+        self.failures = failures
+    }
+
+    func diarize(
+        transcript _: CanonicalTranscript,
+        utteranceTimings: [UtteranceTiming],
+        audio _: URL,
+        config _: DiarizerConfig,
+    ) async throws -> DiarizationArtifact {
+        receivedTimings.append(utteranceTimings)
+        if failures > 0 {
+            failures -= 1
+            throw DiarizerError.diarizationFailed
+        }
+        return DiarizationArtifactBuilder.build(raw: [raw(1, 0, 3), raw(2, 3, 6)], utteranceTimings: utteranceTimings)
+    }
+}
+
+private func runCounting(
+    _ fixture: TranscribeStageFixture,
+    transcriber: StubTimedCounter,
+    diarizer: FlakyDiarizer,
+) async throws -> StageRunner.StageOutcome {
+    try await TranscribeStage.run(
+        meetingID: fixture.meetingID,
+        stateStore: fixture.store,
+        stageRunner: fixture.runner,
+        transcriber: transcriber,
+        diarize: { input in
+            try await DiarizeStage.run(
+                meetingID: input.meetingID,
+                transcript: input.transcript,
+                utteranceTimings: input.utteranceTimings,
+                audio: input.audio,
+                diarizer: diarizer,
+                config: DiarizerConfig(),
+            )
+        },
+    )
+}
+
+private actor StubTimedCounter: TranscriberStrategy {
+    private(set) var callCount = 0
+
+    func transcribe(audio _: URL, config _: TranscriberConfig) async throws -> CanonicalTranscript {
+        stubTranscript()
+    }
+
+    func transcribeTimed(audio _: URL, config _: TranscriberConfig) async throws -> TimedTranscript {
+        callCount += 1
+        return TimedTranscript(transcript: stubTranscript(), utteranceTimings: twoUtteranceTimings)
+    }
+}
+
+@Test func aRetryAfterADiarizationFailureResumesFromTheWrittenTranscript() async throws {
+    let fixture = try await TranscribeStageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantAudio(seconds: 8)
+    let transcriber = StubTimedCounter()
+    let diarizer = FlakyDiarizer(failures: 1)
+
+    let first = try await runCounting(fixture, transcriber: transcriber, diarizer: diarizer)
+    guard case .failed = first else {
+        Issue.record("expected .failed outcome, got \(first)")
+        return
+    }
+    let second = try await runCounting(fixture, transcriber: transcriber, diarizer: diarizer)
+
+    #expect(TranscribeStage.exitCode(for: second) == 0)
+    #expect(await transcriber.callCount == 1)
+    #expect(await diarizer.receivedTimings == [twoUtteranceTimings, twoUtteranceTimings])
+    #expect(try fixture.readTranscript() == stubTranscript())
+}
+
+@Test func aTranscriptWithoutUsableTimingsIsTranscribedAgain() async throws {
+    let fixture = try await TranscribeStageFixture()
+    defer { fixture.cleanUp() }
+    try fixture.plantAudio(seconds: 8)
+    let transcriber = StubTimedCounter()
+    let diarizer = FlakyDiarizer(failures: 1)
+
+    _ = try await runCounting(fixture, transcriber: transcriber, diarizer: diarizer)
+    try AtomicWriter.write(Data("{}".utf8), to: fixture.cacheDirectory().appendingPathComponent("utterance_timings.json"))
+    let second = try await runCounting(fixture, transcriber: transcriber, diarizer: diarizer)
+
+    #expect(TranscribeStage.exitCode(for: second) == 0)
+    #expect(await transcriber.callCount == 2)
+}

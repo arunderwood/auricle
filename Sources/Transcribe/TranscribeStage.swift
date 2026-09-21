@@ -34,6 +34,8 @@ public enum TranscribeStage {
     private static let audioArtifactName = "audio.wav"
     private static let transcriptArtifactName = "transcript.json"
     private static let transcriptSchemaVersion = 1
+    private static let timingsArtifactName = "utterance_timings.json"
+    private static let timingsSchemaVersion = 1
 
     /// Completes into `transcribing`: no state sits between transcribe,
     /// diarize and review, so the state the stage entered is the state it
@@ -94,19 +96,12 @@ public enum TranscribeStage {
         let audio = try audioURL(for: meetingID)
         let durationSeconds = try audioDurationSeconds(of: audio)
 
-        let timed: TimedTranscript
-        do {
-            timed = try await transcriber.transcribeTimed(audio: audio, config: config)
-        } catch let error as TranscriberError {
-            throw TranscribeStageError(error)
+        let timed: TimedTranscript = if let resumed = resumedTranscript(for: meetingID) {
+            resumed
+        } else {
+            try await transcribeAndWrite(meetingID: meetingID, audio: audio, transcriber: transcriber, config: config)
         }
-
         let transcript = timed.transcript
-        do {
-            try CacheArtifactWriter.write(transcript, for: meetingID, named: transcriptArtifactName, schemaVersion: transcriptSchemaVersion)
-        } catch {
-            throw TranscribeStageError.transcriptWriteFailed
-        }
 
         let diarizeMeta = try await diarize?(DiarizationInput(
             meetingID: meetingID,
@@ -119,6 +114,57 @@ public enum TranscribeStage {
             targetState: .transcribing,
             metadataJSON: encodeMetadataJSON(config: config, audioDurationSeconds: durationSeconds, transcript: transcript, diarize: diarizeMeta),
         )
+    }
+
+    /// Timings are written before the transcript, and the transcript is what
+    /// makes the pair usable: a crash between the two writes leaves timings
+    /// with no transcript, which is not resumed.
+    private static func transcribeAndWrite(
+        meetingID: MeetingID,
+        audio: URL,
+        transcriber: any TranscriberStrategy,
+        config: TranscriberConfig,
+    ) async throws -> TimedTranscript {
+        let timed: TimedTranscript
+        do {
+            timed = try await transcriber.transcribeTimed(audio: audio, config: config)
+        } catch let error as TranscriberError {
+            throw TranscribeStageError(error)
+        }
+
+        do {
+            try CacheArtifactWriter.write(
+                TimingsArtifact(timings: timed.utteranceTimings),
+                for: meetingID,
+                named: timingsArtifactName,
+                schemaVersion: timingsSchemaVersion,
+            )
+            try CacheArtifactWriter.write(timed.transcript, for: meetingID, named: transcriptArtifactName, schemaVersion: transcriptSchemaVersion)
+        } catch {
+            throw TranscribeStageError.transcriptWriteFailed
+        }
+        return timed
+    }
+
+    /// The transcript is immutable once written, so a retry after a later
+    /// step failed reuses it instead of paying for transcription again. It is
+    /// reused only when the timings are readable and cover exactly its
+    /// utterances: anything else is transcribed afresh.
+    private static func resumedTranscript(for meetingID: MeetingID) -> TimedTranscript? {
+        guard
+            let directory = try? CacheArtifactWriter.cacheDirectory(for: meetingID),
+            let transcriptData = try? Data(contentsOf: directory.appendingPathComponent(transcriptArtifactName)),
+            let timingsData = try? Data(contentsOf: directory.appendingPathComponent(timingsArtifactName)),
+            let transcript = try? JSONDecoder().decode(CanonicalTranscript.self, from: transcriptData),
+            let artifact = try? JSONDecoder().decode(TimingsArtifact.self, from: timingsData)
+        else {
+            return nil
+        }
+        let timings = artifact.timings
+        guard timings.count == transcript.utteranceCount, timings.indices.allSatisfy({ timings[$0].index == $0 }) else {
+            return nil
+        }
+        return TimedTranscript(transcript: transcript, utteranceTimings: timings)
     }
 
     /// A cache root that cannot be resolved means the audio cannot be found

@@ -73,6 +73,29 @@ public enum MonoAudioLoader {
                 samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
             }
         }
+        try flush(converter: converter, outputFormat: outputFormat, into: &samples)
         return samples
+    }
+
+    /// A resampler holds back the samples its filter still needs input for.
+    /// Feeding `.noDataNow` between chunks leaves them there, so the end of
+    /// the stream has to be signalled for the last ones to come out.
+    private static func flush(converter: AVAudioConverter, outputFormat: AVAudioFormat, into samples: inout [Float]) throws {
+        let capacity: AVAudioFrameCount = 1 << 12
+        while true {
+            guard let output = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { throw LoadError.unreadable }
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+                inputStatus.pointee = .endOfStream
+                return nil
+            }
+            guard status != .error, conversionError == nil else { throw LoadError.unreadable }
+            if let channel = output.floatChannelData?[0], output.frameLength > 0 {
+                samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+            }
+            if status == .endOfStream || output.frameLength == 0 {
+                return
+            }
+        }
     }
 }
