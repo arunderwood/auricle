@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-20-2026 13:37
+last_updated: 09-20-2026 18:15
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -69,17 +69,17 @@ development_status:
   3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrate: done
   epic-3-retrospective: done
 
-  epic-4: backlog
-  4-1-whisperkit-transcribe-stage: backlog
-  4-2-diarize-stage-snippet-extraction: backlog
-  4-3-reviewdiarization-stage-state-machine-entry: backlog
-  4-4-aireviewerinterface-protocol-family-null-transcriptionreview: backlog
-  4-5-claudediarizationreviewer-concrete-impl-behind-flag: backlog
-  4-6-attributionviewmodel-in-attribute-attribution-batch-cli: backlog
-  4-7-auricle-run-verb-skeleton-__internal-stage-worker-dispatch: backlog
-  4-8-builder-mode-audio-import-auricle-__internal-import: backlog
-  4-9-basic-notification-stub-obsidian-url-open: backlog
-  4-10-exit-criteria-gate-ci-pipeline-test-live-run: backlog
+  epic-4: in-progress
+  4-1-whisperkit-transcribe-stage: done
+  4-2-diarize-stage-snippet-extraction: done
+  4-3-reviewdiarization-stage-state-machine-entry: done
+  4-4-aireviewerinterface-protocol-family-null-transcriptionreview: done
+  4-5-claudediarizationreviewer-concrete-impl-behind-flag: done
+  4-6-attributionviewmodel-in-attribute-attribution-batch-cli: done
+  4-7-auricle-run-verb-skeleton-__internal-stage-worker-dispatch: done
+  4-8-builder-mode-audio-import-auricle-__internal-import: done
+  4-9-basic-notification-stub-obsidian-url-open: done
+  4-10-exit-criteria-gate-ci-pipeline-test-live-run: in-progress
   epic-4-retrospective: done
 
   epic-5: backlog
@@ -395,42 +395,42 @@ action_items:
       and attribution.json, and treat a Speaker_N value as unmapped for needs-attribution
       (F1, F2)"
     owner: "story"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-33-add-an-e2e-test-with-a-real-shaped-trans"
     epic: 4
     action: "Add an e2e test with a real-shaped transcript (every utterance Speaker_1)
       and a multi-speaker diarization.json that asserts the note names two speakers"
     owner: "story"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-34-run-story-4-10-part-b-on-private-recordi"
     epic: 4
     action: "Run Story 4.10 Part B on private recordings after the speaker join is
       fixed and record the result in Tests/fixtures/epic4-exit-results.md"
     owner: "maintainer"
-    status: open
+    status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-35-guard-from-and-only-with-expectedstate-a"
     epic: 4
     action: "Guard --from and --only with expectedState and clear or validate attribution.json
       when diarization.json is rewritten (F3, F4)"
     owner: "story"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-36-move-the-internalstageworker-body-into-s"
     epic: 4
     action: "Move the InternalStageWorker body into Sources behind a thin wrapper
       and test the --publish-anyway wiring (F7)"
     owner: "story"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-37-repair-sprint-status-yaml-for-epic-4-sto"
     epic: 4
     action: "Repair sprint-status.yaml for Epic 4 stories 4.1 to 4.9 with the bmad-sprint-planning
       fix flow (F8)"
     owner: "maintainer"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-38-decide-whether-publish-anyway-keeps-a-sa"
     epic: 4
@@ -443,5 +443,5 @@ action_items:
     epic: 4
     action: "Triage the small findings in F6 and the five Story 4.2 deferred items"
     owner: "maintainer"
-    status: open
+    status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"

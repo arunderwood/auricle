@@ -432,29 +432,23 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - closes: `_bmad-output/implementation-artifacts/spec-1-7-cli-executable-scaffold-auricle-binary-with-bare-status-hidden-internal-stage.md`, "`App/Project.swift`'s bundle-embedding fix (`productName`, `copyFiles`) has no automated regression check"
   resolution: The `app` phase of `scripts/check.sh` deletes the built `AuricleApp.app`, runs both `xcodebuild` builds, and fails unless `Contents/MacOS/auricle-cli` exists and is executable. It reads the bundle location from `xcodebuild -showBuildSettings` (`TARGET_BUILD_DIR`, `FULL_PRODUCT_NAME`, `EXECUTABLE_FOLDER_PATH`), so no derived-data path is hard-coded. `ci.yml` calls the script, so CI runs the check with no workflow change. Removing either the `copyFiles` embed or `productName: "auricle-cli"` from `App/Project.swift` makes `scripts/check.sh app` exit 1 with a message naming both settings.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
-  summary: A diarization or snippet failure after `transcript.json` is written fails the whole transcribe stage, so a retry repeats transcription.
-  evidence: The approved matrix folds `diarize_*` failures into `transcription_failed`. The transcript is immutable and already on disk at that point, so Story 4.7's supervisor could resume at diarization instead. Whether a diarize failure should block the meeting at all is a design question for 4.7.
+- closes: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`,
+  resolution: `TranscribeStage` writes `utterance_timings.json` beside `transcript.json`, and a retry reuses the pair when both decode and cover the same utterances (PR #92).
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
-  summary: `SpeakerKitModelStore` treats any non-empty model folder as complete, so a partial download is never repaired.
-  evidence: Same heuristic Story 4.1 deferred for WhisperKit. The real SpeakerKit model layout is needed for a file-level check. Unverified: `provision` has never run against the real repository.
+- closes: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`,
+  resolution: `SpeakerKitModelStore.resolve` requires the real bundle set in each model folder and rejects `*.incomplete` files; `provision()` removes only failing folders before download (PR #92). The re-download against the real hub was not run live.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
-  summary: `MonoAudioLoader` converts in chunks with no end-of-stream flush, so the last resampled samples may be lost (unverified, medium if true).
-  evidence: A 44.1 kHz to 16 kHz round trip that compares total sample counts would settle it.
+- closes: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`,
+  resolution: The shortfall was real: the resampler held back its tail. The loader now flushes with `.endOfStream` after the last chunk (PR #92).
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
-  summary: `WhisperKitDiarizer.rawSegments` drops `.multiple` and `.noMatch` segments, so `overlap_ratio` may undercount overlap (unverified, medium if true).
-  evidence: Whether `useExclusiveReconciliation: false` makes SpeakerKit emit per-speaker overlapping segments or `.multiple` is only visible in a live run. Story 4.10 Part B can check it.
+- closes: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`,
+  resolution: Disproved. `.multiple` and `.noMatch` come only from the word-matching path, which `WhisperKitDiarizer` never calls, and a test shows overlapping per-speaker segments survive with `overlap_ratio` 0.5 (PR #92).
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
-  summary: The default-run tests never exercise a successful SpeakerKit load, model reuse, or concurrent load sharing.
-  evidence: Only the env-gated live test does. A loader seam in `WhisperKitDiarizer` would allow a stubbed test of `modelLoadCount` and `pendingLoad`. The 30 s NFR-P4 budget is also unverified until a live run.
+- closes: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`,
+  resolution: `WhisperKitDiarizer` takes an internal `Loader` and `Engine` seam, and default-run tests cover load, reuse, reload and concurrent sharing (PR #92).
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
-  summary: `InternalStageWorker`'s wiring of `--publish-anyway` into `SummarizeWorker` has no automated test.
-  evidence: The worker body lives in `App/`, outside `swift test`. Argv, stage and runner tests each cover one side of the process boundary. Moving the worker body into `Sources/` behind a thin wrapper would let a test cover it. Severity medium.
+- closes: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`,
+  resolution: The dispatch body moved to `Sources/Pipeline/InternalStageRouter.swift` and `InternalStageRouterTests` cover `--publish-anyway` reaching `SummarizeWorker` (PR #91).
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
   summary: A `published_partial` meeting does not reach notify or `awaiting_verification`; the runner prints the note path instead.
@@ -463,3 +457,19 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-10-exit-criteria-gate-ci-pipeline-test-live-run.md`
   summary: Story 4.10 Part B no longer requires a 1:1 recording; the exit set needs at least 5 recordings with at least two of 4 or more attendees. A 1:1 exit fixture is deferred beyond Epic 4.
   evidence: The maintainer declared 1:1s out of scope for the Epic 4 exit. No public source has one (every AMI scenario meeting has four speakers), so the gate would otherwise wait on a private recording. The 2-speaker path is still covered by Part A's one-to-one scenario, which uses stubs and not real audio.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
+  summary: A finished transcribe leaves the meeting in `transcribing`, so a failed review start or `--to transcribe` makes the next run repeat transcription.
+  evidence: Epic 4 retro F6: `Sources/Transcribe/TranscribeStage.swift:119` and `Sources/Orchestrator/RunPlan.swift:196`. Not re-verified after the run-verb state-guard change (PR #90). Severity low-medium.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
+  summary: `PipelineRunner`'s interrupt handler writes failure metadata inline instead of using the `StageRunner` builder.
+  evidence: Epic 4 retro F6: `Sources/Pipeline/PipelineRunner.swift:290-300`. The duplicated JSON shape can drift. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
+  summary: `--publish-anyway` discards a saved attribution draft, and a subprocess stage gets the pre-read state check but no `expectedState` on its `started` write.
+  evidence: Epic 4 retro F5 (`Sources/Attribute/AttributionStage.swift:131-133`, a product decision) and the note in PR #90 that plumbing `expectedState` through worker arguments was left out. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
+  summary: A resumed transcribe still runs `TranscribeWorker`'s `ensureModel` before the stage, so a retry can trigger a Whisper model-download check.
+  evidence: Noted in PR #92 under item 1. Whether a diarize failure should block the meeting at all is the open design question. Severity low.
