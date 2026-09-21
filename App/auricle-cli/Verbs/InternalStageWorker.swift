@@ -9,6 +9,7 @@ import DiarizerInterface
 import Foundation
 import GoogleCalendarSource
 import Orchestrator
+import Pipeline
 import ReviewDiarization
 import State
 import Summarize
@@ -38,66 +39,33 @@ struct InternalStageWorker: AsyncParsableCommand {
     @OptionGroup var arguments: InternalStageArguments
 
     func run() async throws {
-        switch arguments.decide() {
-        case let .exit(status):
-            try finish(status, prefixed: false)
-
-        case let .run(stage, meetingID):
-            // Switching over `InternalStageKind` without a default is the
-            // worker-coverage check: a stage `auricle run` dispatches here
-            // does not compile until it has a case.
-            guard let kind = InternalStageKind(stage: stage) else {
-                try notYetImplemented(InternalStageArguments.commandName)
-            }
-            switch kind {
-            case .transcribe:
-                try await runTranscribe(meetingID: meetingID)
-            case .reviewDiarization:
-                try await runReviewDiarization(meetingID: meetingID)
-            case .summarize:
-                try await runSummarize(meetingID: meetingID)
-            }
-        }
-    }
-
-    /// Writes the status's message, if any, and exits non-zero unless it is a
-    /// success. A message from a worker gets the command-name prefix; the one
-    /// from argument validation is already a complete line.
-    private func finish(_ status: WorkerExitStatus, prefixed: Bool) throws {
+        let status = await InternalStageRouter.run(arguments, environment: environment)
         if let message = status.message {
-            writeStderr(prefixed ? "\(InternalStageArguments.commandName): \(message)" : message)
+            writeStderr(message)
         }
         if status.code != WorkerExitCode.success {
             throw ExitCode(status.code)
         }
     }
 
-    /// Opens the state store the way every worker does. A typed store error
-    /// names its case, and any other names its type only.
-    private func openStateStore() throws -> StateStore {
-        do {
-            return try StateStore.subprocess()
-        } catch {
-            let cause = (error as? StateStoreError).map { String(describing: $0) } ?? String(describing: type(of: error))
-            writeStderr("\(InternalStageArguments.commandName): could not open the state store (\(cause)).")
-            throw ExitCode(WorkerExitCode.stateError)
-        }
+    /// Builds the concrete strategies. `InternalStageRouter` owns when each
+    /// factory runs, so `swift test` reaches the ordering and the exit codes.
+    private var environment: InternalStageRouter.Environment {
+        InternalStageRouter.Environment(
+            openStateStore: { try StateStore.subprocess() },
+            transcribe: { transcribeDependencies() },
+            reviewDiarization: { reviewDiarizationDependencies() },
+            summarize: { summarizeDependencies(vaultPath: $0) },
+        )
     }
 
-    /// Builds the concrete transcriber and hands it to `TranscribeWorker`,
-    /// which owns the ordering and the exit codes so `swift test` reaches
-    /// them.
-    private func runTranscribe(meetingID: MeetingID) async throws {
-        let stateStore = try openStateStore()
+    private func transcribeDependencies() -> InternalStageRouter.TranscribeDependencies {
         let config = TranscriberConfig()
         let modelStore = WhisperKitModelStore()
         let diarizerConfig = diarizerConfig()
         let diarizerStore = SpeakerKitModelStore()
         let diarizer = WhisperKitDiarizer(store: diarizerStore)
-        let exit = await TranscribeWorker.run(
-            meetingID: meetingID,
-            stateStore: stateStore,
-            stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
+        return InternalStageRouter.TranscribeDependencies(
             transcriber: WhisperKitTranscriber(store: modelStore),
             config: config,
             diarize: { input in
@@ -115,7 +83,6 @@ struct InternalStageWorker: AsyncParsableCommand {
                 await Self.provisionDiarizerModelIfMissing(diarizerStore)
             },
         )
-        try finish(exit, prefixed: true)
     }
 
     /// The one line written says a download is starting and, if it fails,
@@ -150,48 +117,31 @@ struct InternalStageWorker: AsyncParsableCommand {
         )
     }
 
-    /// Builds the Claude reviewer and hands the meeting to
-    /// `ReviewDiarizationWorker`. The reviewer is built even with the flag off:
-    /// constructing it makes no network call and reads no key.
-    private func runReviewDiarization(meetingID: MeetingID) async throws {
-        let stateStore = try openStateStore()
+    /// The reviewer is built even with the flag off: constructing it makes no
+    /// network call and reads no key.
+    private func reviewDiarizationDependencies() -> InternalStageRouter.ReviewDiarizationDependencies {
         let settings = ReviewDiarizationSettings.loading(
             config: { try Config.load() },
             onFailure: { writeStderr("__internal-stage: diarization review is off because the config could not be read (\(type(of: $0))).") },
         )
-        let exit = await ReviewDiarizationWorker.run(
-            meetingID: meetingID,
-            stateStore: stateStore,
-            stageRunner: StageRunner(stateStore: stateStore, stageEventLogger: StageEventLogger(stateStore: stateStore)),
-            reviewer: ClaudeDiarizationReviewer(),
-            settings: settings,
-        )
-        try finish(exit, prefixed: true)
+        return InternalStageRouter.ReviewDiarizationDependencies(reviewer: ClaudeDiarizationReviewer(), settings: settings)
     }
 
-    /// Wires `SummarizeStage`'s dependencies and hands the meeting to
-    /// `SummarizeWorker`, which owns the mapping from the stage's result to an
-    /// exit status.
-    private func runSummarize(meetingID: MeetingID) async throws {
-        let stateStore = try openStateStore()
-        let exit = await SummarizeWorker.run(
-            meetingID: meetingID,
-            stateStore: stateStore,
+    private func summarizeDependencies(vaultPath: String?) -> InternalStageRouter.SummarizeDependencies {
+        InternalStageRouter.SummarizeDependencies(
             orchestrator: ShippedSummarization.orchestrator(),
-            glossary: vaultGlossary(),
+            glossary: vaultGlossary(vaultPath: vaultPath),
             config: SummarizerConfig(),
             calendarSource: calendarSource(),
-            publishAnyway: arguments.publishAnyway,
         )
-        try finish(exit, prefixed: true)
     }
 
     /// Empty when no vault path was given or the vault cannot be read: a
     /// vocabulary is an aid to the summary, never a reason to withhold it. The
     /// one line written names the failure's type only, because a path is the
     /// user's own and does not belong in a log.
-    private func vaultGlossary() -> Glossary {
-        guard let vaultPath = arguments.vaultPath else { return Glossary() }
+    private func vaultGlossary(vaultPath: String?) -> Glossary {
+        guard let vaultPath else { return Glossary() }
         let url = URL(fileURLWithPath: (vaultPath as NSString).expandingTildeInPath, isDirectory: true)
         return VaultGlossaryBuilder(vaultPath: url).buildOrEmpty { error in
             writeStderr("__internal-stage: continuing without a vault glossary (\(type(of: error))).")
