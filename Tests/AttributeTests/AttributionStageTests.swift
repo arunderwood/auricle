@@ -89,14 +89,10 @@ func aBadMappingWritesNothingAndLeavesTheState(raw: String) async throws {
     #expect(try await fixture.events().isEmpty)
 }
 
-@Test func publishAnywayWritesAllPlaceholdersAndEmptyArrays() async throws {
+@Test func publishAnywayWithNoDraftWritesAllPlaceholdersAndEmptyArrays() async throws {
     let fixture = try await AttributeFixture()
     defer { fixture.cleanUp() }
     try fixture.plantInputs()
-    try AttributionFile(
-        speakers: ["Speaker_1": "[[Ben]]"],
-        segmentOverrides: [SegmentOverride(segmentId: "seg_1", speaker: "[[Zed]]")],
-    ).write(for: fixture.meetingID)
 
     let status = await fixture.run(.publishAnyway)
 
@@ -109,6 +105,34 @@ func aBadMappingWritesNothingAndLeavesTheState(raw: String) async throws {
     #expect(try metadata(completed)["named_count"] as? Int == 0)
     let telemetry = try await fixture.store.fetchTelemetry(meetingID: fixture.meetingID.rawValue)
     #expect(telemetry?.attributionCompletionPath == "publish_anyway")
+}
+
+@Test(arguments: ["awaiting_attribution", "attributing"])
+func publishAnywayKeepsTheSavedDraft(state: String) async throws {
+    let fixture = try await AttributeFixture(state: state)
+    defer { fixture.cleanUp() }
+    try fixture.plantInputs(diarization: fourSpeakerDiarization)
+    let override = SegmentOverride(segmentId: "seg_4", speaker: "[[Zed]]")
+    try AttributionFile(
+        speakers: ["Speaker_1": "[[Ben]]", "Speaker_2": "[[Jordan Whitfield]]", "Speaker_3": "Speaker_3"],
+        segmentOverrides: [override],
+    ).write(for: fixture.meetingID)
+
+    let status = await fixture.run(.publishAnyway)
+
+    #expect(status.code == 0)
+    let file = try fixture.readAttribution()
+    #expect(file.speakers == [
+        "Speaker_1": "[[Ben]]", "Speaker_2": "[[Jordan Whitfield]]",
+        "Speaker_3": "Speaker_3", "Speaker_4": "Speaker_4",
+    ])
+    #expect(file.segmentOverrides == [override])
+    #expect(try await fixture.state() == "summarizing")
+    let completed = try #require(await fixture.events().last { $0.event == "completed" })
+    let meta = try metadata(completed)
+    #expect(meta["named_count"] as? Int == 2)
+    #expect(meta["speaker_count"] as? Int == 4)
+    #expect(meta["completion_path"] as? String == "publish_anyway")
 }
 
 @Test(arguments: ["awaiting_verification", "published", "published_partial"])

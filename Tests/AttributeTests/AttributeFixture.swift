@@ -24,6 +24,13 @@ let threeSpeakerDiarization = DiarizationArtifact(segments: [
     segment("seg_3", "Speaker_3", 25, 30, utterances: 2 ... 2),
 ])
 
+let fourSpeakerDiarization = DiarizationArtifact(segments: [
+    segment("seg_1", "Speaker_1", 0, 5, utterances: 0 ... 0),
+    segment("seg_2", "Speaker_2", 5, 25, utterances: 1 ... 1),
+    segment("seg_3", "Speaker_3", 25, 30, utterances: 2 ... 2),
+    segment("seg_4", "Speaker_4", 30, 35, utterances: 3 ... 3),
+])
+
 let threeSpeakerTranscript = CanonicalTranscriptBuilder.build([
     (speakerLabel: "Speaker_1", text: "Hello there."),
     (speakerLabel: "Speaker_2", text: "Let us begin."),

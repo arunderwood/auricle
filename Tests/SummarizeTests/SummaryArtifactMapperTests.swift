@@ -29,6 +29,12 @@ private let transcript = CanonicalTranscript(text: text, utterances: [
     #expect(!SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: extra))
 }
 
+@Test func aPlaceholderValueInTheMapStillNeedsAttribution() {
+    let partly = ["Speaker_1": "[[Ada]]", "Speaker_2": "Speaker_2"]
+
+    #expect(SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: partly))
+}
+
 @Test func aSpeakerWhoSpokeTwiceIsOneDistinctLabel() {
     let repeated = CanonicalTranscript(text: "a b c", utterances: [
         .init(speakerLabel: "Speaker_1", start: 0, end: 1),
