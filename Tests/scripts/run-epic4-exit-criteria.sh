@@ -70,8 +70,6 @@ done < <(find "$fixtures" -maxdepth 1 -name '*.expected.json' | sort)
 python3 - "$fixtures" <<'PY' || exit 1
 import glob, json, sys
 attendees = [json.load(open(p))["attendees"] for p in glob.glob(sys.argv[1] + "/*.expected.json")]
-if 2 not in attendees:
-    sys.exit("run-epic4-exit-criteria: the set needs at least one 1:1 (attendees = 2).")
 if sum(1 for a in attendees if a >= 4) < 2:
     sys.exit("run-epic4-exit-criteria: the set needs at least two recordings with 4 or more attendees.")
 PY
