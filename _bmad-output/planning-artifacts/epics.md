@@ -2283,6 +2283,7 @@ So that scope creep doesn't dilute the Pipeline Validation milestone, CI guards 
 **And** for each recording the script runs `auricle __internal-import`, then `auricle run <id> --publish-anyway` (or `--speakers` per the mapping), and asserts exit 0, a vault note at the expected path with schema-valid frontmatter, and grounded quotes as in Part A
 **And** it asserts `meetings.verified_at` is NULL by reading the `meetings` table with `sqlite3`, because `auricle status <id>` is a stub until Story 9.6
 **And** across the set at least 80% of expected action items and decisions survive grounding, or the script fails with "Epic 4 exit criteria not met: <metric> = <value>"
+**And** an expected item counts as surviving when the note carries that item, whether matched by quote overlap or by item text; the scorer also reports false keeps, so a recall gain bought with noise is visible in the same output
 **And** per-meeting cost, summed from the `telemetry` table, is at most $0.50 with `diarization_review.enabled = false` and at most $0.60 with it `true`, per NFR-C1 read as a per-meeting ceiling
 **And** it uses real WhisperKit and live Anthropic calls
 
@@ -2301,9 +2302,109 @@ So that scope creep doesn't dilute the Pipeline Validation milestone, CI guards 
 
 ---
 
+### Story 4.11: Offline Recall Bench — Frozen Transcripts, Real Claude Call, Automatic Score
+
+As the maintainer,
+I want a bench that runs frozen reference transcripts through a real Claude call and scores item recall automatically,
+So that a prompt change can be measured in minutes for cents, instead of through a full WhisperKit pipeline run that takes hours of setup and cannot attribute a change to the prompt.
+
+**Acceptance Criteria:**
+
+**Given** the three existing harnesses
+**When** I look for one that can measure a prompt change
+**Then** none can: `SummarizeEvalHarness` stubs the Anthropic response so the request is never read, `StrategyComparisonRunner` makes real calls but leaves recall and precision to hand-scoring, and `Tests/regression/ami/run.sh` scores automatically but transcribes audio first
+**And** this story joins them rather than adding a fourth: it reuses `StrategyComparisonRunner`, its existing `substring:<absolute prompt dir>` arm grammar, and the scoring logic of `Tests/regression/ami/score.py`
+**And** it invokes `score.py` rather than reimplementing its scorer in Swift, so that Story 4.12's change to the matching rule lands in one place and the bench and the regression suite cannot drift apart; the Swift side owns fixture loading, arm wiring and the score translation, which is what `swift test` covers
+
+**Given** the bench verb
+**When** I run it over the fixture set
+**Then** it loads `transcript.json` and `expected.json` from each directory named by `Tests/regression/ami/manifest.json` (four under `Tests/SummarizeTests/Fixtures/eval/`, one under `Tests/regression/ami/reference/`)
+**And** it calls the real summarizer once per arm per transcript, renders the note through the shipped mapper and renderer, and scores the rendered note
+**And** it never loads WhisperKit, never reads audio, never writes a vault note outside a temporary directory and never touches the state database
+**And** it prints recall and false keeps per arm per meeting, plus the set total, in the same shape `score.py report` prints
+
+**Given** the AGENTS.md pitfall that `App/`-only logic has no test coverage
+**When** the bench is implemented
+**Then** its logic lands in a `Sources/` module with a thin CLI wrapper, so `swift test` covers the fixture loader, the arm wiring and the scoring translation
+**And** the paid call itself is not exercised by `swift test`
+
+**Given** a run of the full fixture set with one arm
+**When** it completes
+**Then** it takes under two minutes and costs under $0.30, measured from the telemetry the run reports
+
+---
+
+### Story 4.12: Score the Item, Count the False Keeps
+
+As the maintainer,
+I want recall to credit an expected item that the note carries under a different quote, and precision to be counted alongside it,
+So that the Epic 4 number measures whether the item survived — which is what `epics.md` Story 4.10 asks — instead of whether the model happened to quote the same sentence a human curator did, and so that a recall gain bought with fabricated items cannot pass unobserved.
+
+**Acceptance Criteria:**
+
+**Given** `Tests/regression/ami/score.py` as it stands
+**When** an expected item is matched
+**Then** the only test is word overlap of at least 0.5 between the expected quote and a note block quote, so a correct item quoted from a different passage of the same discussion scores zero
+**And** nothing counts a kept item that matches no expected item, so precision is unmeasured across the whole gate
+
+**Given** the amended scorer
+**When** it scores a note
+**Then** an expected item counts as recalled if its quote overlaps a note block quote at or above the existing threshold, **or** its `text` matches a kept item's text at or above a stated item-text threshold
+**And** the item-text threshold is recorded in `thresholds.json` alongside the others, with its calibration written in the commit message
+**And** `false_keeps` is reported per meeting and for the set: kept items matching no expected item by either test
+**And** `score.py report` prints both, and a false-keep count worse than the recorded baseline is a breach like any other threshold
+
+**Given** the 2026-09-21 Part B run at revision `74a3d80`
+**When** its notes are re-scored under the amended scorer
+**Then** the seven kept items that matched no expected quote are classified: false keep, or right item quoted from the wrong passage
+**And** the classification and the re-scored recall are recorded in `Tests/fixtures/epic4-exit-results.md` as a re-score of that run, distinct from a new run
+**And** if the notes from that run are gone, one Story 4.11 bench run regenerates them
+
+**Given** the re-scored number is higher than 42.1%
+**When** it is recorded
+**Then** the record states plainly that a scoring correction cannot close the gap on its own: 15 items were kept against 19 expected, so perfect alignment caps at 78.9%, below the 80% floor
+**And** `Tests/scripts/run-epic4-exit-criteria.sh` uses the same two-test rule, so the exit script and the regression suite stop disagreeing
+
+---
+
+### Story 4.13: Prompt Recall Pass
+
+As the maintainer,
+I want the summarization prompt iterated against the bench until item recall clears 80% without a worse false-keep count,
+So that Epic 4's exit gate is met by the summarizer actually surfacing what the meeting settled, rather than by moving the floor to meet the summarizer.
+
+**Acceptance Criteria:**
+
+**Given** the measured behaviour
+**When** the prompt is examined against it
+**Then** four findings name the starting arms: output volume is flat at 4-5 items against expected counts of 3, 8, 1, 4 and 3; `system.md` rule 5 instructs "Prefer precision over coverage... A short list, or an empty array, is a correct answer" while no gate measures precision; rule 2 excludes "targets or requirements handed to the group from outside" and "ideas that are floated or debated," which describes three of ES2002b's four expected decisions; and the model tends to quote the opening of a passage rather than its decisive line
+
+**Given** each arm
+**When** it is run on the bench
+**Then** it is a prompt directory, compared against the shipped set as the control arm in the same run
+**And** every arm's recall, false-keep count and cost are recorded in a results file under `Tests/fixtures/`, one row per arm, with the prompt directory's diff from the control summarised in the row
+
+**Given** rule 2's conflict with the ES2002b labels
+**When** it is resolved
+**Then** the resolution goes one way or the other explicitly: the rule narrows to admit a target the group adopts as its own working frame, **or** those expected items leave the fixture with the rationale written into that fixture's `expected.json` `notes` field
+**And** the choice is not left implicit in a prompt reword
+
+**Given** the stopping condition
+**When** an arm reaches at least 80% item recall with a false-keep count no worse than the Story 4.12 baseline
+**Then** that arm's prompt directory replaces `Sources/Summarize/Prompts/summarize/`, `Tests/regression/ami/thresholds.json` raises `min_item_recall` to guard the new baseline, and the story is done
+**And** the telemetry `summarization_prompt_set_hash` changes, so the improvement is attributable in `history.jsonl`
+
+**Given** arms stop improving below 80%
+**When** the story ends
+**Then** it ends at the maintainer decision gate rather than at a prompt change nobody measured: at 65% to 79% the maintainer chooses between a multi-pass amendment (PM and Architect, reopening FR32, FR71 and Decision 5.6) and moving Story 4.10's floor to the achieved number with the rationale written into `epics.md`; below 65% it escalates
+**And** FR32 ("a single primary Claude call per meeting; chain-of-summarize is explicitly deferred to v2+") stands until such an amendment lands, so no arm in this story makes more than one primary call
+
+---
+
 **Epic 4 summary:**
 - **10 stories** sized for single dev-agent completion
 - **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 → 4.10 (4.9 cannot land before 4.1–4.8; 4.10 is the explicit gate)
+- **Recall remediation (added 2026-09-20, `sprint-change-proposal-2026-09-20.md`):** 4.11 → 4.12 → 4.13 land after 4.10's first Part B run and before its rerun. They exist because Part B measured 42.1% item recall against 4.10's 80% floor. 4.13 ends at a maintainer decision gate; multi-pass extraction is not among its options while FR32 stands.
 - **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR27 mechanism (Story 4.6 — the `--speakers` batch path; the documented fallback surface stays [v1.1], Story 10.4), FR42 stub (Story 4.9 — full path in Epic 8), FR43 stub (Story 4.9 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
 - **NFRs primarily verified:** NFR-P3 (Story 4.1 perf test), NFR-P4 (Story 4.2 perf test), NFR-P10 peak memory (Stories 4.1 + 4.2 — WhisperKit subprocess constraint), NFR-Pr1 transcribe local (Story 4.1), NFR-Pr4 first-name speakers + email scrubbing (consumed in Story 4.6 + Epic 3 Story 3.10), NFR-C1 v1.1+ tier (Story 4.5 + Story 4.10 live-run validation), NFR-I8 local-LLM v1.1+ slot (Story 4.4 + Story 4.5 telemetry contract)
 - **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7), AR-PIPE-1 in-process persist wiring (Story 4.7), AR-DATA-6 `auricle/needs-summary` tag (Story 4.7), AR-DATA-7 re-publish notification text (Story 4.9)
