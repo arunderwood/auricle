@@ -45,6 +45,21 @@ The rows already in `history.jsonl` were scored before the second test existed a
 
 ES2002a/b and ES2003a/b reuse the Epic 3 eval fixtures under `Tests/SummarizeTests/Fixtures/eval/`. ES2004a has its own reference under `reference/es2004a/`, in the same format, built with `Tests/scripts/eval_fixture_tool.py`. It lives here so that adding a meeting to this suite does not add a fixture to the Epic 3 eval harness, which runs every directory under `eval/` on every `swift test`.
 
+## The offline recall bench
+
+`score.py` has a second consumer. `score.py note <note-path> <expected-json> <transcript-json>` scores one note on its own: it reads no database, no cache root and no manifest, and prints `kept_items`, `ungrounded_quotes`, `expected_items`, `recalled_items` and `false_keeps` as one JSON object. It takes the item-text threshold from the `thresholds.json` beside it, so it applies the same two tests `meeting` does. `score.py meeting` prints the same five keys, from the same `score_note`, so the matching rule has one home and the two consumers cannot drift; `test_score.py` pins that agreement.
+
+`Tests/scripts/run-recall-bench.sh` is the caller. It summarizes the reference transcripts this manifest names — no audio, no WhisperKit, no state database, no vault — renders each result through the shipped note path, and scores it. That makes a prompt change measurable in about two minutes and under $0.30 per arm, without a full pipeline run.
+
+```bash
+Tests/scripts/run-recall-bench.sh                                          # the shipped pair of arms
+Tests/scripts/run-recall-bench.sh --arm substring --arm substring:/abs/dir # one prompt set against another
+```
+
+Its `ungrounded_quotes` is a stronger check than the full pipeline's: with no transcription in the loop, the note's quotes are sliced from this same reference transcript, so a non-zero count is a grounding defect rather than a word-error artifact.
+
+The bench does not replace a full run. It holds transcription and diarization fixed at human-reference quality, so its recall is an upper bound on what the pipeline scores end to end.
+
 ## Epic 4 exit criteria
 
 The five meetings also serve as the recording set for `Tests/scripts/run-epic4-exit-criteria.sh`, which needs at least five recordings and at least two with four or more attendees.

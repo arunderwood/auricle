@@ -238,3 +238,7 @@ Derived/
 # from them (detail.md quotes them). Never committed.
 Tests/fixtures/strategy-comparison-transcripts/
 Tests/fixtures/strategy-comparison-output/
+
+# Story 4.11 offline recall bench: the notes it renders carry real meeting
+# content, and each run's report belongs to that run, not to the repository.
+Tests/fixtures/recall-bench-output/

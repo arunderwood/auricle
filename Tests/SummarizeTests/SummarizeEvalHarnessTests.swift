@@ -118,34 +118,15 @@ private func scoreRun(_ fixture: EvalFixture, summary: SummaryWithGrounding, dec
 }
 
 private func renderedNote(_ fixture: EvalFixture, summary: SummaryWithGrounding) throws -> String {
-    let transcript = fixture.transcript
-    let bytes = Array(transcript.text.utf8)
-    let segments = try SummaryArtifactMapper.transcriptSegments(of: transcript, transcriptBytes: bytes, speakers: nil)
-    let artifact = try SummaryArtifactMapper.artifact(
+    let artifact = try OfflineSummaryArtifact.artifact(
         title: "Eval fixture \(fixture.name)",
+        transcript: fixture.transcript,
         grounded: summary,
-        transcriptSegments: segments,
-        needsAttribution: SummaryArtifactMapper.needsAttribution(transcript: transcript, speakers: nil),
-        transcriptBytes: bytes,
     )
-    return FrontmatterRenderer.render(meeting: frontmatterMeeting(artifact))
-}
-
-/// Field-for-field the same mapping `PersistStage` applies to a decoded
-/// `summary.json`; that function is private, so this is its test-side twin.
-private func frontmatterMeeting(_ artifact: SummaryArtifact) -> MeetingForFrontmatter {
-    MeetingForFrontmatter(
+    return FrontmatterRenderer.render(meeting: SummaryArtifactFrontmatter.meeting(
+        artifact,
         meetingID: MeetingID(ulid: "01HJK3PQXY7N8M3FT4QHNWVZRP")!,
-        title: artifact.title,
         date: "2026-01-15",
-        attendees: artifact.attendees,
-        schemaVersion: 1,
         supersedes: nil,
-        needsAttribution: artifact.needsAttribution,
-        needsCalendarEnrichment: artifact.needsCalendarEnrichment,
-        summary: artifact.summary,
-        actionItems: artifact.actionItems.map { QuotedItem(text: $0.text, quote: $0.quote) },
-        decisions: artifact.decisions.map { QuotedItem(text: $0.text, quote: $0.quote) },
-        transcriptSegments: artifact.transcriptSegments.map { TranscriptSegment(speaker: $0.speaker, text: $0.text) },
-    )
+    ))
 }
