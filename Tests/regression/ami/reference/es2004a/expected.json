@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "source": {
+    "kind": "ami_meeting",
+    "title": "AMI Meeting Corpus ES2004a (scenario design meeting, session a, kickoff)",
+    "origin": "https://github.com/Yale-LILY/QMSum/blob/main/data/Product/all/ES2004a.json",
+    "license": "CC BY 4.0",
+    "attribution": "See NOTICE.md in Tests/regression/ami."
+  },
+  "speakers": {
+    "Speaker_1": "User Interface",
+    "Speaker_2": "Project Manager",
+    "Speaker_3": "Marketing",
+    "Speaker_4": "Industrial Designer"
+  },
+  "action_items": [
+    {
+      "text": "Speaker_2 (project manager) will make the project budget figures available to the team, in the shared folder.",
+      "quote": "or I could put it in the shared folder or something.",
+      "transcript_start": 7058,
+      "transcript_end": 7110
+    },
+    {
+      "text": "Everyone works on their own role's task during the half hour before the next meeting.",
+      "quote": "we've got half an hour before the next meeting, so we're all gonna go off and do our individual things.",
+      "transcript_start": 15374,
+      "transcript_end": 15477
+    }
+  ],
+  "decisions": [
+    {
+      "text": "Multiple languages are not a key point of the design, although the market is international.",
+      "quote": "I don't think it's a case of worrying about different languages and things like that, um making that a key point",
+      "transcript_start": 8398,
+      "transcript_end": 8510
+    }
+  ],
+  "notes": "This is a kickoff meeting: introductions, the animal drawing exercise, the budget figures and an open brainstorm about remote controls. Kept: the project manager's commitment to share the budget figures, the closing instruction to do individual work before the next meeting, and the project manager's ruling that different languages are not a key point. Left out: the LCD menu display borrowed from mobile phones, the flip-top case, the dual set of basic buttons plus a menu, the large-print button for older users, and plastic over metal. Each of those was floated and liked, and none was settled; the industrial designer answered the plastic point by quoting the company slogan back. Also left out are the selling price, production cost and profit aim, which the project manager read from the brief rather than the group deciding them."
+}
