@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "comment": "Short match fragments for Tests/scripts/run-epic4-exit-criteria.sh, one per reference expected item. See the 'Epic 4 exit criteria' section of README.md for why the full reference quote cannot be used. Each fragment must be a contiguous substring of its quote; prepare-exit-fixtures.sh enforces that and fails when a reference item has no fragment here.",
+  "comment": "Short match fragments for Tests/scripts/run-epic4-exit-criteria.sh, one per reference expected item. See the 'Epic 4 exit criteria' section of README.md for why the full reference quote cannot be used, and why a fragment is taken from the START of its quote. Each fragment must be a contiguous substring of its quote; prepare-exit-fixtures.sh enforces that and fails when a reference item has no fragment here.",
   "meetings": {
     "ES2002a": [
       {
         "quote": "as the industrial designer, you're gonna be working on you know the actual working design of it",
-        "fragment": "the actual working design of it"
+        "fragment": "as the industrial designer"
       },
       {
         "quote": "for user interface, technical functions, I guess that's you know like what we've been talking about, what it'll actually do.",
-        "fragment": "what we've been talking about"
+        "fragment": "user interface, technical functions"
       },
       {
         "quote": "marketing executive, you'll be just thinking about what it actually what, you know, what requirements it has to has to fulfil",
-        "fragment": "what requirements it has to"
+        "fragment": "marketing executive, you'll be just thinking about"
       }
     ],
     "ES2002b": [
@@ -23,7 +23,7 @@
       },
       {
         "quote": "User Interface Designer gonna be thinking about our user interface",
-        "fragment": "thinking about our user interface"
+        "fragment": "User Interface Designer"
       },
       {
         "quote": "and marketing you're gonna be thinking about trend watching.",
@@ -31,11 +31,11 @@
       },
       {
         "quote": "so I'll be putting the minutes of this uh this meeting into the project documents folder",
-        "fragment": "the project documents folder"
+        "fragment": "I'll be putting the minutes"
       },
       {
         "quote": "Are we all happy about the idea of um aiming the product at um the fifteen to thirty five bracket?",
-        "fragment": "happy about the idea of"
+        "fragment": "we all happy about the idea of"
       },
       {
         "quote": "the the most basic stuff possible. Um on off, up and down channels, up and down volume and uh skip to a channel.",

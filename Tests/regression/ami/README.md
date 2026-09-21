@@ -20,6 +20,8 @@ Setup is the same as `Tests/scripts/run-epic4-exit-criteria.sh`: launch the app 
 
 `thresholds.json` holds the limits. They guard against a regression from the recorded baseline in `history.jsonl`. They are not quality targets. Change a limit only with a reason in the commit message.
 
+The report aggregates over the meetings in one invocation, and `min_item_recall` is calibrated for the whole set: recall runs 42% across all five but only 25% on ES2002b and ES2003b and 33% on ES2004a. Naming a single meeting on the command line therefore checks it against a limit it was never meant to clear on its own. Read a one-meeting run for its WER, realtime factor and cost, and judge recall from a full run.
+
 ## Reference transcripts
 
 ES2002a/b and ES2003a/b reuse the Epic 3 eval fixtures under `Tests/SummarizeTests/Fixtures/eval/`. ES2004a has its own reference under `reference/es2004a/`, in the same format, built with `Tests/scripts/eval_fixture_tool.py`. It lives here so that adding a meeting to this suite does not add a fixture to the Epic 3 eval harness, which runs every directory under `eval/` on every `swift test`.
