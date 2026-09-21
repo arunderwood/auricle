@@ -34,7 +34,11 @@ AURICLE_EXIT_FIXTURES=$(Tests/regression/ami/prepare-exit-fixtures.sh) Tests/scr
 
 `prepare-exit-fixtures.sh` writes a temporary directory and prints its path. For each meeting it makes a symlink to the cached audio and an expected file in the format that script's header documents. It omits `speakers`, so the run uses `--publish-anyway`.
 
-The expected quotes are the reference transcript's wording, and the pipeline transcribes the audio itself. An expected item only survives when the transcription reproduces that wording, so the pass rate reflects word error rate as much as summarization.
+Each expected item's quote is a short match fragment from `exit-fragments.json`, not the reference quote. The exit script decides that an item survived by testing whether the expected quote is a substring of the note's block quote, and that block quote comes from the pipeline's own transcription. The reference quotes are a separate human transcript of the same speech, 7 to 24 words long, and word error rate runs 0.28 to 0.35, so an exact match over a run that long effectively never happens. Matching on the full reference quote scores near zero regardless of how good the summary is.
+
+A fragment is a contiguous run of its reference quote, four to seven words, chosen to survive a different transcriber: no fillers, no stutters, no sentence punctuation, no digits, no spelled-out letters like `L_E_D_`, and no word whose British and American spellings differ. `prepare-exit-fixtures.sh` checks that every reference item has a fragment and that each fragment really is a substring of its quote, so a reference edit that invalidates a fragment fails the build instead of quietly scoring zero.
+
+The tradeoff is precision: a short fragment can match a block quote about something else, which counts an item as surviving when it did not. That inflates the pass rate rather than deflating it, so treat a passing AMI run as evidence the harness works end to end, not as the Epic 4 acceptance result. Acceptance needs recordings whose expected quotes were written from the transcription the pipeline actually produced.
 
 ## Comparing models
 
