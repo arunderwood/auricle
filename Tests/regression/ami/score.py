@@ -6,6 +6,10 @@
       and diarization, and the state database. Prints no transcript text.
   score.py report <thresholds.json> <results.jsonl>
       Prints a table, checks the thresholds, exits 1 on a breach.
+
+An expected item survives on either of two tests: its quote overlaps a note
+block quote, or its `text` overlaps a kept item's text. A kept item that
+survives neither test against any expected item is a false keep.
 """
 import json
 import re
@@ -39,7 +43,12 @@ def wer(reference, hypothesis):
     return previous[-1] / max(len(reference), 1)
 
 
-def note_quotes(note):
+def note_items(note):
+    """Each bullet under Action Items and Decisions, as its text and its quote.
+
+    FrontmatterRenderer writes a bullet as one `- <text>` line followed by one
+    `  > ` line per line of the quote, so the text is whatever follows `- `.
+    """
     sections = {"Action Items": [], "Decisions": []}
     current = bullet = None
     for line in note.split("\n"):
@@ -47,18 +56,21 @@ def note_quotes(note):
             current = line[3:] if line[3:] in sections else None
             bullet = None
         elif current and line.startswith("- "):
-            bullet = []
+            bullet = {"text": line[2:].strip(), "quote": []}
             sections[current].append(bullet)
         elif current and bullet is not None and line.startswith("  >"):
-            bullet.append(line[3:].strip())
-    return {name: ["\n".join(b) for b in bullets] for name, bullets in sections.items()}
+            bullet["quote"].append(line[3:].strip())
+    for items in sections.values():
+        for item in items:
+            item["quote"] = "\n".join(item["quote"])
+    return sections
 
 
 def overlap(expected, kept):
-    """Share of the shorter quote's words that the longer one also holds.
+    """Share of the shorter side's words that the longer one also holds.
 
     The model often quotes only the start of the passage a reference item
-    covers, so overlap is measured against the shorter side. A kept quote
+    covers, so overlap is measured against the shorter side. A kept string
     under four words never counts: it would match almost anything.
     """
     want = words(expected)
@@ -75,6 +87,22 @@ def overlap(expected, kept):
     return hit / len(shorter)
 
 
+def matches(expected, kept, item_text_overlap):
+    """Whether a kept note item carries an expected item, by either of two tests.
+
+    A quote test alone scores zero for a correct item the model supported with
+    a different sentence of the same discussion, which is a judgement about the
+    curator's sentence choice rather than about whether the item survived. The
+    second test compares the two item descriptions instead. Either is
+    sufficient. `text` is optional on the exit run's expected files, and an
+    absent one scores zero, leaving the quote test to decide alone.
+    """
+    return (
+        overlap(expected["quote"], kept["quote"]) >= RECALL_OVERLAP
+        or overlap(expected.get("text", ""), kept["text"]) >= item_text_overlap
+    )
+
+
 def scalar(db, sql, *args):
     row = db.execute(sql, args).fetchone()
     return row[0] if row else None
@@ -82,6 +110,7 @@ def scalar(db, sql, *args):
 
 def meeting(meeting_id, ami_id, db_path, cache_root, repo_root):
     manifest = json.load(open(Path(repo_root) / "Tests/regression/ami/manifest.json"))
+    item_text_overlap = json.load(open(Path(repo_root) / "Tests/regression/ami/thresholds.json"))["item_text_overlap"]
     entry = next(m for m in manifest["meetings"] if m["id"] == ami_id)
     reference_dir = Path(repo_root) / entry["reference"]
     cache = Path(cache_root) / meeting_id
@@ -127,28 +156,32 @@ def meeting(meeting_id, ami_id, db_path, cache_root, repo_root):
     result["expected_speakers"] = entry["attendees"]
 
     note = open(note_path, encoding="utf-8").read() if note_path else ""
-    quotes = note_quotes(note)
-    result["kept_items"] = sum(len(v) for v in quotes.values())
-    result["ungrounded_quotes"] = sum(1 for v in quotes.values() for q in v if q not in hypothesis)
+    kept = note_items(note)
+    result["kept_items"] = sum(len(v) for v in kept.values())
+    result["ungrounded_quotes"] = sum(1 for v in kept.values() for i in v if i["quote"] not in hypothesis)
 
     expected = json.load(open(reference_dir / "expected.json"))
-    wanted = [("Action Items", i["quote"]) for i in expected["action_items"]] + [("Decisions", i["quote"]) for i in expected["decisions"]]
-    survived = sum(1 for heading, quote in wanted if any(overlap(quote, k) >= RECALL_OVERLAP for k in quotes[heading]))
-    result["expected_items"] = len(wanted)
-    result["recalled_items"] = survived
+    wanted = {"Action Items": expected["action_items"], "Decisions": expected["decisions"]}
+    result["expected_items"] = sum(len(v) for v in wanted.values())
+    result["recalled_items"] = sum(
+        1 for heading, items in wanted.items() for e in items if any(matches(e, k, item_text_overlap) for k in kept[heading])
+    )
+    result["false_keeps"] = sum(
+        1 for heading, items in kept.items() for k in items if not any(matches(e, k, item_text_overlap) for e in wanted[heading])
+    )
     print(json.dumps(result))
 
 
 def report(thresholds_path, results_path):
     limits = json.load(open(thresholds_path))
     rows = [json.loads(line) for line in open(results_path) if line.strip()]
-    print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'recall':>7} {'cost':>8}")
+    print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
     for r in rows:
         print(
             f"{r['ami_id']:9} {r['wer']:6.3f} {r['realtime_factor']:6.3f} "
             f"{r['diarized_speakers']}/{r['expected_speakers']:<3} {r['kept_items']:5d} {r['drop_count']:5d} "
-            f"{r['recalled_items']}/{r['expected_items']:<5} ${r['cost_usd']:7.4f}"
+            f"{r['recalled_items']}/{r['expected_items']:<5} {r['false_keeps']:6d} ${r['cost_usd']:7.4f}"
         )
         name = r["ami_id"]
         checks = [
@@ -162,10 +195,15 @@ def report(thresholds_path, results_path):
         breaches += [f"{name}: {why}" for ok, why in checks if not ok]
     expected = sum(r["expected_items"] for r in rows)
     recalled = sum(r["recalled_items"] for r in rows)
+    false_keeps = sum(r["false_keeps"] for r in rows)
+    kept = sum(r["kept_items"] for r in rows)
     recall = recalled / expected if expected else 1.0
     print(f"item recall {recalled}/{expected} = {recall:.0%}")
+    print(f"false keeps {false_keeps}/{kept}")
     if recall < limits["min_item_recall"]:
         breaches.append(f"item recall {recall:.0%} < {limits['min_item_recall']:.0%}")
+    if false_keeps > limits["max_false_keeps"]:
+        breaches.append(f"false keeps {false_keeps} > {limits['max_false_keeps']}")
     for breach in breaches:
         print(f"REGRESSION: {breach}", file=sys.stderr)
     sys.exit(1 if breaches else 0)
