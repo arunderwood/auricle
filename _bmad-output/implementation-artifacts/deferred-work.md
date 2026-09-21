@@ -452,7 +452,7 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
   summary: A `published_partial` meeting does not reach notify or `awaiting_verification`; the runner prints the note path instead.
-  evidence: `PipelineTransitions` allows notify only under `published`. Story 4.7 resumes `published_partial` at summarize, and a successful re-run reaches `awaiting_verification`. Whether a partial note is announced by the notifier is still a product decision (see the earlier deferred entry on `published_partial` and notify). Severity low.
+  evidence: `PipelineTransitions` allows notify only under `published`. Story 4.7 resumes `published_partial` at summarize, and a successful re-run reaches `awaiting_verification`. Whether a partial note is announced by the notifier is still a product decision (see the earlier deferred entry on `published_partial` and notify). Severity low. Decided: leave it silent in Epic 4, because the CLI prints the note path and the GUI notifier is Epic 6. Epic 6 decides the wording (for example "meeting ready, summary failed") and must not move a summary-less note to `awaiting_verification`.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-10-exit-criteria-gate-ci-pipeline-test-live-run.md`
   summary: Story 4.10 Part B no longer requires a 1:1 recording; the exit set needs at least 5 recordings with at least two of 4 or more attendees. A 1:1 exit fixture is deferred beyond Epic 4.
@@ -468,7 +468,7 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-7-auricle-run-verb-skeleton-internal-stage-worker-dispatch.md`
   summary: `--publish-anyway` discards a saved attribution draft, and a subprocess stage gets the pre-read state check but no `expectedState` on its `started` write.
-  evidence: Epic 4 retro F5 (`Sources/Attribute/AttributionStage.swift:131-133`, a product decision) and the note in PR #90 that plumbing `expectedState` through worker arguments was left out. Severity low.
+  evidence: Epic 4 retro F5 (`Sources/Attribute/AttributionStage.swift:131-133`, a product decision) and the note in PR #90 that plumbing `expectedState` through worker arguments was left out. Severity low. Decided: `--publish-anyway` keeps a saved attribution draft, because the correction workflow is the product and discarding entered names destroys user work. Unnamed speakers stay placeholders and the note stays tagged. Owner: branch `fix/publish-anyway-keeps-attribution-draft`. The `expectedState` note for subprocess stages stays open.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
   summary: A resumed transcribe still runs `TranscribeWorker`'s `ensureModel` before the stage, so a retry can trigger a Whisper model-download check.
