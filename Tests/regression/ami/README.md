@@ -40,7 +40,9 @@ Each expected item's quote is a short match fragment from `exit-fragments.json`,
 
 A fragment is a contiguous run of its reference quote, four to seven words, chosen to survive a different transcriber: no fillers, no stutters, no sentence punctuation, no digits, no spelled-out letters like `L_E_D_`, and no word whose British and American spellings differ. `prepare-exit-fixtures.sh` checks that every reference item has a fragment and that each fragment really is a substring of its quote, so a reference edit that invalidates a fragment fails the build instead of quietly scoring zero.
 
-The tradeoff is precision: a short fragment can match a block quote about something else, which counts an item as surviving when it did not. That inflates the pass rate rather than deflating it, so treat a passing AMI run as evidence the harness works end to end, not as the Epic 4 acceptance result. Acceptance needs recordings whose expected quotes were written from the transcription the pipeline actually produced.
+The tradeoff is precision: a short fragment can match a block quote about something else, which counts an item as surviving when it did not. That inflates the pass rate rather than deflating it, so read a fragment score as an upper bound and `score.py`'s item recall as the acceptance number.
+
+AMI is the Epic 4 acceptance corpus. The repository is public and recordings, transcripts and titles are never committed, so a private corpus cannot gate a build: nothing built from it is reproducible by anyone reading the repo. AMI is harder than the target workload — far-field, four speakers, word error rate 0.28 to 0.38, against a laptop call on a headset — so 80% here is a conservative floor rather than an equivalent one.
 
 ## Comparing models
 

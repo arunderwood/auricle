@@ -3,7 +3,7 @@ title: 'Story 4.10: Exit-Criteria Gate (CI Pipeline Test + Live Run)'
 type: 'feature'
 created: '2026-09-20'
 status: 'in-progress'
-status_detail: 'Part A (CI pipeline test) is done. Part B (live run) awaits the maintainer: it needs private recordings, real WhisperKit and live Anthropic calls, and has not been run.'
+status_detail: 'Part A (CI pipeline test) is done. Part B ran on 2026-09-21 against the AMI set and did not meet the criteria: 26.3% by the fragment scorer, 42.1% item recall. The blocker is summarizer recall, not maintainer availability. Stories 4.11 to 4.13 remediate it; the rerun follows their decision gate.'
 context: [
   '{project-root}/_bmad-output/implementation-artifacts/epic-4-context.md',
 ]
@@ -16,7 +16,7 @@ Epic 4 exits through two gates. Part A guards the pipeline plumbing on every PR.
 ## Status by part
 
 - **Part A: done.** `IntegrationTests` runs in `swift test`. It drives `PipelineRunner` with the real stage workers over stub transcriber, stub diarizer, a stubbed Anthropic endpoint, a temp vault and a temp state database.
-- **Part B: awaits the maintainer's live run.** `Tests/scripts/run-epic4-exit-criteria.sh` is written and untested against real recordings. `Tests/fixtures/epic4-exit-results.md` is a blank template. The story is not `done` until that file records "Epic 4 exit criteria met".
+- **Part B: run, and short of the floor.** `Tests/scripts/run-epic4-exit-criteria.sh` ran on 2026-09-21 over the five AMI meetings and scored 26.3% against an 80% floor; `score.py` puts item recall at 42.1% on the same notes. The summarizer keeps 15 items against 19 expected, so alignment fixes cap at 78.9%. Stories 4.11 to 4.13 build the bench, correct the scoring contract and iterate the prompt. The story is not `done` until `Tests/fixtures/epic4-exit-results.md` records "Epic 4 exit criteria met".
 
 ## Boundaries & Constraints
 

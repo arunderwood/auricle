@@ -80,6 +80,9 @@ development_status:
   4-8-builder-mode-audio-import-auricle-__internal-import: done
   4-9-basic-notification-stub-obsidian-url-open: done
   4-10-exit-criteria-gate-ci-pipeline-test-live-run: in-progress
+  4-11-offline-recall-bench: backlog
+  4-12-item-text-recall-and-false-keep-scoring: backlog
+  4-13-prompt-recall-pass: backlog
   epic-4-retrospective: done
 
   epic-5: backlog
