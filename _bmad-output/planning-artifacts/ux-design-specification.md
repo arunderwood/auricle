@@ -81,7 +81,7 @@ The eight UX-relevant modes that shape the surface:
 
 The product loop has five physical user actions: **click Record → have meeting → click Stop → attribute speakers → click notification**. Four of those are essentially trivial. The single interaction that defines the product is **speaker attribution** — the only blocking human-in-the-loop step in MVP, the only place where the user's time budget can collapse the experience, and the only place where every commercial competitor has a fundamentally different shape (bot-based with no native attribution surface). Get attribution right and everything else falls into place; get it wrong and no amount of summary quality saves the product.
 
-The secondary critical interaction is **first-launch onboarding (J0)** — TCC permission grants for Screen Recording, Microphone, and Notifications. Trust on Day 1 is the gate to Day 30.
+The secondary critical interaction is **first-launch onboarding (J0)** — TCC permission grants for Microphone, System Audio Recording, and Notifications. Trust on Day 1 is the gate to Day 30.
 
 ### Platform Strategy
 
@@ -826,22 +826,21 @@ flowchart TD
     Install[User downloads .app, runs scripts/setup-trust.sh] --> Launch[Launches auricle]
     Launch --> Welcome[Main window: Welcome view<br/>'Let's get auricle set up — 4 quick steps']
     Welcome --> Mic[Step 1: Microphone access<br/>Click → triggers TCC dialog]
-    Mic -->|Granted| Screen[Step 2: Screen Recording access]
+    Mic -->|Granted| Screen[Step 2: System Audio Recording<br/>1-second capture triggers the TCC dialog]
     Mic -->|Denied| MicHelp[Inline help + 'Open Settings' / 'Skip' / 'Try again']
     MicHelp --> Mic
-    Screen -->|Granted| Notif[Step 3: Notifications access]
-    Screen -->|Denied| ScreenHelp[Inline help] --> Screen
-    Notif -->|Granted| Cfg[Step 4: Configure vault + API key + calendar]
+    Screen --> ScreenHelp[Grant can't be read back:<br/>'If you chose Allow, you're done' + Open Settings] --> Notif[Step 3: Notifications access]
+    Notif -->|Granted| Cfg[Step 4: Configure vault + Obsidian check + API key]
     Notif -->|Denied| NotifSkip[Note: 'You can still use auricle —<br/>summary-ready notifications will be silent.'] --> Cfg
     Cfg --> SelfWL[Set self wikilink<br/>default = system account name]
-    SelfWL --> Done[Onboarding complete<br/>Main window: empty list + 'Click ⏺ Record to begin']
+    SelfWL --> Done[Onboarding complete<br/>quiet 'You're set up' state]
 ```
 
 Key UX details:
 - TCC dialog text per Decision 4.4 (purpose-first, in user voice, NOT boilerplate)
 - Each permission step shows a *why* line above the request, so the system dialog isn't a surprise
 - Denied permissions don't terminally block — auricle works with Notifications denied (banner-and-list alternative), Calendar denied (`#auricle/needs-calendar-enrichment` tags), Anthropic key missing (set later when ready to summarize)
-- Only Microphone + Screen Recording are hard-blocking for capture itself
+- Nothing hard-blocks capture: a denied microphone records system audio only, and the System Audio Recording grant cannot be read, so the step explains where to turn it on. Calendar connection is not an onboarding step in MVP; it lives in Settings
 - After completion, Doctor runs once silently; result feeds the in-window banner only if anything failed
 
 ### J1 — Happy path end-to-end
@@ -1579,7 +1578,7 @@ Pattern from Decision 1.5 + Step 10:
 
 - CLI: `"Couldn't attribute 01HZ7K — no speaker mapping yet. Try `auricle attribute 01HZ7K` to set names."`
 - GUI inline: `"Summarization failed — Claude API timeout after 5 retries (credits exhausted). [Retry now]"`
-- Doctor: `[FAIL] Screen Recording permission · auricle needs this to capture meeting audio. → System Settings > Privacy & Security > Screen Recording`
+- Doctor: `[?] System Audio Recording · macOS doesn't let auricle check this. If recordings are silent, turn it on → System Settings > Privacy & Security > Screen & System Audio Recording`
 
 Never: stack-trace dumps, red-X horror screens, modal apology theater.
 

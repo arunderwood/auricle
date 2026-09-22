@@ -1,0 +1,40 @@
+# Contradictions round 2, digest 1: tap silence, prompts, global vs per-process
+
+Accessed 2026-09-22 for every finding. Classes: primary-report (first-hand bug report or maintainer code), vendor-blog, community, secondary.
+
+## Q1: pasrom/meeting-transcriber #79 (Teams silence on 26.4)
+
+- **Claim:** Issue #79 was opened 2026-04-01 on macOS Tahoe 26.4 (25E246). The tap and aggregate device were created ("Built valid aggregate"), but the IOProc got zero-filled buffers "from the Teams process", so app.wav was silent (peak=0, RMS=0) on AirPods Max, built-in speakers, and a real 16-minute meeting. The logs also show "App audio rate differs: actual=24000, expected=48000" and a channel-layout index error. The issue is now **closed**. The page has no comments, linked PRs, or stated resolution. | https://github.com/pasrom/meeting-transcriber/issues/79 | pasrom (GitHub) | 2026-04-01 | high | primary-report
+- **Claim:** The issue text names neither `stereoMixdownOfProcesses` nor `stereoGlobalTapButExcludeProcesses`, and it does not say how Teams was selected. The wording "from the Teams process" points to a per-process tap, but the issue does not state the tap type. | same | high (that it is absent) | primary-report
+- **Claim:** The project's code uses `CATapDescription(stereoMixdownOfProcesses:)`, a per-process mixdown tap that "follows the process, not the device". Issue #683 (2026-09-05) says it "mixes an arbitrary set of processes" and always reports a fixed 48 kHz nominal format. So the project's tap is per-process (a process list), not global. This is established for the code as of September 2026. It is inferred, not confirmed, for the April 2026 #79 build. | https://github.com/pasrom/meeting-transcriber/issues/683 (plus search snippet of PR #684) | pasrom (GitHub) | 2026-09-05 | medium-high | primary-report
+- **Claim:** The #79 author's own hypothesis was that Teams uses "a non-standard audio pipeline that CATapDescription cannot intercept (e.g., WebRTC audio routing)". Nobody verified it. | #79 | pasrom | 2026-04-01 | low (hypothesis) | primary-report
+- **Claim:** A local transcriber (SyntaxCue) ships a system-wide `monoGlobalTapButExcludeProcesses` tap (isPrivate=true, muteBehavior=.unmuted) and captures "the mixed output of whatever's playing, i.e. the call". It does not name Chrome, Teams, Zoom, or Meet specifically and does not report a failure. | https://dev.to/baurzhan_zhetenov_442c4cd/how-i-capture-system-audio-and-transcribe-it-locally-with-no-server-in-the-loop-tauri-rust--4a0n | DEV Community (Baurzhan Zhetenov) | 2026-09-02 | medium | community
+
+## Q2: Apple forums thread 825780 (all-zero buffers after minutes)
+
+- **Claim:** Reported on macOS 26.5 **beta** on an M2 MacBook Air, May 2026. After about 7+ minutes the tap IOProc keeps firing at normal cadence with normal frame counts and timestamps, but every sample is 0.0f while system audio is still audible. In a 51-minute session there were several all-zero stretches (60 s, 53 s, 141 s, 16 min 3 s, 3 min 8 s). Some recovered on their own and some lasted until stop. | https://developer.apple.com/forums/thread/825780 | Apple Developer Forums (user esphoenixx) | 2026-05 | high | primary-report
+- **Claim:** The tap config was private, unmuted, `CATapDescription` with an **empty processes array** at 48 kHz Float32 interleaved stereo. The post only says "empty processes array". That reads as a global tap with nothing excluded, but the post does not name the initializer. | same | medium (config), low (global-tap reading) | primary-report
+- **Claim:** The workaround that worked was a full teardown and rebuild: AudioDeviceStop, DestroyIOProcID, DestroyAggregateDevice, DestroyProcessTap, then recreate everything. Restarting the IOProc or recreating only the aggregate device did not fix it. | same | high | primary-report
+- **Claim:** The thread has 0 replies, no Apple engineer response, no Feedback ID, and no stated fix in any release. | same | high | primary-report
+
+## Q3: Recurring prompts on macOS 26
+
+- **Claim:** On Tahoe 26.3.2 (March 2026), an SCK-based app (BeyondTrust) showed "requesting to bypass the system private window picker and directly access your screen and audio" 10 to 15 times a day, even after Allow. Suggested fixes were a PPPC/MDM profile and `tccutil reset`. | https://beekeepers.beyondtrust.com/general-45/beyondtrust-remote-support-customer-client-repeated-screen-capture-permission-pop-ups-on-macos-tahoe-7998 | BeyondTrust community | 2026-03 | medium | community
+- **Claim:** On macOS 26.3, Codex Desktop's Chronicle re-triggers the same private-window-picker prompt after Allow. Logs tie it to kTCCServiceScreenCapture and kTCCServiceMicrophone. | https://github.com/openai/codex/issues/19134 | openai/codex (GitHub) | 2026 | medium | primary-report
+- **Claim:** The prompt offers "Allow For One Month". This monthly cadence is documented for Sequoia 15 (2024). No Apple source retrieved this run confirms that 26 keeps exactly a monthly cadence. The reports above show the prompt is still present on 26.x and sometimes fires far more often than monthly. | https://9to5mac.com/2024/08/14/macos-sequoia-screen-recording-prompt-monthly/ ; https://support.dropshare.app/hc/en-us/articles/20871477694354 | 9to5Mac; Dropshare | 2024-08 | medium | secondary
+- **Claim:** Process taps fall under a narrower "System Audio Recording Only" permission with no screen access. This comes from search-result synthesis over the Recall.ai "system audio" post and the typewhisper and macparakeet issues. The page read this run (typewhisper #495) confirmed only the permission-scope motivation, not whether any prompt recurs. | https://github.com/TypeWhisper/typewhisper-mac/issues/495 | TypeWhisper (GitHub) | 2026 | medium (permission scope), unverified (no recurrence) | community
+- **Claim:** A "System Audio Recording Permission Needed" modal that fired on every quiet session start of a whole-system process-tap app (Sokuji, macOS 26.6.1) came from the **app's own** heuristic, not from the OS. It checked `kAudioProcessPropertyIsRunningOutput` while samples were zero, and its own silent AudioContext tripped the check. It was fixed 2026-09-05. This is not evidence of an OS-level recurring prompt for taps. It is also a caution: an all-zero tap is ambiguous between "permission denied" and "nothing playing". | https://github.com/kizuna-ai-lab/sokuji/pull/498 | kizuna-ai-lab (GitHub) | 2026-09-05 | high | primary-report
+
+## Q4: Recall.ai on global vs per-process
+
+- **Claim:** Recall.ai (published 2026-07-08, updated 2026-09-17) says browser meetings span main, renderer, helper, and GPU processes. Meeting audio "may come from a renderer or helper process rather than the main browser process", and which process varies by browser and meeting platform, so it is hard to target the right one. | https://www.recall.ai/blog/core-audio-taps | Recall.ai | 2026-07-08 (upd. 2026-09-17) | high | vendor-blog
+- **Claim:** The article frames the problem as picking the right process for a per-process tap. The fetched content does **not** explicitly say that a global tap avoids the problem, and it does not discuss Chrome/WebRTC or permission prompts. That a global exclude-self tap sidesteps process targeting follows from how a global tap works, but this source does not state it. | same | medium | vendor-blog
+
+## Looked for, not found
+
+- Any comment, linked commit, or resolution note on pasrom #79 explaining why it was closed or whether Teams audio later worked.
+- An explicit statement of the tap initializer used in #79 at the time of the report.
+- Any reply, Feedback ID, or release-note fix for forum thread 825780, or other reports of mid-session all-zero tap buffers on **released** (non-beta) macOS 26.x.
+- A report where a **global** tap (`stereoGlobalTapButExcludeProcesses`) explicitly failed, or succeeded, on Teams or Chrome WebRTC audio by name.
+- An Apple primary source for the SCK re-authorization cadence on macOS 26 (monthly or otherwise).
+- Any report of an **OS-level** recurring re-authorization prompt for process-tap apps on macOS 26.

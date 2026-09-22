@@ -125,7 +125,7 @@ Aggregate health metrics reviewed weekly during MVP dogfood:
 
 The MVP gate is a single cohesive milestone — not a walking skeleton — defined by the brainstorm's Phase 4 cut list. Ship-to-self when **all** of the following work end-to-end on a real captured meeting:
 
-- ScreenCaptureKit system-audio capture with manual start/stop (no auto-detection)
+- Core Audio process-tap system-audio capture with manual start/stop (no auto-detection)
 - WhisperKit transcription using Whisper-large-v3-turbo (ANE-accelerated)
 - WhisperKit built-in diarization (no pyannote; no cross-meeting voice-print matching)
 - Native Mac windowed app with attribution UI: per-speaker audio snippets (QuickLook-style playback) + autocomplete sourced from (1) calendar attendees marked first, (2) vault wikilink targets, (3) previously-labeled speakers. "Publish anyway" button with `#auricle/needs-attribution` frontmatter flag.
@@ -200,7 +200,7 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 **This journey reveals requirements for:**
 - Recording controls (start, stop, recording-state visibility) in the main window
 - Calendar-driven upcoming-event sidebar
-- ScreenCaptureKit capture pipeline (system audio + own mic) into a cache directory
+- Process-tap capture pipeline (system audio + own mic) into a cache directory
 - Pipeline state surface (Processing / Awaiting Attribution / Awaiting Verification / Verified)
 - Attribution UI: per-speaker snippet playback, calendar-marked autocomplete, "this is me" self-attribution flow
 - Summarization stage with quote-grounded JSON output
@@ -289,7 +289,7 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 Capabilities that fall out of these five journeys, grouped by surface area:
 
-- **Capture surface:** Record/Stop controls, recording-state indicator, calendar-driven upcoming-event sidebar, ScreenCaptureKit system-audio + mic capture into cache, manual-discard path
+- **Capture surface:** Record/Stop controls, recording-state indicator, calendar-driven upcoming-event sidebar, process-tap system-audio + mic capture into cache, manual-discard path
 - **Pipeline surface:** Processing/Awaiting-Attribution/Awaiting-Verification/Verified/Pending state machine, idempotent stage re-runs, decoupled CLI subcommands per stage, (v1.1) `auricle pending` listing
 - **Attribution surface:** Per-speaker snippet playback, calendar-marked autocomplete with priority order (calendar attendees → vault wikilinks → previously-labeled), self-attribution flow, "Publish anyway" with `#auricle/needs-attribution` tag and `Speaker_N` placeholder rendering, (v1.1) `--emit-snippets` + `--speakers` CLI fallback
 - **Summarization surface:** Constrained-JSON Claude call with quote-grounded action items + decisions, grep validation that drops missing-quote items, vault-glossary injection
@@ -347,7 +347,7 @@ auricle is a native macOS application — not Electron, not Catalyst, not cross-
 
 ### Platform Support
 
-- **Target OS:** macOS 14 (Sonoma) and later. ScreenCaptureKit's stable system-audio-loopback API requires macOS 13+, but several QoL APIs (notably refined permission prompting, cleaner `SCStream` handling) landed in 14. Pinning to 14 simplifies the support matrix.
+- **Target OS:** macOS 14.4 (Sonoma) and later. Core Audio process taps, the system-audio capture API, need 14.4 for the separate "System Audio Recording Only" permission. The maintainer develops and tests on the current macOS release (26 Tahoe); older releases are not tested.
 - **Architecture:** Apple Silicon only (arm64). WhisperKit's ANE-acceleration story doesn't generalize cleanly to Intel Macs, and the brainstorm's latency budget assumes ANE. Intel support is not a goal.
 - **Hardware floor:** M1 or later. M5 Max is the brainstorm's reference hardware for the latency targets (≤2 min P50 for 30-min meeting). M1/M2 will be slower but acceptable; M3/M4/M5 hit the documented SLOs.
 - **Cross-platform:** Explicitly out of scope. iOS/iPadOS/Linux/Windows are not in any roadmap tier. The single-platform constraint is load-bearing — it lets every architectural decision lean on Apple-stack APIs (ScreenCaptureKit, MLX/Core ML, Notification Center, NSUserActivity, Calendar.framework, etc.) without abstraction layers.
@@ -357,7 +357,7 @@ auricle is a native macOS application — not Electron, not Catalyst, not cross-
 
 auricle is a deeply system-integrated app. The integration surface is large and worth enumerating:
 
-- **ScreenCaptureKit** — System-audio capture (loopback). Requires the `Screen Recording` permission (TCC). The user grants this once on first capture attempt; auricle handles the permission-denied flow with a clear in-app explanation that points to System Settings → Privacy & Security → Screen Recording. Microphone capture (the user's own voice) requires the `Microphone` permission (separate TCC entry).
+- **Core Audio process taps** — System-audio capture (loopback) through a global tap that excludes auricle's own process. Requires the "System Audio Recording Only" permission (TCC), which macOS prompts for on the first capture; macOS offers no public API to read that grant, so auricle explains where to turn it on rather than checking it. Microphone capture (the user's own voice) requires the `Microphone` permission (separate TCC entry). ScreenCaptureKit is the recorded fallback (see the Epic 5 capture research).
 - **Notification Center** — `UNUserNotificationCenter` for the "summary ready" notification. Requires Notification permission (granted on first request). Notification carries a meeting-ID payload; click handler routes through `UNUserNotificationCenterDelegate` to (a) open the note in Obsidian via URL scheme and (b) arm the audio retention timer.
 - **Obsidian URL scheme** — `obsidian://open?vault=SecondBrain&file=Meetings/2026-04-28-...`. auricle opens the note via `NSWorkspace.shared.open(url:)`. No Obsidian plugin is required; the URL scheme has been stable for years.
 - **Calendar integration** — Google Calendar via OAuth 2.0 device-code flow, tokens stored in Keychain. The brainstorm explicitly locked Google Calendar (not EventKit/Calendar.app) because the user's primary calendar is Google Workspace. EventKit support is a possible future addition for users on Apple Calendar, but not MVP.
@@ -368,7 +368,7 @@ auricle is a deeply system-integrated app. The integration surface is large and 
 - **Filesystem** — Cache directory at `~/Library/Caches/com.auricle.app/` for in-flight audio, transcripts, and stage artifacts. Application Support at `~/Library/Application Support/com.auricle.app/` for the local SQLite database tracking meeting state and retention timers. User-editable configuration at `~/.auricle/` (FR59). Vault path (configurable, default `~/checkouts/SecondBrain`) for output notes.
 - **QuickLook** — In-app audio snippet playback during attribution uses `QLPreviewPanel` or an embedded `AVPlayerView`. WAV snippets are written to cache during the attribution stage.
 - **Spotlight / Quick Look (output side)** — Notes are markdown files in the user's vault, so they are already indexed by Spotlight and previewable in QuickLook automatically. No special integration needed.
-- **TCC permissions summary:** Screen Recording, Microphone, Notifications. Calendar permission is **not** required — Google Calendar is hit via HTTPS API, not via EventKit.
+- **TCC permissions summary:** System Audio Recording, Microphone, Notifications. Calendar permission is **not** required — Google Calendar is hit via HTTPS API, not via EventKit.
 
 ### Update Strategy
 
@@ -383,7 +383,7 @@ auricle's offline story is unusually strong because of the local-first architect
 
 | Stage | Online required? | Notes |
 |---|---|---|
-| Capture (ScreenCaptureKit) | No | Pure local OS API |
+| Capture (Core Audio process tap) | No | Pure local OS API |
 | Transcribe (WhisperKit) | No | Model weights (~1.5 GB for Whisper-large-v3-turbo) bundled or downloaded once on first run; pure on-device inference thereafter |
 | Diarize (WhisperKit built-in) | No | Same model bundle as transcription |
 | Vault-glossary build | No | Reads vault files directly |
@@ -400,8 +400,8 @@ auricle's offline story is unusually strong because of the local-first architect
 
 ### Implementation Considerations
 
-- **Sandboxing:** **Not sandboxed.** App Sandbox conflicts with both ScreenCaptureKit's audio-capture entitlement model (in some configurations) and direct vault filesystem writes outside `~/Library/Containers/`. Hardened runtime is on; sandboxing is off. This is the standard tradeoff for utility apps that need broad system access. App Store distribution would require sandboxing — and is therefore explicitly off the roadmap.
-- **Entitlements:** `com.apple.security.device.audio-input` (microphone), notification entitlements, and any future entitlements required by ScreenCaptureKit's evolving API. No `com.apple.security.app-sandbox`.
+- **Sandboxing:** **Not sandboxed.** App Sandbox conflicts with direct vault filesystem writes outside `~/Library/Containers/`. Hardened runtime is on; sandboxing is off. This is the standard tradeoff for utility apps that need broad system access. App Store distribution would require sandboxing — and is therefore explicitly off the roadmap.
+- **Entitlements:** `com.apple.security.device.audio-input` (microphone), notification entitlements, and any future entitlements the capture API requires. No `com.apple.security.app-sandbox`.
 - **Build / packaging:** Swift Package Manager for source dependencies (WhisperKit, swift-argument-parser for the CLI, GRDB for SQLite, Sparkle for v1.1). Xcode project for the app target; CLI target as a secondary executable in the same project. Universal binary not needed (Apple Silicon only). Release builds are signed with the self-managed code-signing leaf cert (per NFR-S2); no notarization step (per NFR-C4 / Update Strategy). Per-Mac trust setup is a one-shot `scripts/setup-trust.sh` invocation, not a build-pipeline step.
 - **Telemetry:** Local-only by default (per the brainstorm's lock on "no remote reporting"). A SQLite table records per-meeting metrics for the user's own dashboard surface. Future: opt-in anonymized aggregate telemetry to a self-hosted endpoint, only if and when the project goes public — not MVP.
 - **Crash reporting:** macOS's built-in `ReportCrash` handles writing crash logs to `~/Library/Logs/DiagnosticReports/`. No third-party crash reporter (Crashlytics, Sentry, etc.) in MVP — the user is the developer; they can read the logs.
@@ -471,7 +471,7 @@ These functional requirements are **the capability contract** for auricle. UX de
 - **FR3 [MVP]:** The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
 - **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio: Zoom, Google Meet, Teams, Discord, FaceTime, browser audio, video playback) without requiring integration with the meeting platform.
 - **FR5 [MVP]:** auricle can simultaneously capture the user's microphone audio and mix it with system audio for a complete two-sided recording.
-- **FR6 [MVP]:** auricle can request and handle macOS Screen Recording and Microphone permissions, with clear in-app explanation if permission is denied.
+- **FR6 [MVP]:** auricle can request and handle macOS System Audio Recording and Microphone permissions, with clear in-app explanation if permission is denied.
 - **FR7 [MVP]:** The user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
 - **FR8 [v1.1]:** The user can start and stop capture from a menubar item without opening the main window.
 - **FR9 [v1.1]:** auricle can pre-flight a captured audio file with VAD and halt the pipeline if speech-content is below a configurable threshold (default: <2 minutes of speech in any-duration audio), surfacing the meeting as `silent` instead of producing an empty note.
@@ -576,7 +576,7 @@ AI-assisted correction is a **product category** at auricle, not a single featur
 
 - **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity, and `summarization.prompt_dir` — the directory holding the user's summarization prompt overrides (default: the prompt set bundled with the build; override: a directory under `~/.auricle/prompts/` per FR59).
 - **FR59 [MVP]:** auricle can persist user-editable configuration in `~/.auricle/` as a structured file (TOML or JSON), separate from secrets (Keychain, NFR-S1) and from machine-managed operational state (the SQLite database, FR66). The governing rule: **any file the user is expected to edit, extend, or place config into lives under `~/.auricle/`**; state the user reads only through a CLI verb does not. `~/.auricle/` is a plain directory the user may keep under version control, which is what makes configuration changes auditable after the fact.
-- **FR60 [MVP]:** auricle can detect missing required permissions (Screen Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
+- **FR60 [MVP]:** auricle can detect missing required permissions (System Audio Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
 
 ### Operations & Failure Recovery
 
@@ -719,7 +719,7 @@ Items that the brainstorming session flagged for empirical resolution during the
 - **WhisperKit diarization current quality + whether it exposes embeddings, evaluated alongside SpeakerKit (argmaxinc/argmax-oss-swift v1.0+, pyannote-based, native Swift — confirm it's not a Python sidecar before relying on this).** Diarization quality directly affects the attribution UX. If diarization is poor, the UI's snippet-playback affordance compensates partially, but persistent under-segmentation hurts. Embeddings exposure matters for v2+ cross-meeting voice-print matching. Resolution: empirical test on 5+ real captured meetings during early MVP build, run against both WhisperKit-built-in diarization and SpeakerKit; pyannote-quality diarization is no longer assumed to require a v2+ Python-sidecar rewrite — verify and drop that framing if SpeakerKit is confirmed pure-Swift.
 - **Apple SpeechAnalyzer evaluation quality (fallback only; macOS 26+).** Tertiary fallback ASR. macOS 26 is now the development target. Apple positions it for long-form and distant audio; no independent meeting-audio measurement exists, it exposes no confidence scores, and its timestamp granularity is per attributed-string run. Resolution: a one-day spike through the regression suite, only under the same condition as the alternate ASR path above.
 - **Hidden user journeys surfaced during architecture work — to be formalized in PRD revision before MVP build.** The original PRD names 5 user journeys (happy path, attribution friction, silent meeting, power-user CLI recovery, retention housekeeping); the architecture roundtable surfaced three additional journeys that are real but uncovered:
-  - **J0 — First-launch / permission gauntlet.** The TCC dialog dance (Screen Recording, Microphone, Notifications) on Day 1 of a fresh Mac install. Distinct from J1 happy path because permissions don't exist yet. Architecture handles via `auricle doctor` conversational onboarding (Decision 4.4) and Info.plist usage descriptions in user voice; should be documented as a discrete journey for completeness.
+  - **J0 — First-launch / permission gauntlet.** The TCC dialog dance (Microphone, System Audio Recording, Notifications) on Day 1 of a fresh Mac install. Distinct from J1 happy path because permissions don't exist yet. Architecture handles via `auricle doctor` conversational onboarding (Decision 4.4) and Info.plist usage descriptions in user voice; should be documented as a discrete journey for completeness.
   - **J6 — Anthropic API credits exhausted mid-summarize.** Permanent-from-app's-view but user-actionable-in-reality (user tops up, then resumes). Architecture handles via `summarization_failed` transient state + `auricle run <id>` resume; PRD should name this journey explicitly so the resume mechanism has a documented user-facing narrative.
   - **J8 — macOS sleep-wake mid-capture.** The laptop sleeps during a long meeting; ScreenCaptureKit may produce stream interruptions that the existing `capture` retry policy (3 fails in 30s threshold) might misclassify as permanent failure. Resolution: empirical test during MVP build to confirm whether sleep events trigger the retry threshold; if yes, add sleep-aware classification to capture's failure handling.
   - Resolution: PRD revision pass before the implementation-readiness check; document each as a journey with the same structure as J1–J5.
@@ -740,7 +740,7 @@ Items that the brainstorming session flagged for empirical resolution during the
 
 ### Decisions explicitly made in the PRD that may need re-resolution if assumptions break
 
-- **macOS 14 floor.** Could be raised to macOS 15 if a needed ScreenCaptureKit or notification API only ships in 15.
+- **macOS 14.4 floor.** Set by Core Audio process taps. Could rise further if a needed capture or notification API only ships later.
 - **English-only.** Locked decision; multi-language support would require model-bundle changes and prompt-localization work; not in any scope tier.
 - **Default Claude model and effort level.** Default at MVP is `claude-opus-5` at `medium` effort (per NFR-I6) — `claude-opus-4-7`, this document's original default, is now a legacy model per Anthropic's current model lineup, and the current API's effort levels (`low`/`medium`/`high`/`xhigh`/`max`) have no numeric-budget equivalent to the "or numeric" option this line originally allowed for. The exact default effort level is empirically tuned during the summarization spike (see "Anthropic Citations API vs. free-form quote + grep validation" in Verify-before-implementing flags), measured against drop rate, recall, latency, and per-meeting cost. New Opus / Sonnet / Haiku releases should continue to be evaluated for the cost/quality trade-off before becoming the new default — this proposal is exactly one such evaluation; the model identifier and effort level are configurable per-user (FR58, NFR-I6) so individual tuning does not require a release.
 - **Default audio retention grace.** 7 days post-verification. Could be tuned based on actual usage patterns observed in MVP dogfood (e.g., if the user routinely revisits notes at week-3, the default grace might extend to 14 days).
