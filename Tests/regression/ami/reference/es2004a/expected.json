@@ -13,20 +13,7 @@
     "Speaker_3": "Marketing",
     "Speaker_4": "Industrial Designer"
   },
-  "action_items": [
-    {
-      "text": "Speaker_2 (project manager) will make the project budget figures available to the team, in the shared folder.",
-      "quote": "or I could put it in the shared folder or something.",
-      "transcript_start": 7058,
-      "transcript_end": 7110
-    },
-    {
-      "text": "Everyone works on their own role's task during the half hour before the next meeting.",
-      "quote": "we've got half an hour before the next meeting, so we're all gonna go off and do our individual things.",
-      "transcript_start": 15374,
-      "transcript_end": 15477
-    }
-  ],
+  "action_items": [],
   "decisions": [
     {
       "text": "Multiple languages are not a key point of the design, although the market is international.",
@@ -35,5 +22,5 @@
       "transcript_end": 8510
     }
   ],
-  "notes": "This is a kickoff meeting: introductions, the animal drawing exercise, the budget figures and an open brainstorm about remote controls. Kept: the project manager's commitment to share the budget figures, the closing instruction to do individual work before the next meeting, and the project manager's ruling that different languages are not a key point. Left out: the LCD menu display borrowed from mobile phones, the flip-top case, the dual set of basic buttons plus a menu, the large-print button for older users, and plastic over metal. Each of those was floated and liked, and none was settled; the industrial designer answered the plastic point by quoting the company slogan back. Also left out are the selling price, production cost and profit aim, which the project manager read from the brief rather than the group deciding them."
+  "notes": "This is a kickoff meeting: introductions, the animal drawing exercise, the budget figures and an open brainstorm about remote controls. Maintainer ruling, 2026-09-22, on the two items this fixture previously asserted as action items (Story 4.15, sprint-change-proposal-2026-09-21.md's stop condition): (1) the budget-figures line answers \"should we be making notes of this?\" with \"I'll be able to pull it up, or I could put it in the shared folder or something\" -- a remark about where the figures already live, not a commitment to act after the meeting, so it fails rule 1's commitment test and is removed. (2) \"everyone works on their own task during the half hour before the next meeting\" names no owner, which rule 1 also requires; it is closing logistics that belongs in the summary paragraph, where every model tried already puts it, and is removed. Kept: the project manager's ruling that different languages are not a key point, a decision under rule 2 -- the person in charge states it, a colleague agrees (\"No.\"), nobody objects. The model misses it because it is phrased as hedged language (\"I don't think it's a case of worrying about\") rather than a direct ruling; this is a real miss and the right target for the next single-variable prompt arm, not a fixture problem. Left out: the LCD menu display borrowed from mobile phones, the flip-top case, the dual set of basic buttons plus a menu, the large-print button for older users, and plastic over metal. Each of those was floated and liked, and none was settled; the industrial designer answered the plastic point by quoting the company slogan back. Also left out are the selling price, production cost and profit aim, which the project manager read from the brief rather than the group deciding them."
 }

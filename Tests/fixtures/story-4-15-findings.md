@@ -135,17 +135,32 @@ noise at this sample size. Changing `temperature` or amending the stop
 condition's single-run methodology are both maintainer decisions, not made
 here.
 
-## Dependency on Story 4.14
+## Story 4.14's three recorded full-pipeline runs (landed 2026-09-22, PR #107)
 
-This story's stop condition (16/19 on a recorded full-pipeline run) needs
-Story 4.14's recorded `history.jsonl` row and raised `min_item_recall`. As of
-this writing, `origin/main` carries the gate fix itself
-(`firstTokenLogProbThreshold: nil`, PR #104) but not the retention metric
-(`dropped_reference_fraction` / `max_dropped_reference_fraction`) or the
-recorded Part B rerun under the promoted prompt — `thresholds.json` still
-reads `min_item_recall: 0.35` and `history.jsonl` carries no row past
-2026-09-21. Until that lands, "16/19 on a recorded full-pipeline run" cannot
-be produced from this worktree.
+Three complete runs at revision `21a5771be6f33b3186ab7613de15c27a32c352e5`
+(verified directly against `history.jsonl`'s rows, not taken on faith):
+
+| run | item recall | false keeps | dropped reference fraction |
+|---|---:|---:|---:|
+| 1 | 11/19 = 58% | 4 | 0.0% |
+| 2 | 14/19 = 74% | 4 | 0.0% |
+| 3 | 16/19 = 84% | 3 | 0.0% |
+| **median** | **14/19 = 74%** | **4** | **0.0%** |
+
+`min_item_recall` is raised to 0.68 (13/19, one item below the median) as a
+regression floor — not the same thing as the 16/19 exit bar. `PR #107` is
+still open, not yet merged to `origin/main`.
+
+**Flag for the maintainer, not resolved here.** The median (74%) is below the
+16/19 = 84% bar `epics.md` states for Story 4.10's exit gate and for this
+story's own stop condition. Only one of the three real runs (84%) actually
+cleared 16/19; the other two (58%, 74%) did not. The per-meeting breakdown
+shows why: ES2002b alone ranges 4/8 to 8/8 across the three runs, with real
+diarization present on every run (this is the full pipeline, not a bench
+arm) — high variance at temperature 1.0 is not something diarization removes,
+on this evidence. Whether the exit bar moves, the sample size grows, or the
+gate is read some other way is a decision for the maintainer; this story
+states the number and stops.
 
 ## AC3 — the diarized bench arm
 
@@ -170,52 +185,109 @@ map is the identity map (`Speaker_N` to itself) for every meeting — no human
 named the speakers on this run — so the arm's per-speaker labels are still
 `Speaker_1`..`Speaker_5`, just no longer collapsed onto one placeholder.
 
-**Run, 2026-09-22, one arm, live:** `Tests/scripts/run-recall-bench.sh
---repo-root .../2026-09-21-diarized --arm substring --diarized` —
+**Three runs, 2026-09-22, live, per the median-of-three bar this story's stop
+condition now shares with Story 4.14:** `Tests/scripts/run-recall-bench.sh
+--repo-root .../2026-09-21-diarized --arm substring --diarized`, run three
+times.
 
-| meeting | un-diarized (run1/run2) | diarized |
+| meeting | un-diarized (2 draws) | diarized (3 draws) |
 |---|---:|---:|
-| ES2002a | 3/3 / 3/3 | 3/3 |
-| ES2002b | 2/8 / 3/8 (act 0-1/4) | **6/8 (act 4/4)** |
-| ES2003a | 1/1 / 1/1 | 1/1 |
-| ES2003b | 4/4 / 3/4 | 4/4 |
-| ES2004a | 0/3 / 0/3 | 0/3 |
-| **total** | **10/19 / 10/19** | **14/19 = 74%** |
+| ES2002a | 3/3, 3/3 | 3/3, 3/3, 3/3 |
+| ES2002b | 2/8, 3/8 (act 0/4, 1/4) | 6/8, 4/8, 4/8 (act **4/4, 2/4, 2/4**) |
+| ES2003a | 1/1, 1/1 | 1/1, 1/1, 1/1 |
+| ES2003b | 4/4, 3/4 | 4/4, 1/4, 2/4 |
+| ES2004a | 0/3, 0/3 | 0/3, 0/3, 0/3 |
+| **total** | **10/19, 10/19** | **14/19, 9/19, 10/19** |
+| **median** | **10/19 = 53%** | **10/19 = 53%** |
 
-Matches the full pipeline's 14/19 exactly, item for item on the meetings that
-moved: ES2002b's action items go from 0-1/4 to 4/4 kept, the same recovery the
-full pipeline showed over the un-diarized bench. This is one run, not three —
-consistent with a real diarization effect (a plausible mechanism: with every
-utterance labelled identically, the model may struggle to bind a commitment to
-a distinct owner) but not distinguishable from a favorable roll of the
-temperature-1.0 variance documented above without repeat runs. ES2004a stays
-at 0/3 regardless of diarization, holding the AC2 finding: its three items are
-never proposed on any transcript source or labelling tried so far.
+The first diarized draw (14/19) read as matching the full pipeline; the other
+two (9/19, 10/19) correct that. **The diarized arm's median equals the
+un-diarized control's median** — three draws show no detectable total-recall
+difference from diarizing the transcript. Overclaiming a lever from the first
+draw alone would have been exactly the mistake this story's own temperature
+finding warns against; corrected here rather than left standing.
 
-New observation, not present on any prior arm: 4 ungrounded quotes this run
-(0 on every un-diarized arm). Not investigated further — recorded as a data
-point for whoever runs the next arm, not a blocker.
+One effect survives the correction: **ES2002b's action items never drop
+below 2/4 across all three diarized draws, and never rise above 1/4 across
+both un-diarized draws** — a real, non-overlapping gap specific to that
+meeting's action items, distinct from the total-recall noise. It doesn't move
+the total because ES2003b, stable in the two un-diarized draws (4/4, 3/4),
+turned volatile once diarized (4/4, 1/4, 2/4) and gave back what ES2002b
+gained. Worth a future single-variable prompt or fixture experiment; not
+something this story's bench arm resolves on its own.
+
+ES2004a: 0/3 correctly recalled on every one of 8 runs now on record across
+this story and Story 4.14 combined (2 un-diarized bench draws, 3 diarized
+bench draws, 3 full-pipeline runs) — the most robustly confirmed finding in
+this story.
+
+Ungrounded quotes were elevated on 2 of the 3 diarized draws (4, 3, 0) against
+0 on every un-diarized draw — noted, not investigated further.
 
 ## Stop condition (amended)
 
-Given the confirmed temperature-1.0 variance above, the maintainer amended the
-stop condition: **16/19 as the median of three recorded full-pipeline runs
-under the same revision**, not a single run — Story 4.14 is adding the median
-to `report()` and recording the two further runs. The same bar applies to any
-bench arm before it is claimed to move recall: three bench runs, median
-reported. This story's diarized arm has one bench draw (14/19), not three, so
-it does not itself demonstrate a recall change — it sits inside the 10-to-14
-spread already seen on byte-identical input.
+Given the confirmed temperature-1.0 variance, the maintainer amended the stop
+condition: **16/19 as the median of three recorded full-pipeline runs under
+the same revision**, not a single run, with the same bar for any bench arm
+before it is claimed to move recall. Both medians now exist:
 
-Not met, under either the amended condition or the fixture-ruling path. Per
-the spec's Never constraint, this story does not pick a reading: it does not
-fabricate a recorded median, and it does not write a fixture ruling into
-`expected.json`'s notes on its own authority. Two paths remain open:
+- Full pipeline (Story 4.14, PR #107, 3 runs): **14/19 = 74%**.
+- This story's diarized bench arm (3 runs): **10/19 = 53%**, equal to the
+  un-diarized control's median — no detectable recall lever from diarizing
+  the bench's transcript alone.
 
-1. Three full-pipeline runs recorded to `history.jsonl` under the same
-   revision, median computed, once Story 4.14 lands its retention metric,
-   rerun, and the median-of-three `report()` change.
-2. The maintainer rules that ES2004a's three items leave the fixture, with
-   the rationale written into `expected.json`'s `notes` field verbatim —
-   unaffected by the above, since ES2004a scored 0/3 on every arm tried,
-   diarized included.
+Under the median-of-three condition, the full pipeline's own median (74%,
+14/19) fell short, clearing 16/19 on only 1 of its 3 runs. That is what made
+path 2 — a maintainer ruling on ES2004a's fixture — the live option, and the
+maintainer ruled on it 2026-09-22.
+
+## Stop condition: met, via a fixture ruling
+
+`Tests/regression/ami/reference/es2004a/expected.json` now asserts one
+expected item, not three. The maintainer's ruling, written into the fixture's
+own `notes` field (not just here, per the story's Never constraint against a
+unilateral change):
+
+- **Budget-figures action item, removed.** The quote answers "should we be
+  making notes of this?" with "I'll be able to pull it up, or I could put it
+  in the shared folder or something" — a remark about where the figures
+  already live, not a commitment to act after the meeting. Fails rule 1's
+  commitment test.
+- **"Everyone works on their own task" action item, removed.** Names no
+  owner, which rule 1 also requires. Closing logistics that belongs in the
+  summary paragraph, where the model already puts it on every source and
+  every draw tried in this story.
+- **Languages decision, kept.** The person in charge states it, a colleague
+  agrees ("No."), nobody objects — a decision under rule 2. The model misses
+  it because it is phrased as hedged language ("I don't think it's a case of
+  worrying about") rather than a direct ruling. **This remains an open miss**
+  and the right target for the next single-variable prompt arm — the fixture
+  ruling does not resolve it, it just says the miss is real rather than a
+  fixture artifact.
+
+Re-scoring Story 4.14's three recorded full-pipeline runs against the
+corrected fixture (`score.py meeting`, no API cost — the rendered notes are
+unchanged, only `expected_items` drops): total expected items falls from 19
+to 17 (ES2004a: 3 → 1); `recalled_items` for ES2004a was 0 on all three runs
+before and after (neither removed item was ever the thing recalled, so
+nothing here was a hidden pass), so the same three numerators score against
+the smaller denominator —
+
+| run | before (of 19) | after (of 17) |
+|---|---:|---:|
+| 1 | 11/19 = 58% | 11/17 = 65% |
+| 2 | 14/19 = 74% | 14/17 = 82% |
+| 3 | 16/19 = 84% | 16/17 = 94% |
+| **median** | **14/19 = 74%** | **14/17 = 82%** |
+
+**82% clears the 80% floor.** The median crosses the bar because two of the
+three items this fixture asserted fell outside the shipped rule set's own
+definitions, not because the pipeline recovered anything it was previously
+missing — the same runs, the same rendered notes, a corrected count.
+`Tests/regression/ami/history.jsonl`'s three rows for this revision need the
+same re-score applied so the committed record matches the fixture it is
+scored against; that rewrite is coordinated with Story 4.14 (PR #107, which
+owns those rows and is not yet merged) rather than duplicated here — see the
+spec's residual risks.
+
+This story's stop condition is met via path 2. AC4 is satisfied.
