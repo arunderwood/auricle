@@ -4,7 +4,7 @@ Aggregates only, under opaque labels. No transcript text, no quotes and no title
 
 ## Status
 
-**Part B has been run and did not meet the criteria.** Epic 4 exits when the last line of a run reads "Epic 4 exit criteria met" and Part A (`Tests/IntegrationTests/PipelineEndToEndTests.swift`) is green. The run scored 26.3% against a floor of 80%. Re-scoring the same notes under the amended scorer (Story 4.12) gives 57.9%, still short. Cost is well inside its ceiling.
+**Part B is met.** See "Exit under the amended rule" at the end of this file. The sections before it record the first run, which scored 26.3% against the 80% floor, and its re-score under the amended scorer (Story 4.12), 57.9%. Part A (`Tests/IntegrationTests/PipelineEndToEndTests.swift`) is green.
 
 ## Run
 
@@ -92,3 +92,23 @@ fixture-4 Decisions #1 is the clearest single case for the amendment: its item t
 ## What would move the pass rate
 
 The gap between 57.9% and the 80% floor is summarization recall on meeting audio. Scoring mechanics accounted for 21.1 points of it and are now spent. Nothing further in the fixtures or the scoring can close what is left.
+
+## Exit under the amended rule
+
+Stories 4.13 to 4.15 changed what Part B reads. `epics.md` (Stories 4.14 and 4.15) sets the exit: the median of the three newest complete full-pipeline runs recorded in `Tests/regression/ami/history.jsonl` reaches the floor, or the maintainer rules ES2004a's items out of the fixture with the rationale in its `expected.json` notes. The summarization call has no fixed temperature, so a single run is one draw. Three runs of the same code scored 11, 14 and 16 of 19.
+
+The maintainer ruled on 2026-09-22 that two of ES2004a's three expected items fall outside the shipped action-item rule, with no commitment and no owner. They left the fixture (e0e08e1), which takes the expected total from 19 to 17. The three recorded runs were re-scored against the corrected fixture (e452600). Nothing was re-run.
+
+`python3 Tests/regression/ami/score.py report Tests/regression/ami/thresholds.json Tests/regression/ami/history.jsonl` over revision `21a5771be6f33b3186ab7613de15c27a32c352e5`:
+
+```
+run_at                 recall        cost
+2026-09-22T03:08:38Z   14/17  82%    $0.3829
+2026-09-22T06:35:47Z   11/17  65%    $0.3685
+2026-09-22T06:45:45Z   16/17  94%    $0.3866
+median                 82%
+```
+
+Worst single-meeting cost across the three runs is $0.1381, under the $0.20 ceiling. Dropped reference fraction is 0.0% on every run.
+
+Epic 4 exit criteria met: pass rate 82%, total cost $0.3829 over 5 fixtures
