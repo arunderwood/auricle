@@ -18,6 +18,9 @@ Given a meeting audio file already on disk, the maintainer registers it with the
 - Story 4.8: Builder-Mode Audio Import (`auricle __internal-import`)
 - Story 4.9: Basic Notification Stub + Obsidian URL Open
 - Story 4.10: Exit-Criteria Gate (CI Pipeline Test + Live Run)
+- Story 4.11: Offline Recall Bench (Frozen Transcripts, Real Claude Call, Automatic Score)
+- Story 4.12: Score the Item, Count the False Keeps
+- Story 4.13: Prompt Recall Pass
 
 ## Requirements & Constraints
 
@@ -29,6 +32,12 @@ Given a meeting audio file already on disk, the maintainer registers it with the
 - Diarization review is default-off in MVP. Off, the stage short-circuits in under 100ms with an empty stub artifact and telemetry `{model_id: "flag_off", cost_usd: 0, suggestions_count: 0, review_skipped: true}`. The flag flips in v1.1 only after a smoke test on at least five real meetings (applied/suggested at least 40% over four weeks, false-positive rate under 20%). A suggestion count of zero is "insufficient signal", never a pass.
 - Failure semantics: transcribe gets one retry after a fresh subprocess restart, then becomes permanent `transcription_failed`, and `--force` is the override. Reviewer timeout (90s fixed) or an Anthropic failure is a benign passthrough: write an empty stub, go to `awaiting_attribution`, log `error_class='ai_reviewer_timeout'`. It is never a `*_failed` state.
 - `--publish-anyway` publishes with `Speaker_N` placeholder names and the needs-attribution tag. If summarize then fails, the meeting becomes `published_partial` carrying both needs-attribution and needs-summary tags. SIGINT cancels an in-flight retry, marks `summarization_failed`, and exits 130.
+
+- Recall remediation. Part B ran on 2026-09-21 and measured 42.1% item recall against the 80% floor, so 4.11 to 4.13 land between that run and its rerun. The blocker is summarizer recall, not transcription, cost or maintainer availability: 15 items were kept against 19 expected, so a scoring correction alone caps at 78.9%.
+- Recall is measured on a public corpus. AMI is the acceptance set because a private recording cannot gate a public repository. AMI meetings are harder than the target workload, so clearing the floor there is conservative.
+- An expected item currently counts as recalled only on word overlap of at least 0.5 between its quote and a note block quote. Story 4.12 adds a second test on item text and reports false keeps alongside recall; until it lands, a bench number is quote-overlap only, and no false-keep threshold is gated anywhere.
+- FR32's single primary Claude call per meeting stands. Multi-pass or map-reduce extraction is not an option inside 4.13; it is an escalation that reopens FR32, FR71 and Decision 5.6 with the PM and the Architect.
+- 4.13 ends at a maintainer decision gate, not at an unmeasured prompt change. Between 65% and 79% the maintainer chooses between that amendment and moving 4.10's floor with the rationale written into `epics.md`; below 65% it escalates.
 
 ## Technical Decisions
 
@@ -49,6 +58,9 @@ Given a meeting audio file already on disk, the maintainer registers it with the
 - **Override application.** `segment_overrides` and `segment_splits` are applied by the pure renderer, and Epic 7's Story 7.11 owns wiring that into summarize. Epic 4 only ships `--speakers` batch attribution (Story 4.6), which Epics 9 and 10 reuse rather than re-implement.
 - **Config.** User-editable settings (`diarization_review.enabled`, `diarization_review.model`, `attribution.snippet_duration_seconds`, default 8s) live in `~/.auricle/config.toml` via `Core/Config`. SQLite stays in Application Support and per-meeting artifacts in Caches.
 
+- **Offline measurement reuses the shipped parts; it does not add a fourth harness.** The recall bench joins the existing strategy-comparison runner and its `substring:<absolute prompt dir>` arm grammar, the frozen reference transcripts the AMI manifest names, and the AMI scorer. The matching rule stays in `Tests/regression/ami/score.py` alone, invoked as a subprocess, so Story 4.12's change to it reaches the bench and the regression suite together. Swift owns fixture loading, arm wiring and the score translation, which is what `swift test` covers.
+- **Bench logic lands in a library module with a thin CLI wrapper**, per the pitfall that `App/`-only logic has no automated test coverage. The paid Anthropic call is reachable only from the hidden verb, never from `swift test`.
+
 ## UX & Interaction Patterns
 
 - No GUI ships here. This epic precomputes what Epic 7's Attribution sheet consumes: per-speaker snippet WAVs (5-10s), Float32 `.envelope` files (~200 samples) for waveform pre-render, and per-segment voice-profile metadata for the variance warning.
@@ -65,3 +77,4 @@ Given a meeting audio file already on disk, the maintainer registers it with the
 - 4.10 runs Epic 3's summarize (substring is the shipped default; the grounding-method field in its output should reflect that) and Epic 2's persist, entering through 4.8's import. Part A uses stubs in CI. Part B is the manual live script.
 - The wedge measurement reads 0 without a vault path reaching dispatched workers. That is now built, but the Google Calendar source has no sign-in until Epic 9, so enrichment stays degraded during this epic's runs. `AuricleApp` has no summarize path yet, so this epic is CLI-only.
 - 4.9 is a deliberate stub. Epic 8 owns verification, retention-timer arming and manual keep. Epic 7 consumes `AttributionViewModel` and the snippet artifacts, and Epic 10 owns the concrete transcription reviewer.
+- 4.11 to 4.13 run in order after 4.10's first Part B run and before its rerun. 4.11 builds the measuring loop, 4.12 corrects what the number means, 4.13 spends it on prompt arms. 4.11 needs Epic 3's summarize strategies and Epic 2's note renderer; it needs no audio, no state store and no vault.

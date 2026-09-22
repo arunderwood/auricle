@@ -216,6 +216,9 @@ custom_rules:
       # The strategy comparison's result is the verb's output: where the two
       # report files were written.
       - ".*/App/auricle-cli/Verbs/StrategyComparisonVerb\\.swift$"
+      # The recall bench's result is the verb's output: the score table on
+      # stdout, the same shape score.py's own report prints.
+      - ".*/App/auricle-cli/Verbs/RecallBenchVerb\\.swift$"
       # The eval harness prints each fixture's score line so a run shows its
       # numbers in the test output; there is no logger to route it to in a
       # test.
@@ -301,6 +304,9 @@ custom_rules:
       # side by side, so it names them the way a composition root does; its
       # logic lives in Sources/Summarize, which stays strategy-agnostic.
       - ".*/App/auricle-cli/Verbs/StrategyComparisonVerb\\.swift$"
+      # The Story 4.11 recall bench wires the same arms for the same reason:
+      # its logic lives in Sources/RecallBench, which stays strategy-agnostic.
+      - ".*/App/auricle-cli/Verbs/RecallBenchVerb\\.swift$"
       # The summarize stage's subprocess entry point wires the primary and
       # fallback strategies into SummarizerOrchestrator; the stage logic
       # itself lives in Sources/Summarize, which stays strategy-agnostic.

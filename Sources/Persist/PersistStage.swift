@@ -278,20 +278,11 @@ public enum PersistStage {
     }
 
     private static func frontmatterMeeting(_ resolved: ResolvedMeeting, supersedes: String?) -> MeetingForFrontmatter {
-        MeetingForFrontmatter(
+        SummaryArtifactFrontmatter.meeting(
+            resolved.artifact,
             meetingID: resolved.meetingID,
-            title: resolved.artifact.title,
             date: resolved.localDate,
-            attendees: resolved.artifact.attendees,
-            schemaVersion: FrontmatterSchema.current,
             supersedes: supersedes,
-            needsAttribution: resolved.artifact.needsAttribution,
-            needsCalendarEnrichment: resolved.artifact.needsCalendarEnrichment,
-            needsSummary: resolved.artifact.needsSummary,
-            summary: resolved.artifact.summary,
-            actionItems: resolved.artifact.actionItems.map { QuotedItem(text: $0.text, quote: $0.quote) },
-            decisions: resolved.artifact.decisions.map { QuotedItem(text: $0.text, quote: $0.quote) },
-            transcriptSegments: resolved.artifact.transcriptSegments.map { TranscriptSegment(speaker: $0.speaker, text: $0.text) },
         )
     }
 

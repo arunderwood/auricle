@@ -21,6 +21,7 @@ let auricleKitProducts: [TargetDependency] = [
     .package(product: "Summarize"),
     .package(product: "ReviewDiarization"),
     .package(product: "Persist"),
+    .package(product: "RecallBench"),
     .package(product: "Pipeline"),
     .package(product: "Verify"),
     .package(product: "Notifications"),

@@ -32,6 +32,7 @@ let package = Package(
         .library(name: "Attribute", targets: ["Attribute"]),
         .library(name: "Summarize", targets: ["Summarize"]),
         .library(name: "Persist", targets: ["Persist"]),
+        .library(name: "RecallBench", targets: ["RecallBench"]),
         .library(name: "Pipeline", targets: ["Pipeline"]),
         .library(name: "Verify", targets: ["Verify"]),
         .library(name: "Notifications", targets: ["Notifications"]),
@@ -103,6 +104,16 @@ let package = Package(
             dependencies: ["Core", "State", "Telemetry", "Orchestrator", .product(name: "Yams", package: "Yams")],
             path: "Sources/Persist",
         ),
+        // === Offline measurement harnesses ===
+        // Story 4.11's recall bench: frozen transcripts in, the shipped note
+        // out, `score.py`'s number back. No state, no cache, no audio — it
+        // depends on the note-rendering path and nothing else.
+        .target(
+            name: "RecallBench",
+            dependencies: ["Core", "Persist", "Summarize", "SummarizerInterface"],
+            path: "Sources/RecallBench",
+        ),
+
         .target(
             name: "Pipeline",
             dependencies: [
@@ -211,6 +222,11 @@ let package = Package(
             ],
             path: "Tests/SummarizeTests",
             resources: [.copy("Snapshots"), .copy("Fixtures")],
+        ),
+        .testTarget(
+            name: "RecallBenchTests",
+            dependencies: ["RecallBench", "Core", "Persist", "Summarize", "SummarizerInterface"],
+            path: "Tests/RecallBenchTests",
         ),
         .testTarget(name: "ClaudeSummarizerTests", dependencies: ["ClaudeSummarizer", "TestSupport", "Summarize"], path: "Tests/ClaudeSummarizerTests"),
         .testTarget(

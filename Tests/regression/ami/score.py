@@ -4,6 +4,11 @@
   score.py meeting <meeting-id> <ami-id> <db> <cache-root> <repo-root>
       Prints one JSON object of numbers. Reads the note, the cached transcript
       and diarization, and the state database. Prints no transcript text.
+  score.py note <note-path> <expected-json> <transcript-json>
+      Prints one JSON object of note scores, under the same two tests. Reads
+      nothing else: no database, no cache root, no manifest. Takes the
+      item-text threshold from the thresholds.json beside this script. The
+      offline recall bench calls this.
   score.py report <thresholds.json> <results.jsonl>
       Prints a table, checks the thresholds, exits 1 on a breach.
 
@@ -103,6 +108,51 @@ def matches(expected, kept, item_text_overlap):
     )
 
 
+def score_note(note, hypothesis, expected, item_text_overlap):
+    """Scores one note's Action Items and Decisions against the reference.
+
+    The one place a note is turned into numbers. `meeting` reaches it with a
+    WhisperKit transcript as `hypothesis`; the offline bench reaches it with
+    the reference transcript the note was summarized from. Both get the same
+    two tests over the same note, so the bench and this suite cannot report
+    different recall for the same output.
+    """
+    kept = note_items(note)
+    wanted = {"Action Items": expected["action_items"], "Decisions": expected["decisions"]}
+    return {
+        "kept_items": sum(len(v) for v in kept.values()),
+        "ungrounded_quotes": sum(1 for v in kept.values() for i in v if i["quote"] not in hypothesis),
+        "expected_items": sum(len(v) for v in wanted.values()),
+        "recalled_items": sum(
+            1 for heading, items in wanted.items() for e in items if any(matches(e, k, item_text_overlap) for k in kept[heading])
+        ),
+        "false_keeps": sum(
+            1 for heading, items in kept.items() for k in items if not any(matches(e, k, item_text_overlap) for e in wanted[heading])
+        ),
+    }
+
+
+def thresholds_beside_this_script():
+    """The calibration that belongs to the rule, read from beside the rule.
+
+    `item_text_overlap` calibrates `matches`, so it travels with this script
+    rather than with the `repo_root` a caller passes in. That argument supplies
+    data — the manifest and the reference directories — and a caller scoring
+    one checkout's meetings with another checkout's scorer must still get this
+    checkout's threshold. Every path through `score_note` reads it here, so the
+    bench and the regression suite cannot apply the same rule at two different
+    thresholds.
+    """
+    return json.load(open(Path(__file__).parent / "thresholds.json", encoding="utf-8"))
+
+
+def note(note_path, expected_path, transcript_path):
+    hypothesis = json.load(open(transcript_path, encoding="utf-8"))["text"]
+    expected = json.load(open(expected_path, encoding="utf-8"))
+    item_text_overlap = thresholds_beside_this_script()["item_text_overlap"]
+    print(json.dumps(score_note(open(note_path, encoding="utf-8").read(), hypothesis, expected, item_text_overlap)))
+
+
 def scalar(db, sql, *args):
     row = db.execute(sql, args).fetchone()
     return row[0] if row else None
@@ -110,7 +160,7 @@ def scalar(db, sql, *args):
 
 def meeting(meeting_id, ami_id, db_path, cache_root, repo_root):
     manifest = json.load(open(Path(repo_root) / "Tests/regression/ami/manifest.json"))
-    item_text_overlap = json.load(open(Path(repo_root) / "Tests/regression/ami/thresholds.json"))["item_text_overlap"]
+    item_text_overlap = thresholds_beside_this_script()["item_text_overlap"]
     entry = next(m for m in manifest["meetings"] if m["id"] == ami_id)
     reference_dir = Path(repo_root) / entry["reference"]
     cache = Path(cache_root) / meeting_id
@@ -155,25 +205,36 @@ def meeting(meeting_id, ami_id, db_path, cache_root, repo_root):
     result["diarized_speakers"] = len({s["speaker_label"] for s in diarization["segments"]})
     result["expected_speakers"] = entry["attendees"]
 
-    note = open(note_path, encoding="utf-8").read() if note_path else ""
-    kept = note_items(note)
-    result["kept_items"] = sum(len(v) for v in kept.values())
-    result["ungrounded_quotes"] = sum(1 for v in kept.values() for i in v if i["quote"] not in hypothesis)
-
     expected = json.load(open(reference_dir / "expected.json"))
-    wanted = {"Action Items": expected["action_items"], "Decisions": expected["decisions"]}
-    result["expected_items"] = sum(len(v) for v in wanted.values())
-    result["recalled_items"] = sum(
-        1 for heading, items in wanted.items() for e in items if any(matches(e, k, item_text_overlap) for k in kept[heading])
-    )
-    result["false_keeps"] = sum(
-        1 for heading, items in kept.items() for k in items if not any(matches(e, k, item_text_overlap) for e in wanted[heading])
-    )
+    note_text = open(note_path, encoding="utf-8").read() if note_path else ""
+    result.update(score_note(note_text, hypothesis, expected, item_text_overlap))
     print(json.dumps(result))
 
 
+def require_the_rules_own_threshold(limits):
+    """Refuses a thresholds file that redefines the rule the rows were scored by.
+
+    The gates are per-invocation on purpose: `max_wer`, `max_realtime_factor`
+    and `max_cost_usd` grade a run and have nothing to do with matching, so a
+    caller may legitimately pass a stricter file. `item_text_overlap` is not
+    one of them. It calibrates `matches`, the rows were already scored under
+    the value beside this script, and re-declaring it here would print a number
+    produced under one threshold beneath a heading claiming another. A file
+    that omits the key is fine: it is only setting gates.
+    """
+    passed = limits.get("item_text_overlap")
+    ours = thresholds_beside_this_script()["item_text_overlap"]
+    if passed is not None and passed != ours:
+        sys.exit(
+            f"score.py report: this thresholds file sets item_text_overlap {passed}, "
+            f"but the rows were scored at {ours}, the value beside score.py. "
+            f"Re-score with this file's threshold, or drop the key and keep only the gates."
+        )
+
+
 def report(thresholds_path, results_path):
-    limits = json.load(open(thresholds_path))
+    limits = json.load(open(thresholds_path, encoding="utf-8"))
+    require_the_rules_own_threshold(limits)
     rows = [json.loads(line) for line in open(results_path) if line.strip()]
     print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
@@ -224,4 +285,4 @@ def report(thresholds_path, results_path):
 
 if __name__ == "__main__":
     command, *args = sys.argv[1:]
-    {"meeting": meeting, "report": report}[command](*args)
+    {"meeting": meeting, "note": note, "report": report}[command](*args)

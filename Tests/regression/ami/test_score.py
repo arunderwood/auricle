@@ -5,8 +5,11 @@ The rule carries a calibrated threshold and is the only thing standing between
 a prompt change and the Epic 4 number, so it needs a check that runs in CI.
 `swift test` cannot reach it: it is Python.
 """
+import inspect
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -100,6 +103,96 @@ check("a short quote does not stop the text test", score.matches(different_passa
 # reached 0.583. A threshold outside that window changes the recorded baseline.
 check("item_text_overlap stays above the highest non-pair", ITEM_TEXT_OVERLAP > 0.526)
 check("item_text_overlap stays at or below the weakest same-item pair", ITEM_TEXT_OVERLAP <= 0.583)
+
+# score_note is the one function `meeting`, `note` and the bench all reach, so
+# the two-test rule has to survive the trip through it and through the `note`
+# subcommand's JSON. A revert of the bench to quote-only matching fails here.
+scored_note = note(
+    ("Decisions", kept_different_passage["text"], kept_different_passage["quote"]),
+    ("Action Items", unrelated["text"], unrelated["quote"]),
+)
+expected_file = {"action_items": [], "decisions": [different_passage]}
+scored = score.score_note(scored_note, scored_note, expected_file, ITEM_TEXT_OVERLAP)
+check("score_note recalls an item the quote test alone would miss", scored["recalled_items"] == 1)
+check("score_note counts the unmatched keep as a false keep", scored["false_keeps"] == 1)
+check("score_note counts every bullet as kept", scored["kept_items"] == 2)
+check("score_note reports the expected total", scored["expected_items"] == 1)
+check(
+    "quote-only matching would have scored this zero",
+    not any(
+        score.overlap(different_passage["quote"], k["quote"]) >= score.RECALL_OVERLAP
+        for k in score.note_items(scored_note)["Decisions"]
+    ),
+)
+
+# The `note` subcommand prints exactly what score_note returned, under the
+# threshold beside this script, so the Swift bench decodes the same numbers
+# `meeting` records.
+with tempfile.TemporaryDirectory() as scratch:
+    scratch = Path(scratch)
+    (scratch / "note.md").write_text(scored_note, encoding="utf-8")
+    (scratch / "expected.json").write_text(json.dumps(expected_file), encoding="utf-8")
+    (scratch / "transcript.json").write_text(json.dumps({"text": scored_note}), encoding="utf-8")
+    printed = subprocess.run(
+        [sys.executable, str(HERE / "score.py"), "note", str(scratch / "note.md"), str(scratch / "expected.json"), str(scratch / "transcript.json")],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    check("the note subcommand prints what score_note returned", json.loads(printed) == scored)
+    check(
+        "the note subcommand reports every key the bench decodes",
+        set(json.loads(printed)) == {"kept_items", "ungrounded_quotes", "expected_items", "recalled_items", "false_keeps"},
+    )
+    check("the note subcommand uses the recorded item-text threshold", score.thresholds_beside_this_script()["item_text_overlap"] == ITEM_TEXT_OVERLAP)
+
+# `meeting` and `note` must not be able to apply the same rule at two different
+# thresholds. Both read `thresholds_beside_this_script`, so a repo_root pointing
+# somewhere else cannot move one of them: the source text of `meeting` must not
+# resolve a thresholds path out of its repo_root argument.
+meeting_source = inspect.getsource(score.meeting)
+check(
+    "meeting takes the item-text threshold from beside the script",
+    'item_text_overlap = thresholds_beside_this_script()["item_text_overlap"]' in meeting_source,
+)
+check("meeting does not resolve a thresholds path from repo_root", "thresholds.json" not in meeting_source)
+
+
+# `report` is the last surface where a caller-supplied file could disagree with
+# the rule the rows were scored by. A file that redefines item_text_overlap is
+# refused, one that omits it only sets gates and is fine, and neither case may
+# depend on the gates themselves.
+def run_report(limits, rows):
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch = Path(scratch)
+        (scratch / "thresholds.json").write_text(json.dumps(limits), encoding="utf-8")
+        (scratch / "results.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+        return subprocess.run(
+            [sys.executable, str(HERE / "score.py"), "report", str(scratch / "thresholds.json"), str(scratch / "results.jsonl")],
+            capture_output=True,
+            text=True,
+        )
+
+
+gates_only = {k: THRESHOLDS[k] for k in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "max_false_keeps")}
+clean_row = {
+    "ami_id": "ES0000a", "state": "awaiting_verification", "verified_at_null": True,
+    "wer": 0.1, "realtime_factor": 0.1, "cost_usd": 0.01, "ungrounded_quotes": 0,
+    "diarized_speakers": 4, "expected_speakers": 4, "drop_count": 0,
+    "kept_items": 1, "expected_items": 1, "recalled_items": 1, "false_keeps": 0,
+}
+
+omitted = run_report(gates_only, [clean_row])
+check("report accepts a thresholds file that only sets gates", omitted.returncode == 0)
+
+agreeing = run_report({**gates_only, "item_text_overlap": ITEM_TEXT_OVERLAP}, [clean_row])
+check("report accepts a thresholds file that agrees on the rule", agreeing.returncode == 0)
+
+disagreeing = run_report({**gates_only, "item_text_overlap": ITEM_TEXT_OVERLAP + 0.1}, [clean_row])
+check("report refuses a thresholds file that redefines the rule", disagreeing.returncode != 0)
+check("the refusal names both thresholds", str(ITEM_TEXT_OVERLAP) in disagreeing.stderr and str(ITEM_TEXT_OVERLAP + 0.1) in disagreeing.stderr)
+check("the refusal keeps the gates argument meaningful", "drop the key" in disagreeing.stderr)
+
 
 # report() reads these; a missing one is a crash mid-run rather than a message.
 for limit in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "item_text_overlap", "max_false_keeps"):

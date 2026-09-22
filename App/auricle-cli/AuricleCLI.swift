@@ -20,6 +20,7 @@ struct AuricleCLI: AsyncParsableCommand {
             InternalStageWorker.self,
             ImportVerb.self,
             StrategyComparisonVerb.self,
+            RecallBenchVerb.self,
             JargonWedgeVerb.self,
         ],
         defaultSubcommand: BareInvocation.self,
