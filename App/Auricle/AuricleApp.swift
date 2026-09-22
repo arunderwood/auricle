@@ -29,7 +29,8 @@ struct AuricleApp: App {
     /// fires it is not wired into the GUI yet, so only the click side is live.
     /// Without a configured vault there is no note to open, so no delegate.
     static func makeNotifier() -> any Notifier {
-        UserNotificationNotifier(center: SystemNotificationCenter(permissionChecker: permissionChecker))
+        let authorization = PermissionCheckedNotificationAuthorization(permissionChecker: permissionChecker)
+        return UserNotificationNotifier(center: SystemNotificationCenter(authorization: authorization))
     }
 
     private static func makeNotificationDelegate() -> NotificationDelegate? {

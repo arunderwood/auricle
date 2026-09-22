@@ -1,7 +1,6 @@
 import AppKit
 import Foundation
 import Notifications
-import Permissions
 import UserNotifications
 
 /// Forwards a notification click to `NotificationClickHandler`; all decisions
@@ -44,14 +43,10 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 }
 
 struct SystemNotificationCenter: NotificationCenterPosting {
-    let permissionChecker: PermissionChecker
+    let authorization: PermissionCheckedNotificationAuthorization
 
     func isAuthorized() async -> Bool {
-        var status = await permissionChecker.check(.notifications)
-        if status == .notDetermined {
-            status = await permissionChecker.request(.notifications)
-        }
-        return status == .granted
+        await authorization.isAuthorized()
     }
 
     func post(_ request: NotificationRequest) async throws {

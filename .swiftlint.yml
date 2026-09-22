@@ -378,12 +378,19 @@ custom_rules:
       settings-change refresh PermissionChecker centralizes.
     # `.requestAccess(` alone would also catch unrelated types with a same-named
     # method, so it's qualified by AVCaptureDevice's own receiver the way the
-    # boundary this rule enforces names it. `.notificationSettings(` and
-    # `.requestAuthorization(options:` aren't similarly qualified by receiver:
+    # boundary this rule enforces names it. `.notificationSettings(`,
+    # `.requestAuthorization(options:` and `.getNotificationSettings(
+    # completionHandler:` (the completion-handler sibling of
+    # `.notificationSettings(`) aren't similarly qualified by receiver:
     # UNUserNotificationCenter is reached via `.current()` or a stored
-    # reference, so there's no fixed prefix token to anchor on, and neither
-    # method name collides with anything else in this codebase.
-    regex: 'AVCaptureDevice\.(authorizationStatus|requestAccess)\(|\.notificationSettings\(|\.requestAuthorization\(options:|\bCGPreflightScreenCaptureAccess\(|\bCGRequestScreenCaptureAccess\('
+    # reference, so there's no fixed prefix token to anchor on, and none of
+    # those method names collide with anything else in this codebase.
+    # `AVAudioApplication.shared.recordPermission`/`.requestRecordPermission(`
+    # are macOS 14+'s newer audio-permission API, qualified by
+    # `AVAudioApplication` the same way the AVCaptureDevice pair is — it
+    # duplicates what `AVCaptureDevice.authorizationStatus(for:)`/
+    # `.requestAccess(for:)` already cover for the microphone category.
+    regex: 'AVCaptureDevice\.(authorizationStatus|requestAccess)\(|\.notificationSettings\(|\.requestAuthorization\(options:|\bCGPreflightScreenCaptureAccess\(|\bCGRequestScreenCaptureAccess\(|\.getNotificationSettings\(completionHandler:|AVAudioApplication\.shared\.recordPermission\b|AVAudioApplication\.requestRecordPermission\('
     match_kinds:
       - identifier
       - keyword

@@ -4,9 +4,9 @@ import Foundation
 import UserNotifications
 
 /// The single API surface for TCC/notification-permission status (AR-PAT-4,
-/// architecture.md's Permission Detection section). Every OS call this story
-/// names — `AVCaptureDevice.authorizationStatus(for:)`/`.requestAccess(for:)`,
-/// `UNUserNotificationCenter().notificationSettings()`/
+/// architecture.md's Permission Detection section). Every OS call that reads
+/// or requests permission state — `AVCaptureDevice.authorizationStatus(for:)`/
+/// `.requestAccess(for:)`, `UNUserNotificationCenter().notificationSettings()`/
 /// `.requestAuthorization(options:)`, `CGPreflightScreenCaptureAccess()`,
 /// `CGRequestScreenCaptureAccess()` — happens only behind this protocol,
 /// enforced by `.swiftlint.yml`'s `permission_checker_bypass` rule.

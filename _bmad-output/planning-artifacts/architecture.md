@@ -1209,7 +1209,7 @@ Required permissions, in dependency order:
 | `NSMicrophoneUsageDescription` | *"auricle captures your voice alongside the meeting so your contributions are in the notes."* |
 | Calendar OAuth consent screen | *"auricle reads your calendar to title meetings and identify who's in the room."* |
 
-`NSUserNotificationsUsageDescription` does not appear: it is a legacy `NSUserNotificationCenter` key. Per documented platform behavior (not verified via a live on-device prompt in this run): `UNUserNotificationCenter`'s permission dialog shows no custom app-supplied string on any platform, so the key has nothing to display and Story 5.1 removed it from `Info.plist`.
+`NSUserNotificationsUsageDescription` does not appear in `Info.plist`: it is a legacy `NSUserNotificationCenter` key, and `UNUserNotificationCenter`'s permission dialog shows no custom app-supplied string on any platform, so the key has nothing to display. This rests on documented platform behavior rather than an observed on-device prompt — see `deferred-work.md`.
 
 **`auricle doctor` UX (MVP):** conversational, narrated, not a checklist:
 
