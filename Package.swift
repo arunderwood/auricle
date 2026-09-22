@@ -107,10 +107,12 @@ let package = Package(
         // === Offline measurement harnesses ===
         // Story 4.11's recall bench: frozen transcripts in, the shipped note
         // out, `score.py`'s number back. No state, no cache, no audio — it
-        // depends on the note-rendering path and nothing else.
+        // depends on the note-rendering path, and on `Attribute`'s
+        // diarization/attribution join for the optional diarized-fixture
+        // load path, and nothing else.
         .target(
             name: "RecallBench",
-            dependencies: ["Core", "Persist", "Summarize", "SummarizerInterface"],
+            dependencies: ["Core", "Persist", "Summarize", "SummarizerInterface", "Attribute", "DiarizerInterface"],
             path: "Sources/RecallBench",
         ),
 
@@ -225,7 +227,7 @@ let package = Package(
         ),
         .testTarget(
             name: "RecallBenchTests",
-            dependencies: ["RecallBench", "Core", "Persist", "Summarize", "SummarizerInterface"],
+            dependencies: ["RecallBench", "Core", "Persist", "Summarize", "SummarizerInterface", "Attribute", "DiarizerInterface"],
             path: "Tests/RecallBenchTests",
         ),
         .testTarget(name: "ClaudeSummarizerTests", dependencies: ["ClaudeSummarizer", "TestSupport", "Summarize"], path: "Tests/ClaudeSummarizerTests"),
