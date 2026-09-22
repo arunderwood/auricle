@@ -333,7 +333,7 @@ check("an all-unmeasured set says so", "not measured" in text)
 text, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=1)])
 check("a mixed set still exits 0 inside the limit", ok)
 check("a mixed set reports its partial total", "false keeps 1/4" in text)
-check("a mixed set labels its coverage", "1 of 2 rows" in text)
+check("a mixed set labels its coverage", "1 of 2 newest-run rows" in text)
 
 # A fully scored set reports the plain total with no coverage caveat.
 text, ok = run_report([dict(ROW, false_keeps=1), dict(ROW, ami_id="ES0000b", false_keeps=1)])

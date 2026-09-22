@@ -328,6 +328,20 @@ def report(thresholds_path, results_path):
     limits = json.load(open(thresholds_path, encoding="utf-8"))
     require_the_rules_own_threshold(limits)
     rows = [json.loads(line) for line in open(results_path) if line.strip()]
+    # A regression gate has to grade the newest run against its own baseline, not
+    # against a sum that includes it: summing every historical row means an old,
+    # already-scored run permanently props up the average, so a real regression
+    # in the newest run can hide behind rows that will never be re-scored. The
+    # per-row table and per-row checks below still cover every row; only the
+    # three set-level aggregates (item recall, the per-section split, false
+    # keeps) are scoped to the newest run_at.
+    # A raw results file has no `run_at` on any row (`run.sh` adds it only when
+    # writing to `history.jsonl`); `None` has no ordering, so `max` over an
+    # all-`None` sequence raises rather than picking one, and that file is the
+    # only run it could describe anyway.
+    run_ats = [r["run_at"] for r in rows if "run_at" in r]
+    newest_run_at = max(run_ats) if run_ats else None
+    latest = [r for r in rows if r.get("run_at") == newest_run_at] if run_ats else rows
     print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'refDrop':>7} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
     for r in rows:
@@ -362,22 +376,27 @@ def report(thresholds_path, results_path):
                 f"dropped reference fraction {r['dropped_reference_fraction']:.1%} > {limits['max_dropped_reference_fraction']:.0%}",
             ))
         breaches += [f"{name}: {why}" for ok, why in checks if not ok]
-    expected = sum(r["expected_items"] for r in rows)
-    recalled = sum(r["recalled_items"] for r in rows)
+    expected = sum(r["expected_items"] for r in latest)
+    recalled = sum(r["recalled_items"] for r in latest)
     recall = recalled / expected if expected else 1.0
-    print(f"item recall {recalled}/{expected} = {recall:.0%}")
+    scope = f" (run_at {newest_run_at}, {len(latest)} of {len(rows)} rows)" if run_ats else ""
+    print(f"item recall {recalled}/{expected} = {recall:.0%}{scope}")
     if recall < limits["min_item_recall"]:
         breaches.append(f"item recall {recall:.0%} < {limits['min_item_recall']:.0%}")
+    if len(latest) < len(rows):
+        all_expected = sum(r["expected_items"] for r in rows)
+        all_recalled = sum(r["recalled_items"] for r in rows)
+        print(f"  all rows for context (not gated): {all_recalled}/{all_expected} = {all_recalled / all_expected:.0%} across {len(rows)} rows")
 
     # Per section on the total line only. The two sections fail in opposite
     # directions, so a set total that moves by nothing can still hide items
     # migrating from one to the other; per-row columns would make the table
     # unreadable for a number that is only legible in aggregate anyway.
-    split = [r for r in rows if "recalled_action_items" in r]
+    split = [r for r in latest if "recalled_action_items" in r]
     if not split:
-        print(f"per-section recall not measured: all {len(rows)} rows predate the split")
+        print(f"per-section recall not measured: none of the {len(latest)} newest-run rows carry it")
     else:
-        coverage = "" if len(split) == len(rows) else f" over {len(split)} of {len(rows)} rows; the rest predate the split"
+        coverage = "" if len(split) == len(latest) else f" over {len(split)} of {len(latest)} newest-run rows; the rest predate the split"
         parts = []
         for suffix, label in (("action_items", "action items"), ("decisions", "decisions")):
             got = sum(r[f"recalled_{suffix}"] for r in split)
@@ -386,16 +405,16 @@ def report(thresholds_path, results_path):
             parts.append(f"{label} {got}/{want} (false {bad})")
         print("  " + ", ".join(parts) + coverage)
 
-    # The total covers only the rows that carry a count. A partial total is
-    # still a floor on the set, so it is checked; it is labelled so nobody
-    # reads it as the whole set's.
-    scored = [r for r in rows if "false_keeps" in r]
+    # The total covers only the newest-run rows that carry a count. A partial
+    # total is still a floor on that set, so it is checked; it is labelled so
+    # nobody reads it as the whole set's.
+    scored = [r for r in latest if "false_keeps" in r]
     if not scored:
-        print(f"false keeps not measured: all {len(rows)} rows predate the count")
+        print(f"false keeps not measured: none of the {len(latest)} newest-run rows carry it")
     else:
         false_keeps = sum(r["false_keeps"] for r in scored)
         kept = sum(r["kept_items"] for r in scored)
-        coverage = "" if len(scored) == len(rows) else f" over {len(scored)} of {len(rows)} rows; the rest predate the count"
+        coverage = "" if len(scored) == len(latest) else f" over {len(scored)} of {len(latest)} newest-run rows; the rest predate the count"
         print(f"false keeps {false_keeps}/{kept}{coverage}")
         if false_keeps > limits["max_false_keeps"]:
             breaches.append(f"false keeps {false_keeps} > {limits['max_false_keeps']}")

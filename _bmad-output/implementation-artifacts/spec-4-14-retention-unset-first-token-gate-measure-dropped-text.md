@@ -2,7 +2,16 @@
 title: 'Story 4.14: Retention — Unset the First-Token Gate, Measure Dropped Text'
 type: 'feature'
 created: '2026-09-21'
-status: 'done'
+status: 'in-progress'
+status_detail: >-
+  AC3's threshold is not raised yet. An external review found min_item_recall
+  0.52 was calibrated from report()'s all-rows sum (masking any future
+  regression in the newest run) and from a single non-deterministic run (the
+  summarizer sets no temperature; three runs of identical input scored 10, 10,
+  14 of 19). report() now gates only the newest run_at; min_item_recall is
+  reverted to 0.35 pending the maintainer's median-of-three-runs gate design,
+  which needs two more recorded full-pipeline runs (~$0.77) awaiting the
+  user's go-ahead.
 baseline_revision: 'e88e2e542ac2c73b9f8265d512c81561e0585bc4'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -167,6 +176,16 @@ that row's real numbers.
 
 AC3 was completed by reusing an already-cached, unrecorded local `run.sh` pass (the user's explicit choice) instead of spending fresh Anthropic credit on a new invocation of `AURICLE_AMI_RECORD=1 Tests/regression/ami/run.sh`.
 
+**2026-09-22 — external review found `min_item_recall: 0.52` unsound.** A peer session's review of the merged PR found: (1) `report()` summed `recalled_items`/`expected_items` across every row in `history.jsonl`, so the 0.52 floor derived from the combined pre-fix+fixed baseline (22/38) would still pass a real regression in the newest run (a hypothetical 10/19 next run averages to 32/57 = 56%, still above 0.52) — verified true by reading `report()`. (2) The recorded run's own 74% (14/19) is one draw from a non-deterministic process: the summarization call sets no `temperature` and `claude-opus-5` accepts none, and three runs of byte-identical input scored 10, 10 and 14 of 19 — verified the missing `temperature` parameter directly in the summarizer's HTTP client code; the specific 10/10/14 figures are the peer's own separate measurement, not independently re-run here. (3) The recorded rows' `run_at` (`2026-09-22T00:00:00Z`) was fabricated rather than drawn from the real run — verified against `stage_events.occurred_at` for the same meeting ids (transcribe started `2026-09-22T03:08:38Z` for ES2002a, matching the review's citation exactly).
+
+**Amendment:** `report()` now scopes item recall, the per-section split and false keeps to the rows sharing the newest `run_at` (a raw, unrecorded results file has no `run_at` at all, so it is treated as one run, unchanged from before); older rows print for context only. `history.jsonl`'s five 2026-09-22 rows now carry `run_at: "2026-09-22T03:08:38Z"` (the batch's real first-transcribe timestamp) instead of the fabricated midnight value. `min_item_recall` is reverted to 0.35 (not raised) because a single run cannot calibrate a floor.
+
+**Known-bad state avoided:** shipping a `min_item_recall` that reads as a calibrated regression gate but neither gates the newest run in isolation nor rests on more than one non-deterministic draw — exactly the silent-regression risk Story 4.14 exists to close for the decoding-gate failure mode.
+
+**Maintainer's gate design (relayed, not yet implemented):** gate on the median of three recorded full-pipeline runs sharing a revision (all five meetings present per run), keep the existing 16/19 bar, raise `min_item_recall` from that median with one item of slack once three such runs exist. The 2026-09-22 run (now correctly timestamped) counts as the first. Two more recorded runs are needed (~$0.77, ~25 minutes) — this requires the user's go-ahead per this spec's own boundary on spending real Anthropic credit, not yet obtained as of this entry.
+
+**KEEP:** the newest-run-only gating in `report()`, the real `run_at` timestamps, and `min_item_recall: 0.35` all survive into the eventual median-of-three implementation regardless of how that design is finalized — do not re-derive them.
+
 ## Review Triage Log
 
 ### 2026-09-22 — Review pass
@@ -220,7 +239,9 @@ hand-run only, never CI, so this cost is acceptable.
 
 ## Auto Run Result
 
-Status: done
+Status: in-progress — reopened 2026-09-22 after an external review of the open PR found the raised threshold unsound; see `## Spec Change Log` above for what changed and why. The record below is the original pass's account and is left as written.
+
+Status: done (original pass, superseded by the reopening above)
 
 **Summary:** Verified AC1 already landed on `origin/main`. Implemented AC2 (a
 dropped-reference-text metric, sharing `wer()`'s existing alignment) and its
