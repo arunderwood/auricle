@@ -2,7 +2,8 @@
 title: 'Story 4.15: Summarizer Under-Production on ES2002b and ES2004a'
 type: 'feature'
 created: '2026-09-21'
-status: 'done'
+status: 'in-progress'
+status_detail: 'AC1/AC2/AC3 landed and reviewed (PR #105). AC4 (the stop condition) is open: needs either a recorded full-pipeline run reaching 16/19 (blocked on a live Anthropic call and on Story 4.14 landing its retention metric/rerun on origin/main) or a maintainer ruling written into expected.json notes.'
 baseline_revision: 'e88e2e542ac2c73b9f8265d512c81561e0585bc4'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -203,7 +204,7 @@ A second, related gap: the offline bench (`RecallBenchVerb`/`Sources/RecallBench
 
 ## Auto Run Result
 
-**Summary:** AC1 (per-meeting diff) and AC2 (ES2004a's three items characterized as never-proposed) are satisfied by direct investigation, written up committed. AC3 (diarized bench arm) is implemented, tested, and reviewed. AC4 (the stop condition) is not met and cannot be from this worktree: it needs a live Anthropic API call this environment has no Keychain access for, and — for the 16/19 path — Story 4.14's recorded `history.jsonl` row and raised `min_item_recall`, which were still landing in a separate session as of this writing. Per the spec's own `Never` constraint, no result was fabricated and no fixture ruling was made unilaterally.
+**Summary:** AC1 (per-meeting diff) and AC2 (ES2004a's three items characterized as never-proposed) are satisfied by direct investigation, written up committed. AC3 (diarized bench arm) is implemented, tested, and reviewed. A follow-up investigation ruled out glossary, attendee context, and `SummarizerConfig` defaults as explanations for the full-pipeline-vs-bench recall gap, using the real run's own cache artifacts as evidence (see findings doc). AC4 (the stop condition) is not met and cannot be from this worktree: it needs a live Anthropic API call, which this session's own permission mode currently blocks the setup for (Keychain/config reads are refused as credential exploration — a key may still exist on this machine), and — for the 16/19 path — Story 4.14's recorded `history.jsonl` row and raised `min_item_recall`, which were still landing in a separate session as of this writing. Per the spec's own `Never` constraint, no result was fabricated and no fixture ruling was made unilaterally.
 
 **Files changed:**
 - `Sources/RecallBench/RecallBenchFixtureLoader.swift` — new `diarized` parameter on `load`/`fixture(for:repoRoot:)`; joins `diarization.json`+`attribution.json` via `UtteranceSpeakers.resolve` and rebuilds the transcript via `CanonicalTranscriptBuilder.build` when both are present, falling back per-fixture otherwise.
@@ -227,6 +228,7 @@ A second, related gap: the offline bench (`RecallBenchVerb`/`Sources/RecallBench
 **Verification performed:** `swift build` (clean); `swift test --filter RecallBenchTests` (28/28 pass, including all 5 new/patched tests); `scripts/check.sh lint` (0 lint violations, custom-lint fixture self-check green, AMI scorer self-check green, actionlint/zizmor clean) — all run twice, before and after the patch round, against the diff staged from `baseline_revision`.
 
 **Residual risks:**
-- The diarized bench arm has never actually been run against live data (needs a Keychain Anthropic key) — its plumbing is unit-tested but its real recall number is unmeasured.
+- The diarized bench arm has never actually been run against live data — its plumbing is unit-tested but its real recall number is unmeasured; this session's permission mode blocks the Keychain/config setup a run needs, independent of whether a key exists on the machine.
 - AC4's 16/19 path is blocked on Story 4.14 landing on `origin/main`; the maintainer should rebase this work onto `origin/main` once that happens and re-check before treating the stop condition as open or closed.
+- The full pipeline's 14/19 vs the un-diarized bench's 10/19 (twice) on byte-identical transcript text, empty glossary, empty attendee context, and identical `SummarizerConfig` defaults is unexplained by any input difference found so far (see findings doc). Either a real difference remains unfound, or a single recorded run carries more variance than this story's stop-condition methodology assumes — worth repeat runs before trusting any one 16/19 result as decisive.
 - The four deferred findings are all in `Sources/RecallBench/RecallBenchFixtureLoader.swift`'s diarized-load path and are all reachable only via malformed or hand-edited fixture data — a real risk given this exact story's workflow involves hand-copying fixture directories, but none is reachable via the app's own artifact writers today.

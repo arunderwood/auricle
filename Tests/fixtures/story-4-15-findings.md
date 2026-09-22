@@ -82,6 +82,49 @@ may carry real attendee names from calendar enrichment or `--speakers`. This
 is a second, undocumented bench/pipeline divergence, unrelated to
 diarization.
 
+## Why the full pipeline (14/19) beats the un-diarized bench (10/19, twice) on the same text
+
+The 2026-09-21 full-pipeline-with-fix run and the offline bench's two
+gate-fixed runs summarize the *same* transcript text — confirmed by a direct
+byte comparison of `transcript.json`'s `text` field for ES2002b between the
+bench's shadow root and the real run's cache (`ea91c672d19f...` vs
+`5679bb837155...` file hashes differ only because of JSON formatting; decoded
+`text` is `==`, 37,692 characters both sides, 667 utterances both sides) — yet
+the full pipeline recalls 14/19 against the bench's 10/19 on two independent
+runs. Three candidate explanations were checked directly against the real
+run's own cache artifacts, not assumed:
+
+- **Glossary.** `App/auricle-cli/Verbs/RecallBenchVerb.swift` never passes a
+  `glossary:` argument to `RecallBenchRunner.run`, so it defaults to an empty
+  `Glossary()`. The real pipeline scopes the actual vault glossary
+  (`InternalStageWorker.vaultGlossary`, `SummarizeStage+Glossary.swift`'s
+  `scopeAndRecordGlossary`) — but the cached `glossary.json` for both ES2002b
+  and ES2004a's real run is `{"concepts": [], "people": [], "projects": [],
+  "uncategorized": []}`, empty on every category. Ruled out: both sides passed
+  an empty glossary.
+- **Attendee names.** `SummarizerConfig.attendeeNames` comes from calendar
+  enrichment (`enrichment.match?.attendeeNames ?? []`); the cached
+  `calendar.json` for both meetings reads `{"degraded": true}` — no match, so
+  the real run's attendee names were empty too, same as the bench's default
+  `SummarizerConfig()`. Ruled out.
+- **SummarizerConfig defaults (model, effort, cost ceiling).** The real
+  pipeline's composition root (`InternalStageWorker.swift:134`,
+  `summarizeDependencies`) constructs `SummarizerConfig()` with no overrides —
+  the identical bare initializer `RecallBenchVerb.swift:73` uses. Ruled out.
+
+With transcript text, glossary, attendee context and config all confirmed
+identical, the two summarizer calls should build byte-identical prompts. The
+gap remains unexplained by any input difference found so far. The two
+independent bench runs landed within one item of each other (10, 10), which
+is the variance this project's own regression suite already treats as
+ordinary sampling noise for a single meeting — but a 4-item gap against the
+full pipeline, replicated across both bench runs, is larger than that budget
+covers. Left open: either a real prompt-input difference not yet found, or
+genuine run-to-run model variance large enough that a single recorded
+full-pipeline run is not a stable number by itself — worth three repeat runs
+of the same arm before trusting any single 16/19 (or 10/19) result as
+decisive.
+
 ## Dependency on Story 4.14
 
 This story's stop condition (16/19 on a recorded full-pipeline run) needs
@@ -119,19 +162,21 @@ named the speakers on this run — so the arm's per-speaker labels are still
 
 Running `Tests/scripts/run-recall-bench.sh --repo-root
 <absolute path>/Tests/fixtures/recall-bench-output/2026-09-21-diarized --arm
-substring --diarized` spends live Anthropic API credit and needs a Keychain
-API key this environment does not have; the maintainer runs it and records
-the result here or in a further gitignored output directory, per the "one arm
-per finding" task.
+substring --diarized` spends live Anthropic API credit. This session's own
+permission mode blocks reading Keychain/config state directly (confirmed: even
+a plain `cat ~/.auricle/config.toml` is refused as credential exploration) — a
+key may still exist on this machine, as it did for the session that ran the
+full-pipeline measurement this story builds on. Whether to run this from here
+or have the maintainer run it is their call to make, not something to route
+around.
 
 ## Stop condition
 
 Not yet met. Per the spec's Never constraint, this story does not pick a
 reading: it does not fabricate a 16/19 recorded run, and it does not write a
 fixture ruling into `expected.json`'s notes on its own authority. Two paths
-remain open, both requiring a live Anthropic call this environment cannot
-make (no Keychain access) and, for the first, Story 4.14's still-unlanded
-retention metric and recorded rerun:
+remain open, both requiring a live Anthropic call and, for the first, Story
+4.14's still-unlanded retention metric and recorded rerun:
 
 1. Run the diarized arm above (and any other single-variable arm the
    findings motivate) through the bench, then a full-pipeline run once Story
