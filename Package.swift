@@ -44,6 +44,7 @@ let package = Package(
         .library(name: "GoogleCalendarSource", targets: ["GoogleCalendarSource"]),
         .library(name: "VaultGlossary", targets: ["VaultGlossary"]),
         .library(name: "TestSupport", targets: ["TestSupport"]),
+        .library(name: "AppUI", targets: ["AppUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.1.0"),
@@ -161,6 +162,9 @@ let package = Package(
 
         // === Test support ===
         .target(name: "TestSupport", dependencies: ["Core"], path: "Sources/TestSupport"),
+
+        // === GUI-facing views ===
+        .target(name: "AppUI", dependencies: [], path: "Sources/AppUI"),
 
         // === Test targets (one per source target) ===
         .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport", "ClaudeSummarizer"], path: "Tests/CoreTests"),
@@ -305,5 +309,6 @@ let package = Package(
             dependencies: ["Notifications", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", .product(name: "GRDB", package: "GRDB.swift")],
             path: "Tests/NotificationsTests",
         ),
+        .testTarget(name: "AppUITests", dependencies: ["AppUI"], path: "Tests/AppUITests"),
     ],
 )

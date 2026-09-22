@@ -1,8 +1,10 @@
 import ProjectDescription
 
-/// Every library product AuricleKit declares except TestSupport — both executables
-/// are full composition roots per AR-PAT-5: AuricleApp wires the GUI, auricle-cli
-/// exposes every stage per AR-PIPE-1, so both need the complete strategy set.
+/// Every library product AuricleKit declares except TestSupport and AppUI — both
+/// executables are full composition roots per AR-PAT-5: AuricleApp wires the GUI,
+/// auricle-cli exposes every stage per AR-PIPE-1, so both need the complete
+/// strategy set. AppUI is GUI-only view code, so it's added to AuricleApp's own
+/// dependencies below rather than here, and auricle-cli never links it.
 let auricleKitProducts: [TargetDependency] = [
     .package(product: "Core"),
     .package(product: "State"),
@@ -60,7 +62,7 @@ let project = Project(
                 .executables(name: "Embed auricle-cli", subpath: ".", files: [.buildProduct(name: "auricle-cli", codeSignOnCopy: true)]),
             ],
             entitlements: .file(path: "Auricle/Auricle.entitlements"),
-            dependencies: auricleKitProducts + [.target(name: "auricle-cli")],
+            dependencies: auricleKitProducts + [.package(product: "AppUI"), .target(name: "auricle-cli")],
         ),
         .target(
             name: "auricle-cli",
