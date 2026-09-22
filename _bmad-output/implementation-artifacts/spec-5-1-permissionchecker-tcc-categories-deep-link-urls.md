@@ -2,7 +2,7 @@
 title: 'Story 5.1: PermissionChecker + TCC Categories + Deep-Link URLs'
 type: 'feature'
 created: '2026-09-22'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: true
 baseline_revision: '07d3c28cc0ff71d1551cdc30becb2540d9c189b0'
@@ -205,6 +205,8 @@ public actor PermissionChecker: PermissionChecking {
 
 **Residual risks:**
 - `NSUserNotificationsUsageDescription` was removed from `Info.plist` based on documented platform behavior, not a live on-device trigger of the prompt — logged in `deferred-work.md`.
+
+**CI:** `lint`, `swift`, and `app` all pass on `75227ea` (the merge-with-main commit). PR #113 ready for auto-merge.
 
 **Deep-link verification (2026-09-22):** the maintainer opened each of the three remediation deep links on their own Mac and viewed a screenshot of the result (this session has no screen/accessibility-automation access, so it could not do this itself — see the PR review pass below). No screenshots were kept in the repo; they contained personal data.
 - `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` → "Screen & System Audio Recording", including the "System Audio Recording Only" section. Correct — matches the candidate already shipped.
