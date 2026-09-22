@@ -1,3 +1,4 @@
+import AppUI
 import Core
 import Notifications
 import State
@@ -17,7 +18,7 @@ struct AuricleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Text("auricle")
+            AuricleRootView()
         }
     }
 
@@ -43,5 +44,20 @@ struct AuricleApp: App {
             stateStore: store,
             opener: NotificationDelegate.openInDefaultApp,
         ))
+    }
+}
+
+/// `isRecording` is local UI state; nothing in the codebase observes real
+/// capture state yet, so it never reflects an actual recording.
+private struct AuricleRootView: View {
+    @State private var isRecording = false
+
+    var body: some View {
+        Text("auricle")
+            .toolbar {
+                ToolbarItem {
+                    RecordingIndicator(isRecording: isRecording)
+                }
+            }
     }
 }

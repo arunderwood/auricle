@@ -31,6 +31,7 @@ let auricleKitProducts: [TargetDependency] = [
     .package(product: "WhisperKitDiarizer"),
     .package(product: "GoogleCalendarSource"),
     .package(product: "VaultGlossary"),
+    .package(product: "AppUI"),
 ]
 
 let project = Project(
