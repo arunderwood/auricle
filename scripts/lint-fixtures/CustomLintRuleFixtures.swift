@@ -17,8 +17,11 @@
 // make swiftlint honor the exclusion for an explicitly-named file. Not part
 // of any SwiftPM target: this is CI tooling, not application or test code.
 
+import AVFoundation
+import CoreGraphics
 import Foundation
 import os
+import UserNotifications
 
 /// Foundation spells the same write several ways; the rule has to match all
 /// of them, so each one is exercised separately here.
@@ -62,6 +65,19 @@ func compositionRootStrategyBypassFixture() {
 
 func accessibilityLabelMissingFixture() {
     Button("Save") {} // expect: accessibility_label_missing
+}
+
+/// Every OS entry point PermissionChecker.swift exists to wrap: two on
+/// AVCaptureDevice, two on UNUserNotificationCenter, two free Core Graphics
+/// functions. Each needs its own line — this rule's regex is an alternation,
+/// same self-check rationale as atomicWriterBypassFixture above.
+func permissionCheckerBypassFixture(center: UNUserNotificationCenter) async throws {
+    _ = AVCaptureDevice.authorizationStatus(for: .audio) // expect: permission_checker_bypass
+    _ = await AVCaptureDevice.requestAccess(for: .audio) // expect: permission_checker_bypass
+    _ = await center.notificationSettings() // expect: permission_checker_bypass
+    _ = try await center.requestAuthorization(options: [.alert, .sound]) // expect: permission_checker_bypass
+    _ = CGPreflightScreenCaptureAccess() // expect: permission_checker_bypass
+    _ = CGRequestScreenCaptureAccess() // expect: permission_checker_bypass
 }
 
 /// Synthetic stand-ins so this file compiles standalone, with no dependency

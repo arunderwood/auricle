@@ -1,5 +1,6 @@
 import Core
 import Notifications
+import Permissions
 import State
 import SwiftUI
 import UserNotifications
@@ -9,6 +10,9 @@ import UserNotifications
 /// entitlement key for it, so none appears in Auricle.entitlements.
 @main
 struct AuricleApp: App {
+    /// Shared for the process so its per-category memo (AR-PAT-4) reflects
+    /// every caller's checks, not just the notification path's own.
+    private static let permissionChecker = PermissionChecker()
     private static let notificationDelegate = makeNotificationDelegate()
 
     init() {
@@ -25,7 +29,7 @@ struct AuricleApp: App {
     /// fires it is not wired into the GUI yet, so only the click side is live.
     /// Without a configured vault there is no note to open, so no delegate.
     static func makeNotifier() -> any Notifier {
-        UserNotificationNotifier(center: SystemNotificationCenter())
+        UserNotificationNotifier(center: SystemNotificationCenter(permissionChecker: permissionChecker))
     }
 
     private static func makeNotificationDelegate() -> NotificationDelegate? {

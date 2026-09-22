@@ -1207,8 +1207,9 @@ Required permissions, in dependency order:
 |---|---|
 | `NSAudioCaptureUsageDescription` | *"auricle records your meeting audio so it can transcribe what's said."* Must be a literal Info.plist key; if it is missing, capture is denied silently with all-zero buffers. `scripts/check.sh app` asserts it. |
 | `NSMicrophoneUsageDescription` | *"auricle captures your voice alongside the meeting so your contributions are in the notes."* |
-| `NSUserNotificationsUsageDescription` (where applicable) | *"auricle pings you when a meeting is ready to review — usually just a click to confirm."* |
 | Calendar OAuth consent screen | *"auricle reads your calendar to title meetings and identify who's in the room."* |
+
+`NSUserNotificationsUsageDescription` does not appear: it is a legacy `NSUserNotificationCenter` key. Per documented platform behavior (not verified via a live on-device prompt in this run): `UNUserNotificationCenter`'s permission dialog shows no custom app-supplied string on any platform, so the key has nothing to display and Story 5.1 removed it from `Info.plist`.
 
 **`auricle doctor` UX (MVP):** conversational, narrated, not a checklist:
 

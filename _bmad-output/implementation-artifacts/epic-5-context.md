@@ -1,6 +1,6 @@
 # Epic 5 Context: System-Audio Capture & First-Run Onboarding (J0)
 
-<!-- Compiled from planning artifacts. Edit freely. Regenerate with compile-epic-context if planning docs change. -->
+<!-- Generated from planning artifacts. Regenerate with compile-epic-context if planning docs change. -->
 
 ## Goal
 
