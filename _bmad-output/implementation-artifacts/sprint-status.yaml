@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: 09-20-2026 19:59
+last_updated: '09-22-2026 10:26'
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -69,7 +69,7 @@ development_status:
   3-12-vaultglossarybuilder-glossaryinjector-jargoncorrectionstrate: done
   epic-3-retrospective: done
 
-  epic-4: in-progress
+  epic-4: done
   4-1-whisperkit-transcribe-stage: done
   4-2-diarize-stage-snippet-extraction: done
   4-3-reviewdiarization-stage-state-machine-entry: done
@@ -79,12 +79,12 @@ development_status:
   4-7-auricle-run-verb-skeleton-__internal-stage-worker-dispatch: done
   4-8-builder-mode-audio-import-auricle-__internal-import: done
   4-9-basic-notification-stub-obsidian-url-open: done
-  4-10-exit-criteria-gate-ci-pipeline-test-live-run: in-progress
-  4-11-offline-recall-bench: backlog
-  4-12-item-text-recall-and-false-keep-scoring: backlog
+  4-10-exit-criteria-gate-ci-pipeline-test-live-run: done
+  4-11-offline-recall-bench-frozen-transcripts-real-claude-call-aut: done
+  4-12-score-the-item-count-the-false-keeps: done
   4-13-prompt-recall-pass: done
-  4-14-retention-unset-first-token-gate-measure-dropped-text: backlog
-  4-15-summarizer-under-production-es2002b-es2004a: backlog
+  4-14-retention-unset-the-first-token-gate-measure-dropped-text: done
+  4-15-summarizer-under-production-on-es2002b-and-es2004a: done
   epic-4-retrospective: done
 
   epic-5: backlog
@@ -160,8 +160,6 @@ development_status:
   10-9-local-llm-summarization-fr33: backlog
   10-10-auricle-stats-enrichments-rolling-aggregates-drilldowns-kill: backlog
   epic-10-retrospective: optional
-
-# Action items committed during retrospectives (section created by the retrospective workflow)
 action_items:
   - id: "epic-3-retro-item-1-build-core-config-and-pass-vault-path-fr"
     epic: 3
@@ -414,7 +412,7 @@ action_items:
     action: "Run Story 4.10 Part B on private recordings after the speaker join is
       fixed and record the result in Tests/fixtures/epic4-exit-results.md"
     owner: "maintainer"
-    status: in-progress
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-35-guard-from-and-only-with-expectedstate-a"
     epic: 4
@@ -442,7 +440,7 @@ action_items:
     action: "Decide whether publish-anyway keeps a saved attribution draft and whether
       a published_partial note fires the notifier (F5, F7)"
     owner: "maintainer"
-    status: in-progress
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
   - id: "epic-4-retro-item-39-triage-the-small-findings-in-f6-and-the"
     epic: 4
@@ -454,28 +452,61 @@ action_items:
     epic: 4
     action: "Decide how Epic 4 exits, now that Story 4.13 has shown transcription
       rather than summarization is the binding constraint: pursue the Parakeet-TDT
-      alternate ASR path that prd.md:426 names as the designed response, or move
-      Story 4.10's 80% floor to the roughly 74% the pipeline achieves. The
-      summarizer reaches 84% on reference transcripts and 74% on WhisperKit output
-      of the same audio, which is 14% to 34% shorter, so the ceiling exists and
-      moving the floor forecloses it. Multi-pass summarization is struck as an
-      option: a second pass cannot recover text that was never transcribed."
+      alternate ASR path that prd.md:426 names as the designed response, or move Story
+      4.10's 80% floor to the roughly 74% the pipeline achieves. The summarizer reaches
+      84% on reference transcripts and 74% on WhisperKit output of the same audio,
+      which is 14% to 34% shorter, so the ceiling exists and moving the floor forecloses
+      it. Multi-pass summarization is struck as an option: a second pass cannot recover
+      text that was never transcribed."
     owner: "maintainer"
     status: done
     resolution: "2026-09-21. Lever: a WhisperKit decoding gate (firstTokenLogProbThreshold
-      -1.5 with temperatureFallbackCount 0) was dropping whole windows; fixed in
-      Story 4.14, no ASR swap. Floor: stands at 80%; Story 4.15 owns the summarizer
-      residual. sprint-change-proposal-2026-09-21.md."
+      -1.5 with temperatureFallbackCount 0) was dropping whole windows; fixed in Story
+      4.14, no ASR swap. Floor: stands at 80%; Story 4.15 owns the summarizer residual.
+      sprint-change-proposal-2026-09-21.md."
     ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
   - id: "story-4-13-rerun-part-b-under-the-promoted-prompt"
     epic: 4
     action: "Rerun Story 4.10 Part B under the promoted sections-independent prompt
-      and record it, so Tests/fixtures/epic4-exit-results.md and
-      Tests/regression/ami/history.jsonl carry a full-pipeline number for it. Until
-      one exists, min_item_recall stays at 0.35 and cannot be raised to guard the
-      new baseline. Expect roughly 74%, not a pass. Run it under Story 4.14's fix so
-      the recorded row is the fixed pipeline. Unrecorded run on 2026-09-21 under the
-      fix: 14/19 = 74%, WER 0.20 to 0.25, false keeps 3."
+      and record it, so Tests/fixtures/epic4-exit-results.md and Tests/regression/ami/history.jsonl
+      carry a full-pipeline number for it. Until one exists, min_item_recall stays
+      at 0.35 and cannot be raised to guard the new baseline. Expect roughly 74%,
+      not a pass. Run it under Story 4.14's fix so the recorded row is the fixed pipeline.
+      Unrecorded run on 2026-09-21 under the fix: 14/19 = 74%, WER 0.20 to 0.25, false
+      keeps 3."
+    owner: "maintainer"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
+  - id: "epic-4-retro-item-42-fix-the-recall-gate-plumbing-exclude-his"
+    epic: 4
+    action: "Fix the recall gate plumbing: exclude history.jsonl from the run.sh revision
+      pathspec, make score.py report fail or warn when the newest revision is not
+      yet gated, recalibrate min_item_recall on the 17-item median, and correct the
+      /19 totals in README.md and epic4-exit-results.md (N1-N3)"
+    owner: "story"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
+  - id: "epic-4-retro-item-43-close-the-scorer-gaps-stop-scoring-an-em"
+    epic: 4
+    action: "Close the scorer gaps: stop scoring an empty quote as grounded, and pick
+      one false-keep rule for score.py and EvalScorer or name them differently (N4,
+      N5)"
+    owner: "story"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
+  - id: "epic-4-retro-item-44-move-recallbenchverb-options-and-exit-ru"
+    epic: 4
+    action: "Move RecallBenchVerb options and exit rule into Sources as a ParsableArguments
+      type and dedupe RecallBenchFixtureLoader prefix stripping with AttributionRenderer
+      (N6, N8)"
+    owner: "story"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
+  - id: "epic-4-retro-item-45-copy-the-story-4-11-4-14-and-4-15-frontm"
+    epic: 4
+    action: "Copy the Story 4.11, 4.14 and 4.15 frontmatter deferrals into deferred-work.md,
+      including that SummarizeStage feeds the Speaker_1-only transcript.json to the
+      summarizer (N7)"
     owner: "maintainer"
     status: open
-    ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"

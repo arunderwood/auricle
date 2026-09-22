@@ -2,8 +2,8 @@
 title: 'Story 4.10: Exit-Criteria Gate (CI Pipeline Test + Live Run)'
 type: 'feature'
 created: '2026-09-20'
-status: 'in-progress'
-status_detail: 'Part A (CI pipeline test) is done. Part B ran on 2026-09-21 against the AMI set and did not meet the criteria: 26.3% by the fragment scorer, 42.1% item recall. The blocker is summarizer recall, not maintainer availability. Stories 4.11 to 4.13 remediate it; the rerun follows their decision gate.'
+status: 'done'
+status_detail: 'Part A is done. Part B exits under the amended rule in epics.md (Story 4.15): the median of the three newest complete full-pipeline runs at revision 21a5771 is 14 of 17, or 82%, against the 80% floor, after the maintainer removed two of ES2004a''s three items from the fixture. Recorded in Tests/fixtures/epic4-exit-results.md.'
 context: [
   '{project-root}/_bmad-output/implementation-artifacts/epic-4-context.md',
 ]
@@ -16,7 +16,7 @@ Epic 4 exits through two gates. Part A guards the pipeline plumbing on every PR.
 ## Status by part
 
 - **Part A: done.** `IntegrationTests` runs in `swift test`. It drives `PipelineRunner` with the real stage workers over stub transcriber, stub diarizer, a stubbed Anthropic endpoint, a temp vault and a temp state database.
-- **Part B: run, and short of the floor.** `Tests/scripts/run-epic4-exit-criteria.sh` ran on 2026-09-21 over the five AMI meetings and scored 26.3% against an 80% floor; `score.py` puts item recall at 42.1% on the same notes. The summarizer keeps 15 items against 19 expected, so alignment fixes cap at 78.9%. Stories 4.11 to 4.13 build the bench, correct the scoring contract and iterate the prompt. The story is not `done` until `Tests/fixtures/epic4-exit-results.md` records "Epic 4 exit criteria met".
+- **Part B: met.** The first run, on 2026-09-21, scored 26.3% against the 80% floor. Stories 4.11 to 4.15 built the bench, corrected the scoring contract, promoted a prompt, unset WhisperKit's first-token gate, and amended the exit rule. Under that rule, Part B reads the median of the three newest complete recorded runs in `Tests/regression/ami/history.jsonl`. At revision `21a5771` the median is 14 of 17, or 82%. `Tests/fixtures/epic4-exit-results.md` records "Epic 4 exit criteria met".
 
 ## Boundaries & Constraints
 
@@ -36,7 +36,7 @@ Epic 4 exits through two gates. Part A guards the pipeline plumbing on every PR.
 
 - [x] Part A: import through `AudioImporter`; state reaches `awaiting_verification`; note at the `FilenameResolver` path with schema-valid frontmatter; every item followed by a quote that matches the transcript literally; `verified_at` is NULL.
 - [x] Part B script and results template written.
-- [ ] Part B run by the maintainer; result recorded in `Tests/fixtures/epic4-exit-results.md`.
+- [x] Part B run and recorded in `Tests/fixtures/epic4-exit-results.md`.
 
 ## Design Notes
 

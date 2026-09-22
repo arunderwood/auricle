@@ -659,7 +659,7 @@ User (in builder mode) has a meeting audio file on disk → registers it with th
 
 **Out of scope (architectural slot ≠ FR satisfaction):** FR76 (`ClaudeTranscriptionReviewer` concrete impl) is *not* claimed by this epic. AR-AI-1 ships the `TranscriptionReviewerStrategy` protocol declaration as part of slot-laying so v1.1's Phase 3 Path C activation is a concrete-impl story not a refactor — but the *requirement* FR76 is owned by Epic 10.
 
-**Story sequence (10 stories — sequencing matters; 4.9 cannot land before 4.1–4.8):**
+**Story sequence (10 planned stories, 4.11 to 4.15 added later — sequencing matters; 4.9 cannot land before 4.1–4.8):**
 1. `4.1` WhisperKit transcribe stage (FR17, FR19, FR20)
 2. `4.2` Diarize stage + snippet extraction (FR18)
 3. `4.3` `ReviewDiarization` stage + state machine entry (FR74 with flag default-off path validated in <100ms)
@@ -2457,7 +2457,7 @@ So that the next prompt change targets a reproduced defect rather than the whole
 ---
 
 **Epic 4 summary:**
-- **10 stories** sized for single dev-agent completion
+- **15 stories** sized for single dev-agent completion: 4.1 to 4.10 as planned, 4.11 to 4.15 added for recall remediation
 - **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 → 4.10 (4.9 cannot land before 4.1–4.8; 4.10 is the explicit gate)
 - **Recall remediation (added 2026-09-20, `sprint-change-proposal-2026-09-20.md`):** 4.11 → 4.12 → 4.13 land after 4.10's first Part B run and before its rerun. They exist because Part B measured 42.1% item recall against 4.10's 80% floor. 4.13 ended at a maintainer decision gate that `sprint-change-proposal-2026-09-21.md` resolved: 4.14 removes the WhisperKit decoding gate that was dropping whole windows and adds a retention metric; 4.15 owns the summarizer residual. Multi-pass extraction is not among the options while FR32 stands.
 - **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR27 mechanism (Story 4.6 — the `--speakers` batch path; the documented fallback surface stays [v1.1], Story 10.4), FR42 stub (Story 4.9 — full path in Epic 8), FR43 stub (Story 4.9 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
