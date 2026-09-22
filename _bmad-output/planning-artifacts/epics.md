@@ -2488,7 +2488,7 @@ So that the capture stage, onboarding, Doctor (Epic 9), and the notification pat
 **Then** the public API exposes: `func check(_ category: TCCCategory) async -> PermissionStatus`, `func request(_ category: TCCCategory) async -> PermissionStatus`, `func refresh()`, `func remediationDeepLink(for: TCCCategory) -> URL?`
 **And** `TCCCategory` has cases `.systemAudioCapture`, `.microphone`, `.notifications`, `.calendarOAuth` per AR-FAIL-6 (Decision 4.4)
 **And** `PermissionStatus` has cases `.granted`, `.denied`, `.notDetermined`, `.unknown`
-**And** `.systemAudioCapture` always reports `.unknown` from `check`, because macOS has no public API to read the process-tap grant; `request(.systemAudioCapture)` starts a 1-second tap capture so the system prompt appears, then reports `.unknown`
+**And** `.systemAudioCapture` always reports `.unknown` from `check`, because macOS has no public API to read the process-tap grant; `request(.systemAudioCapture)` reports `.unknown` without prompting, because `Permissions` cannot call the tap code in `Capture` (`Capture` depends on `Permissions`); Story 5.8 triggers that prompt through `Capture`
 **And** checks are memoized for the lifetime of the process; `refresh()` invalidates the memo (called on `NSWorkspace.shared.notificationCenter` settings-change notifications per AR-PAT-PermissionDetection)
 
 **Given** any caller in the codebase
@@ -2532,6 +2532,7 @@ So that the captured audio is Whisper-native and covers any meeting platform (Zo
 **And** `AudioMixer` resamples both to 16kHz with `AVAudioConverter`, mixes to mono and emits 16-bit signed PCM
 **And** the tap is passive: it does not mute (`muteBehavior` unmuted) and adds no perceivable latency to the meeting app per NFR-P13
 **And** the deployment target in `App/Project.swift` and `Package.swift` rises to macOS 14.4, the process-tap floor
+**And** `Capture` exposes `SystemAudioPermissionProbe.prompt()`, which runs the tap for 1 second and discards the audio, so the system shows the System Audio Recording prompt; Story 5.8 calls it
 
 **Given** the system-audio tap delivers exact-zero buffers for 30 consecutive seconds
 **When** the watchdog notices
@@ -2760,7 +2761,7 @@ So that the TCC flow on Day 1 builds trust.
 
 **Given** the System Audio step
 **When** the user clicks "Allow System Audio Recording"
-**Then** `PermissionChecker.request(.systemAudioCapture)` runs its 1-second capture so the system prompt appears with the `NSAudioCaptureUsageDescription` string
+**Then** `SystemAudioPermissionProbe.prompt()` (Story 5.2) runs a 1-second capture so the system prompt appears with the `NSAudioCaptureUsageDescription` string, and `AppUI` depends on `Capture` for it
 **And** because the grant cannot be read back, the step then shows *"If you chose Allow, you're done. If not, you can turn on System Audio Recording for auricle in System Settings."* with `[Open Settings]` and `[Continue]`
 **And** the step notes that without it, recordings contain only your microphone
 
@@ -2831,10 +2832,13 @@ So that onboarding and Settings can write config without discarding the keys and
 ---
 
 **Epic 5 summary:**
-- **10 stories.** Build order:
-  - Track A (capture): 5.1 → 5.3 → 5.2 → 5.4 → 5.5 → 5.6
-  - Track B (onboarding): 5.10 → 5.7 → 5.8 (needs 5.1) → 5.9
-  - The two tracks meet at 5.6's dogfood run.
+- **10 stories.** Build order, in waves; stories within a wave can run in parallel:
+  - Wave 1: 5.1, 5.3, 5.10, 5.5 (no dependencies). Land 5.5 early: it adds the `AppUI` target to `Package.swift`, which 5.7 needs.
+  - Wave 2: 5.2 (needs 5.1, 5.3) and 5.7 (needs 5.10 and the `AppUI` target)
+  - Wave 3: 5.4 (needs 5.2), 5.8 (needs 5.1, 5.2's `SystemAudioPermissionProbe`, 5.7) and 5.9 (needs 5.7, 5.10)
+  - Wave 4: 5.6 (needs 5.4, 5.5), the end-to-end dogfood run
+  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6. 5.2's manual live-app gate waits on the maintainer's real calls; 5.4 can start against a fake `SystemAudioSource` before the gate passes, at the risk of rework if the gate fails.
+  - Shared files: `Package.swift` (5.1, 5.2, 5.4, 5.5), `Info.plist` and `scripts/check.sh` (5.1 only), `StateStore` and `PipelineTransitions` (5.4 only).
 - **FRs covered:** FR1 and FR2 (5.4 + 5.6; the main-window button is Story 6.2), FR3 (5.5), FR4 (5.2), FR5 (5.2), FR6 (5.1 + 5.8), FR58 initial scaffold (5.7 + 5.9 + 5.10), FR60 mid-capture revocation (5.4)
 - **NFRs verified:** NFR-P11 (5.4, measured), NFR-P13 (5.2), NFR-S3 (5.3), NFR-Pr3 (5.3), NFR-Pr7 (5.2; OS-level capture sends nothing to the meeting), NFR-A1 to A6 (5.5, 5.7, 5.8)
 - **Architecture:** AR-FAIL-6 (5.1, 5.4, 5.8), Decision 1.4 capture backend and the `WAVWriter` exemption (5.2, 5.3), Decision 1.2 recovery of `recording` (5.4)

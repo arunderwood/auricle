@@ -25,7 +25,7 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
 - Output is one mono 16kHz PCM 16-bit WAV per meeting in the cache directory. The file is 0600 inside a 0700 directory, and partial audio always survives a failure.
 - Nothing blocks a start:
   - A denied microphone records system audio only, and the metadata says so.
-  - macOS offers no public way to read or request the System Audio Recording grant, so auricle treats it as unknown. Onboarding triggers the system prompt by starting a 1-second capture.
+  - macOS offers no public way to read or request the System Audio Recording grant, so auricle treats it as unknown. Onboarding triggers the system prompt through `Capture`'s `SystemAudioPermissionProbe`, a 1-second capture. `Permissions` cannot call it, because `Capture` depends on `Permissions`.
 - Exact-zero system buffers are ambiguous. They can mean silence, a missing grant, or a known OS fault. Never fail a capture on them; count them.
 - Idle CPU with the app open and not recording stays ≤1%. The story measures it.
 - Onboarding copy is plain and purpose-first, and each permission step has a "why" line. Denied Notifications and a missing API key degrade gracefully and never block.
@@ -79,9 +79,11 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
 ## Cross-Story Dependencies
 
 - **Build order:**
-  - Capture track: 5.1 → 5.3 → 5.2 → 5.4 → 5.5 → 5.6.
-  - Onboarding track: 5.10 → 5.7 → 5.8 (needs 5.1) → 5.9.
-  - The tracks meet at 5.6's dogfood run.
+  - Wave 1, all parallel: 5.1, 5.3, 5.10, 5.5. Land 5.5 early, because it adds the `AppUI` target.
+  - Wave 2: 5.2 (after 5.1 and 5.3) and 5.7 (after 5.10 and `AppUI`).
+  - Wave 3: 5.4 (after 5.2), 5.8 (after 5.1, 5.2's probe and 5.7), and 5.9 (after 5.7 and 5.10).
+  - Wave 4: 5.6 (after 5.4 and 5.5), the dogfood run.
+  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6.
 - **Story 5.2 carries a manual gate.** A 5-minute capture each from Teams, Meet in Chrome and Zoom must be audible, plus a 60-minute soak. A failure stops the story and triggers a correct-course to the ScreenCaptureKit fallback.
 - **Later epics own:**
   - Story 6.2: deleting the debug trigger and moving the indicator
