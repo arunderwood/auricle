@@ -113,17 +113,27 @@ run's own cache artifacts, not assumed:
   the identical bare initializer `RecallBenchVerb.swift:73` uses. Ruled out.
 
 With transcript text, glossary, attendee context and config all confirmed
-identical, the two summarizer calls should build byte-identical prompts. The
-gap remains unexplained by any input difference found so far. The two
-independent bench runs landed within one item of each other (10, 10), which
-is the variance this project's own regression suite already treats as
-ordinary sampling noise for a single meeting — but a 4-item gap against the
-full pipeline, replicated across both bench runs, is larger than that budget
-covers. Left open: either a real prompt-input difference not yet found, or
-genuine run-to-run model variance large enough that a single recorded
-full-pipeline run is not a stable number by itself — worth three repeat runs
-of the same arm before trusting any single 16/19 (or 10/19) result as
-decisive.
+identical, the two summarizer calls build byte-identical prompts. The
+explanation is not a hidden input: `ClaudeSubstringSummarizer.swift:191-201`
+(`buildRequestBody`) sends `model`, `max_tokens`, `output_config` and `system`
+in the Messages API request body and never sets `temperature`. Every
+summarization call this codebase makes therefore samples at the API's default
+temperature of 1.0, on both the bench and the full pipeline, on every arm
+Story 4.13 and this story ran. `ClaudeCitationsSummarizer` and the rest of
+`Sources/ClaudeSummarizer` and `Sources/SummarizerInterface` carry no
+`temperature` reference either — this is not a substring-arm-specific gap.
+
+**Consequence.** Three samples of byte-identical input (the two bench runs
+plus the full pipeline) scored 10, 10 and 14 of 19 — a 4-item spread at
+temperature 1.0, not evidence of a missing input. Story 4.13's own read of its
+data — "Sampling variance is about one item, bounded by run 2's control
+(12/19) against the independent Part B re-score (11/19)" — rested on a single
+pair of runs. A single recorded full-pipeline run cannot certify 16/19 as a
+stop condition when three runs of the same input already span four items;
+whatever the true mean recall is, one run's number is not distinguishable from
+noise at this sample size. Changing `temperature` or amending the stop
+condition's single-run methodology are both maintainer decisions, not made
+here.
 
 ## Dependency on Story 4.14
 
