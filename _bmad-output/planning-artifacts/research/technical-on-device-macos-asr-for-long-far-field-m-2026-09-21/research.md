@@ -32,7 +32,7 @@ Three findings drive the verdict:
 2. **No candidate has published evidence on this workload.** The leaderboard's AMI column is headset audio cut under 30 seconds [17][18]; Apple's long-form claim has no independent meeting measurement [19][21]; Parakeet-TDT leads Whisper on headset AMI, WER 11.39 against 15.95 [16], and its Swift runtime dropped whole windows until 2026-09-11 [11].
 3. **A swap is not cheap and not free of the same failure class.** Parakeet in Argmax's SDK is a paid Pro tier [7][8]; the open route is 0.x and documents no timestamps [9][10]; Apple's route has no confidence scores [19][20].
 
-**The biggest caveat.** Fuller transcripts did not raise item recall. The full pipeline with the fix scored 14 of 19 (74%) on diarized text, the same 74% Story 4.13 measured without it, and on un-diarized text the fuller transcripts scored lower (Cross-dimension insight 1). The transcription fix is necessary. It is not sufficient for the 80% gate, and the residual is now the summarizer's, not the transcriber's.
+**The biggest caveat.** Fuller transcripts did not raise item recall. The full pipeline with the fix scored 14 of 19 (74%), the same 74% Story 4.13 measured without it, and the offline bench over the same transcripts scored lower (Cross-dimension insight 1). The transcription fix is necessary. It is not sufficient for the 80% gate, and the residual is now the summarizer's, not the transcriber's.
 
 ## Requirements frame
 
@@ -126,7 +126,7 @@ The app feeds 16 kHz mono PCM WAV, which issue #500 states is the tested-good pa
 
 ## Cross-dimension insights
 
-1. **The dropped text was masking the summarizer, not only starving it.** On un-diarized text the fuller transcripts scored lower with the shipped prompt, 10 of 19 in both runs against 13 of 19 on the app's cached transcripts (Appendix A). Story 4.13 inferred a two- to three-item transcription cost by comparing reference transcripts against WhisperKit text. Reference transcripts also carry four real speaker labels and verbatim disfluencies, so that comparison changed three variables, not one. The single-variable comparison here says completeness alone does not move the item count. That points back at the summarizer's flat output volume, which the 2026-09-20 sprint change proposal already named.
+1. **The dropped text was masking the summarizer, not only starving it.** On the offline bench the fuller transcripts scored lower with the shipped prompt, 10 of 19 in both runs against 13 of 19 on the app's cached transcripts (Appendix A). The full pipeline scored 14 of 19 on the same fuller transcripts, byte for byte, so the bench and the pipeline differ in some summarizer input other than the transcript; Story 4.15 owns finding which. Story 4.13 inferred a two- to three-item transcription cost by comparing reference transcripts against WhisperKit text. Reference transcripts also carry four real speaker labels and verbatim disfluencies, so that comparison changed three variables, not one. The single-variable comparison here says completeness alone does not move the item count. That points back at the summarizer's flat output volume, which the 2026-09-20 sprint change proposal already named.
 2. **Every candidate has a whole-window failure mode, and none publishes it.** The regression suite needs a retention metric, because word error rate against a verbatim reference hides it: the app's WER of 0.28 to 0.38 in history mixes fillers, substitutions and vanished windows into one number.
 
 ## Decision matrix
@@ -161,14 +161,14 @@ Re-weighting retention to 2 and accuracy to 4 still leaves the fix ahead, 21 to 
 
 1. **Land the option fix as its own story** (feeds: epics.md Epic 4, architecture.md transcription decision). Pin the option in the decoding-options unit test so a dependency bump cannot restore it silently. Confidence high.
 2. **Add a retention metric to the AMI regression suite**: reference content words that fall in a run of 25 or more with no hypothesis text, reported per meeting next to WER (feeds: Tests/regression/ami thresholds). This is what would have caught the gate, and it is the guard against the second early-stop path in issue #525. Confidence high.
-3. **Rerun Story 4.10 Part B under the fix and the promoted prompt, and record it.** It ran here unrecorded: 14 of 19 (74%), false keeps 3, WER 0.20 to 0.25 against 0.28 to 0.38 in history. Confidence high.
+3. **Rerun Story 4.10 Part B under the fix and the promoted prompt, and record it.** It ran here unrecorded: 14 of 19 (74%), false keeps 3, WER 0.20 to 0.25 against 0.28 to 0.38 in history. Confidence high. Note that the summarize stage hands the summarizer the raw `transcript.json`, in which every utterance is `Speaker_1`; diarized speakers reach only the note's segment metadata. The pipeline number and the bench number are therefore measured on the same text.
 4. **Retire the PRD's Parakeet line as "the designed response"** and replace it with a conditional spike as described in the verdict (feeds: prd.md open resolutions, epics.md Story 4.13 gate). Confidence high on the landscape facts [6][7][8][9][11].
 5. **Do not move the 80% floor on this evidence.** The floor is reachable on clean text. Whether it is reachable on the pipeline's own text is now a summarizer question again, and the bench in Appendix A shows item recall does not track completeness. Confidence medium.
 
 ## Open questions
 
 - Why does the summarizer emit zero items for ES2004a on every transcript source, including the human reference, when all three expected-item quotes are present in the fixed transcript? To answer: the next summarizer story, not a transcription one.
-- Why does a fuller un-diarized transcript lower item recall? To answer: a per-meeting diff of kept items between the cached and fixed transcripts, which the bench output directories hold.
+- Why does a fuller transcript lower item recall on the bench but not in the pipeline? The bench scored 10 of 19 twice and the pipeline 14 of 19 on byte-identical transcripts under the same prompt set and grounding. To answer: diff the two summarizer call sites input by input, glossary scoping, attendee context and summarizer config first; then the per-meeting diff of kept items, which the bench output directories hold.
 
 ## Appendix A. Project measurements
 
@@ -202,7 +202,7 @@ Expected-item quotes present at 0.7 overlap or better: app today 16 of 19, confi
 | config A, run 2 | 10 / 19 (53%) | 7 / 12 | 3 / 7 | 5 | $0.36 |
 | config G | 9 / 19 (47%) | 5 / 12 | 4 / 7 | 10 | $0.34 |
 
-Story 4.13 measured the same prompt at 14 of 19 on the same cached transcripts on 2026-09-20, so run-to-run variance on that set is about one item. The gap between the cached set and config A is three items on two runs and is not variance. All four sets label every utterance Speaker_1, which is not what the pipeline summarizes.
+Story 4.13 measured the same prompt at 14 of 19 on the same cached transcripts on 2026-09-20, so run-to-run variance on that set is about one item. The gap between the cached set and config A is three items on two runs and is not variance. All four sets label every utterance Speaker_1. So does the transcript the pipeline's summarize stage reads: diarized speakers are joined into the published note's segments, never into the summarizer's input.
 
 **Full pipeline with the fix** (transcribe, diarize, summarize, score, five meetings, not recorded to history):
 
@@ -215,7 +215,7 @@ Story 4.13 measured the same prompt at 14 of 19 on the same cached transcripts o
 | ES2004a | 0.229 | 0.049 | 5 of 4 | 0 | 0 / 3 | 0 | $0.043 |
 | **total** | | | | **17** | **14 / 19 (74%)** (action items 9 of 12, decisions 5 of 7) | **3** | **$0.38** |
 
-The transcript byte counts the stage recorded match config A's exactly on every meeting, and the CLI and app builds share the model, revision and options, so the two measurements describe the same transcripts. WER against the verbatim reference fell from 0.28 to 0.38 in `history.jsonl` to 0.20 to 0.25. Item recall is 74%, the figure Story 4.13 measured on the unfixed transcripts and expected from a rerun. ES2004a still yields zero items, as it does on the human reference transcript. The report file is kept beside this document under `imports/`.
+The transcript byte counts the stage recorded match config A's exactly on every meeting, and the CLI and app builds share the model, revision and options, so the two measurements describe the same transcripts. WER against the verbatim reference fell from 0.28 to 0.38 in `history.jsonl` to 0.20 to 0.25. Item recall is 74%, the figure Story 4.13 measured on the unfixed transcripts and expected from a rerun. It is four items above what the bench scored on the same transcripts, which means the two paths feed the summarizer differently in something other than the text. ES2004a still yields zero items, as it does on the human reference transcript. The report file is kept beside this document under `imports/`.
 
 ## Source appendix
 

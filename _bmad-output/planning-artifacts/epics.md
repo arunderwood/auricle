@@ -2440,7 +2440,11 @@ So that the next prompt change targets a reproduced defect rather than the whole
 
 **Given** the bench's fixture loader
 **When** a WhisperKit-transcript arm is added
-**Then** the arm carries the diarized speaker labels from `attribution.json`, so the bench no longer measures a `Speaker_1`-only condition the pipeline never runs
+**Then** the arm can carry the diarized speaker labels from `attribution.json`, so the bench can test whether per-speaker labels are a recall lever; the summarize stage as shipped passes the `Speaker_1`-only `transcript.json` to the summarizer, so this arm measures a possible pipeline change, not the pipeline as shipped
+
+**Given** the full pipeline and the offline bench over byte-identical `Speaker_1`-only transcripts under the same prompt set
+**When** they score 14 of 19 and 10 of 19
+**Then** the story names the summarizer input that differs between `SummarizeStage.summarize` and the bench runner before any prompt arm is run
 
 **Given** arms run one finding at a time
 **When** a recorded full-pipeline run reaches 16 of 19, or the maintainer rules that ES2004a's items leave the fixture with the rationale in its `expected.json` notes
