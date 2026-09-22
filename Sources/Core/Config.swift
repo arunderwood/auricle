@@ -71,6 +71,9 @@ public struct Config: Sendable, Equatable {
     public let googleCalendar: GoogleCalendar
     public let attribution: Attribution
     public let diarizationReview: DiarizationReview
+    /// The wikilink text (e.g. `"[[Jordan]]"`) identifying this user, in the
+    /// vault's own wikilink syntax.
+    public let selfWikilink: String?
 
     public init(
         vaultPath: URL? = nil,
@@ -78,12 +81,14 @@ public struct Config: Sendable, Equatable {
         googleCalendar: GoogleCalendar = GoogleCalendar(),
         attribution: Attribution = Attribution(),
         diarizationReview: DiarizationReview = DiarizationReview(),
+        selfWikilink: String? = nil,
     ) {
         self.vaultPath = vaultPath
         self.meetingsSubdir = meetingsSubdir
         self.googleCalendar = googleCalendar
         self.attribution = attribution
         self.diarizationReview = diarizationReview
+        self.selfWikilink = selfWikilink
     }
 
     public static func defaultFileURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
@@ -142,6 +147,7 @@ public struct Config: Sendable, Equatable {
                 enabled: raw.diarizationReview?.enabled ?? false,
                 model: nonEmpty(raw.diarizationReview?.model) ?? DiarizationReview.defaultModel,
             ),
+            selfWikilink: nonEmpty(raw.selfTable?.wikilink),
         )
     }
 
@@ -219,12 +225,20 @@ private struct RawDiarizationReview: Decodable {
     let model: String?
 }
 
+/// Named `RawSelfTable` rather than `RawSelf`: `self` is a reserved word, so
+/// the TOML table name `self` is carried instead in `RawConfig`'s
+/// `CodingKeys`.
+private struct RawSelfTable: Decodable {
+    let wikilink: String?
+}
+
 private struct RawConfig: Decodable {
     let vaultPath: String?
     let meetingsSubdir: String?
     let googleCalendar: RawGoogleCalendar?
     let attribution: RawAttribution?
     let diarizationReview: RawDiarizationReview?
+    let selfTable: RawSelfTable?
 
     enum CodingKeys: String, CodingKey {
         case vaultPath = "vault_path"
@@ -232,5 +246,6 @@ private struct RawConfig: Decodable {
         case googleCalendar = "google_calendar"
         case attribution
         case diarizationReview = "diarization_review"
+        case selfTable = "self"
     }
 }

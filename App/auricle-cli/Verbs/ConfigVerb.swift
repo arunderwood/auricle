@@ -1,4 +1,5 @@
 import ArgumentParser
+import Core
 import Orchestrator
 
 /// The one grouped verb (Decision 1.5): every other verb is flat, but reading
@@ -33,7 +34,18 @@ struct ConfigVerb: AsyncParsableCommand {
         @OptionGroup var arguments: ConfigSetArguments
 
         func run() async throws {
-            try notYetImplemented("config set")
+            do {
+                try ConfigWriter.set(arguments.key, to: arguments.value)
+            } catch let error as ConfigWriter.WriterError {
+                throw failure(error.message)
+            } catch {
+                throw failure("could not write the config (\(String(describing: error))).")
+            }
+        }
+
+        private func failure(_ message: String) -> ExitCode {
+            writeStderr("config set: \(message)")
+            return ExitCode(1)
         }
     }
 }
