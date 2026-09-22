@@ -47,7 +47,18 @@ On a fresh Mac, a user grants permissions through a 4-step onboarding gauntlet, 
 
 ## Cross-Story Dependencies
 
-- Build waves: (1) 5.1, 5.3, 5.10, 5.5 — no deps; land 5.5 early since it adds the `AppUI` target 5.7 needs. (2) 5.2 (needs 5.1, 5.3) and 5.7 (needs 5.10, `AppUI`). (3) 5.4 (needs 5.2), 5.8 (needs 5.1, 5.2's probe, 5.7), 5.9 (needs 5.7, 5.10). (4) 5.6 (needs 5.4, 5.5), then end-to-end dogfood. Critical path: 5.1/5.3 → 5.2 → 5.4 → 5.6.
-- Story 5.2's manual live-app gate (Teams/Meet/Zoom) and 60-minute soak need the maintainer; a failed gate triggers a correct-course to the ScreenCaptureKit fallback, reopening the permission surface in 5.1/5.8.
-- Forward references, resolved in later epics and non-blocking here: 6.2 deletes 5.6's debug trigger and relocates the indicator; 6.3 owns the empty meeting list; 9.2 runs Doctor once after onboarding; 9.5 decides how CLI `record`/`stop` reach the GUI process; Epic 7 owns the "set me first" empty-`self.wikilink` state.
-- Shared files across stories: `Package.swift` (5.1, 5.2, 5.4, 5.5); `Info.plist`/`scripts/check.sh` (5.1 only); `StateStore`/`PipelineTransitions` (5.4 only).
+- **Build order:**
+  - Wave 1, all parallel: 5.1, 5.3, 5.10, 5.5. Land 5.5 early, because it adds the `AppUI` target.
+  - Wave 2: 5.2 (after 5.1 and 5.3) and 5.7 (after 5.10 and `AppUI`).
+  - Wave 3: 5.4 (after 5.2), 5.8 (after 5.1, 5.2's probe and 5.7), and 5.9 (after 5.7 and 5.10).
+  - Wave 4: 5.6 (after 5.4 and 5.5), the dogfood run.
+  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6.
+- **No story asks the maintainer for live testing before a facility for it exists.** Stories 5.1–5.5 are done on automated tests. Story 5.6's debug Record hotkey is the first ergonomic way to capture, so the live check of the process tap happens there, through the maintainer's normal Teams, Meet and Zoom meetings, with the evidence read from `stage_events` capture metadata. A real meeting whose far side is missing triggers a correct-course to the ScreenCaptureKit fallback.
+- **Later epics own:**
+  - Story 6.2: deleting the debug trigger and moving the indicator
+  - Story 6.3: the empty meeting list
+  - Story 9.2: the silent post-onboarding doctor run
+  - Story 9.5: the `record` and `stop` CLI verbs and how they reach the app
+  - Epic 7: the "Set me first…" state
+- **Open maintainer decision:** ad-hoc Debug signing likely makes each rebuild re-prompt for permissions, and it may block cross-process Keychain reads. The choice is to keep ad-hoc until Story 9.3 or pull its signing identity forward.
+- Shared files across stories: `Package.swift` (5.1, 5.2, 5.4, 5.5, 5.7); `Info.plist`/`scripts/check.sh` (5.1 only); `StateStore`/`PipelineTransitions` (5.4 only).
