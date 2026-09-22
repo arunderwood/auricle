@@ -22,8 +22,23 @@ struct AuricleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AuricleRootView()
+            if OnboardingMarker.exists(applicationSupportDirectory: .applicationSupportDirectory) {
+                AuricleRootView()
+            } else {
+                OnboardingRootView(coordinator: Self.makeOnboardingCoordinator())
+            }
         }
+    }
+
+    /// `configure`'s `URLOpener` reuses `NotificationDelegate.openInDefaultApp`
+    /// rather than a second `NSWorkspace.open` call site — one place decides
+    /// what "opened successfully" means.
+    @MainActor
+    private static func makeOnboardingCoordinator() -> OnboardingCoordinator {
+        let configure = OnboardingConfigureModel(opener: { url in
+            await (try? NotificationDelegate.openInDefaultApp(url)) != nil
+        })
+        return OnboardingCoordinator(checker: permissionChecker, configure: configure)
     }
 
     /// The GUI's `Notifier` is a `UserNotificationNotifier`; the pipeline that
