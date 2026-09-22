@@ -13,7 +13,11 @@ import PackageDescription
 
 let package = Package(
     name: "AuricleKit",
-    platforms: [.macOS(.v14)],
+    // The Capture target's process tap needs 14.4 (`AudioHardwareCreateProcessTap`'s
+    // own minimum); `PackageDescription` also declares `.macOS(_ versionString:
+    // String)`, which takes an arbitrary minor version string, not just the
+    // `.v14`/`.v15`-style whole-number cases.
+    platforms: [.macOS("14.4")],
     products: [
         // One library product per source target — Xcode targets link these by name.
         .library(name: "Core", targets: ["Core"]),
