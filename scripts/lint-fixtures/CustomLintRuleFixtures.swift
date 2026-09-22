@@ -17,8 +17,11 @@
 // make swiftlint honor the exclusion for an explicitly-named file. Not part
 // of any SwiftPM target: this is CI tooling, not application or test code.
 
+import AVFoundation
+import CoreGraphics
 import Foundation
 import os
+import UserNotifications
 
 /// Foundation spells the same write several ways; the rule has to match all
 /// of them, so each one is exercised separately here.
@@ -64,6 +67,35 @@ func accessibilityLabelMissingFixture() {
     Button("Save") {} // expect: accessibility_label_missing
 }
 
+/// Every OS entry point PermissionChecker.swift exists to wrap: two on
+/// AVCaptureDevice, three on UNUserNotificationCenter (`.notificationSettings(`
+/// and its completion-handler sibling `.getNotificationSettings(
+/// completionHandler:`, plus `.requestAuthorization(options:`), two free Core
+/// Graphics functions, and two on AVAudioApplication — macOS 14+'s newer
+/// audio-permission API, already reachable through this file's own
+/// `import AVFoundation`. Each needs its own line — this rule's regex is an
+/// alternation, same self-check rationale as atomicWriterBypassFixture above.
+func permissionCheckerBypassFixture(center: UNUserNotificationCenter) async throws {
+    _ = AVCaptureDevice.authorizationStatus(for: .audio) // expect: permission_checker_bypass
+    _ = await AVCaptureDevice.requestAccess(for: .audio) // expect: permission_checker_bypass
+    _ = await center.notificationSettings() // expect: permission_checker_bypass
+    _ = try await center.requestAuthorization(options: [.alert, .sound]) // expect: permission_checker_bypass
+    _ = CGPreflightScreenCaptureAccess() // expect: permission_checker_bypass
+    _ = CGRequestScreenCaptureAccess() // expect: permission_checker_bypass
+    center.getNotificationSettings(completionHandler: { _ in }) // expect: permission_checker_bypass
+    _ = AVAudioApplication.shared.recordPermission // expect: permission_checker_bypass
+    _ = await AVAudioApplication.requestRecordPermission() // expect: permission_checker_bypass
+}
+
+/// `UnrelatedResourcePool` is not `AVCaptureDevice` — its own same-named
+/// `requestAccess(for:)` proves the rule's `AVCaptureDevice\.` qualification
+/// actually discriminates by receiver instead of matching the method name
+/// bare, which would false-positive on any unrelated type that happens to
+/// share it. No `// expect:` marker: this line must NOT produce a violation.
+func permissionCheckerBypassNegativeFixture() {
+    _ = UnrelatedResourcePool.requestAccess(for: "probe")
+}
+
 /// Synthetic stand-ins so this file compiles standalone, with no dependency
 /// on Core/SwiftUI/the real vendor types those modules declare.
 struct TranscriptPayload: Decodable {}
@@ -72,4 +104,10 @@ struct WhisperKitStreamTranscriber {}
 struct GoogleCalendarSource {}
 struct Button {
     init(_: String, action _: () -> Void) {}
+}
+
+enum UnrelatedResourcePool {
+    static func requestAccess(for _: String) -> Bool {
+        true
+    }
 }

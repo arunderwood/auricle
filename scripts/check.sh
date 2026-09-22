@@ -141,6 +141,23 @@ phase_app() {
         echo "Check the copyFiles and productName settings in App/Project.swift." >&2
         exit 1
     fi
+
+    # Without this key, capture is denied silently with all-zero buffers
+    # (Decision 4.4) rather than prompting — a failure mode with no error to
+    # catch downstream, so it is asserted here instead.
+    echo "==> NSAudioCaptureUsageDescription present in $product_name"
+    expected_audio_capture_usage="auricle records your meeting audio so it can transcribe what's said."
+    actual_audio_capture_usage="$(plutil -extract NSAudioCaptureUsageDescription raw "$target_build_dir/$product_name/Contents/Info.plist" 2>/dev/null)"
+    if [ -z "$actual_audio_capture_usage" ]; then
+        echo "error: NSAudioCaptureUsageDescription is missing from $product_name's Info.plist." >&2
+        echo "Check App/Auricle/Info.plist." >&2
+        exit 1
+    fi
+    if [ "$actual_audio_capture_usage" != "$expected_audio_capture_usage" ]; then
+        echo "error: NSAudioCaptureUsageDescription in $product_name's Info.plist is \"$actual_audio_capture_usage\", expected \"$expected_audio_capture_usage\" (architecture.md Decision 4.4)." >&2
+        echo "Check App/Auricle/Info.plist." >&2
+        exit 1
+    fi
 }
 
 echo "==> mise install"

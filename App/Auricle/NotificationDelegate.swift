@@ -43,13 +43,10 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 }
 
 struct SystemNotificationCenter: NotificationCenterPosting {
+    let authorization: PermissionCheckedNotificationAuthorization
+
     func isAuthorized() async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            return await (try? center.requestAuthorization(options: [.alert, .sound])) ?? false
-        }
-        return settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+        await authorization.isAuthorized()
     }
 
     func post(_ request: NotificationRequest) async throws {

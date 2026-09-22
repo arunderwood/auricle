@@ -126,7 +126,7 @@ let package = Package(
             path: "Sources/Pipeline",
         ),
         .target(name: "Verify", dependencies: ["Core", "State", "Telemetry"], path: "Sources/Verify"),
-        .target(name: "Notifications", dependencies: ["Core", "State", "Orchestrator", "Telemetry"], path: "Sources/Notifications"),
+        .target(name: "Notifications", dependencies: ["Core", "State", "Orchestrator", "Telemetry", "Permissions"], path: "Sources/Notifications"),
         .target(
             name: "ReviewDiarization",
             dependencies: ["Core", "State", "Telemetry", "Orchestrator", "AIReviewerInterface", "DiarizerInterface"],
@@ -306,7 +306,10 @@ let package = Package(
         .testTarget(name: "VerifyTests", dependencies: ["Verify", "TestSupport"], path: "Tests/VerifyTests"),
         .testTarget(
             name: "NotificationsTests",
-            dependencies: ["Notifications", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", .product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: [
+                "Notifications", "TestSupport", "Core", "State", "Orchestrator", "Telemetry", "Permissions",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             path: "Tests/NotificationsTests",
         ),
         .testTarget(name: "AppUITests", dependencies: ["AppUI"], path: "Tests/AppUITests"),

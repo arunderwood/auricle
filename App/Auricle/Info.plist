@@ -20,12 +20,10 @@
 	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>NSScreenCaptureUsageDescription</key>
-	<string>auricle records your meeting audio so it can transcribe what's said</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>auricle records your meeting audio so it can transcribe what's said.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>auricle captures your voice alongside the meeting so your contributions are in the notes</string>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>auricle pings you when a meeting is ready to review — usually just a click to confirm</string>
+	<string>auricle captures your voice alongside the meeting so your contributions are in the notes.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

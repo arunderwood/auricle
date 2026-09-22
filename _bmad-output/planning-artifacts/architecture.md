@@ -1189,9 +1189,9 @@ Required permissions, in dependency order:
 
 | Permission | TCC category | When required | Remediation deep link |
 |---|---|---|---|
-| System Audio Recording | `kTCCServiceAudioCapture` | Prompted on the first capture; macOS has no public API to read or request it, so it always reads as unknown | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` (Story 5.1 verifies and records the working URL) |
-| Microphone | `kTCCServiceMicrophone` | Before any capture attempt; denied records system audio only | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone` (Story 5.1 verifies) |
-| Notifications | TCC via `UNUserNotificationCenter` | Before notify stage; not strictly blocking (Decision 4.2) | `x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications` |
+| System Audio Recording | `kTCCServiceAudioCapture` | Prompted on the first capture; macOS has no public API to read or request it, so it always reads as unknown | `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` — opens "Screen & System Audio Recording", including the "System Audio Recording Only" section |
+| Microphone | `kTCCServiceMicrophone` | Before any capture attempt; denied records system audio only | `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone` — opens "Microphone" |
+| Notifications | TCC via `UNUserNotificationCenter` | Before notify stage; not strictly blocking (Decision 4.2) | `x-apple.systempreferences:com.apple.Notifications-Settings.extension` — opens "Notifications", with its Application Notifications list |
 | Calendar (Google OAuth) | Not TCC; OAuth refresh-token in Keychain | Before calendar enrichment in summarize stage | Re-auth flow via system browser; on persistent failure, meeting publishes with `auricle/needs-calendar-enrichment` tag (graceful degradation per FR54) |
 
 **Detection points:**
@@ -1207,8 +1207,9 @@ Required permissions, in dependency order:
 |---|---|
 | `NSAudioCaptureUsageDescription` | *"auricle records your meeting audio so it can transcribe what's said."* Must be a literal Info.plist key; if it is missing, capture is denied silently with all-zero buffers. `scripts/check.sh app` asserts it. |
 | `NSMicrophoneUsageDescription` | *"auricle captures your voice alongside the meeting so your contributions are in the notes."* |
-| `NSUserNotificationsUsageDescription` (where applicable) | *"auricle pings you when a meeting is ready to review — usually just a click to confirm."* |
 | Calendar OAuth consent screen | *"auricle reads your calendar to title meetings and identify who's in the room."* |
+
+`NSUserNotificationsUsageDescription` does not appear in `Info.plist`: it is a legacy `NSUserNotificationCenter` key, and `UNUserNotificationCenter`'s permission dialog shows no custom app-supplied string on any platform, so the key has nothing to display. This rests on documented platform behavior rather than an observed on-device prompt — see `deferred-work.md`.
 
 **`auricle doctor` UX (MVP):** conversational, narrated, not a checklist:
 
