@@ -2552,9 +2552,8 @@ So that the captured audio is Whisper-native and covers any meeting platform (Zo
 **Given** the test suite
 **When** I run `Tests/CaptureTests/`
 **Then** tests cover: `AudioMixer` resamples and mixes synthetic input (44.1kHz mic + 48kHz system → 16kHz mono); the watchdog rebuild rule against a fake `SystemAudioSource`; mic-denied records system audio only; start/stop lifecycle is idempotent
-**And** a manual check, recorded in the story spec, captures 5 minutes each from Microsoft Teams, Google Meet in Chrome and Zoom on the maintainer's Mac and confirms the far side is audible in `audio.wav`
-**And** a manual 60-minute soak, recorded in the story spec, reports exact-zero seconds and watchdog rebuilds, and whether an ad-hoc rebuild of the app re-prompts for System Audio Recording
-**And** if the Teams / Meet / Zoom check fails, the story stops and the ScreenCaptureKit fallback in the research report becomes a correct-course decision
+**And** tests against a fake `SystemAudioSource` also cover a mid-stream format change, a source that stops delivering callbacks, and a slow writer that must not block the source callback
+**And** the story is done on automated tests alone; nothing in it asks the maintainer for live testing, because no ergonomic way to trigger a capture exists until Story 5.6. Live behavior on real meeting apps is checked in Story 5.6
 
 ---
 
@@ -2700,6 +2699,13 @@ So that capture can be exercised end-to-end before Epic 6's main window exists. 
 **When** I dogfood it
 **Then** I can: launch a Debug build → onboard (Stories 5.7–5.10) → `Cmd-Shift-R` → talk over a meeting → `Cmd-Shift-R` → find `audio.wav` in the cache directory → `auricle attribute <id> --speakers …` and `auricle run <id>` finish the note from the terminal
 
+**Given** the maintainer records real meetings with the trigger as part of normal work
+**When** those recordings exist
+**Then** they are the live check of the process-tap backend: no separate test session is scheduled
+**And** the story spec records, per meeting, the platform (Teams, Meet in Chrome, Zoom), whether the far side is audible, and the capture metadata Story 5.4 writes (`mic_included`, `exact_zero_seconds`, `tap_rebuilds`), read from `stage_events` rather than observed by hand
+**And** it records whether an ad-hoc rebuild of the app re-prompted for System Audio Recording
+**And** if a real meeting's far side is missing, that becomes a correct-course decision on the ScreenCaptureKit fallback in the capture research report
+
 ---
 
 ### Story 5.7: OnboardingCoordinator + Welcome / Vault / Obsidian / API Key / Expectation Flow
@@ -2837,7 +2843,7 @@ So that onboarding and Settings can write config without discarding the keys and
   - Wave 2: 5.2 (needs 5.1, 5.3) and 5.7 (needs 5.10 and the `AppUI` target)
   - Wave 3: 5.4 (needs 5.2), 5.8 (needs 5.1, 5.2's `SystemAudioPermissionProbe`, 5.7) and 5.9 (needs 5.7, 5.10)
   - Wave 4: 5.6 (needs 5.4, 5.5), the end-to-end dogfood run
-  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6. 5.2's manual live-app gate waits on the maintainer's real calls; 5.4 can start against a fake `SystemAudioSource` before the gate passes, at the risk of rework if the gate fails.
+  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6. Every story before 5.6 is done on automated tests. The live check of the capture backend happens in 5.6, through the maintainer's normal meetings, because 5.6 is the first story with an ergonomic way to start a recording. Stories 5.2 and 5.4 carry the risk that a real meeting app behaves differently from the fakes.
   - Shared files: `Package.swift` (5.1, 5.2, 5.4, 5.5), `Info.plist` and `scripts/check.sh` (5.1 only), `StateStore` and `PipelineTransitions` (5.4 only).
 - **FRs covered:** FR1 and FR2 (5.4 + 5.6; the main-window button is Story 6.2), FR3 (5.5), FR4 (5.2), FR5 (5.2), FR6 (5.1 + 5.8), FR58 initial scaffold (5.7 + 5.9 + 5.10), FR60 mid-capture revocation (5.4)
 - **NFRs verified:** NFR-P11 (5.4, measured), NFR-P13 (5.2), NFR-S3 (5.3), NFR-Pr3 (5.3), NFR-Pr7 (5.2; OS-level capture sends nothing to the meeting), NFR-A1 to A6 (5.5, 5.7, 5.8)

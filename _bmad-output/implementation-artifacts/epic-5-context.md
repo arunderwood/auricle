@@ -84,7 +84,7 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
   - Wave 3: 5.4 (after 5.2), 5.8 (after 5.1, 5.2's probe and 5.7), and 5.9 (after 5.7 and 5.10).
   - Wave 4: 5.6 (after 5.4 and 5.5), the dogfood run.
   - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6.
-- **Story 5.2 carries a manual gate.** A 5-minute capture each from Teams, Meet in Chrome and Zoom must be audible, plus a 60-minute soak. A failure stops the story and triggers a correct-course to the ScreenCaptureKit fallback.
+- **No story asks the maintainer for live testing before a facility for it exists.** Stories 5.1–5.5 are done on automated tests. Story 5.6's debug Record hotkey is the first ergonomic way to capture, so the live check of the process tap happens there, through the maintainer's normal Teams, Meet and Zoom meetings, with the evidence read from `stage_events` capture metadata. A real meeting whose far side is missing triggers a correct-course to the ScreenCaptureKit fallback.
 - **Later epics own:**
   - Story 6.2: deleting the debug trigger and moving the indicator
   - Story 6.3: the empty meeting list
