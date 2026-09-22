@@ -3,7 +3,7 @@ title: 'Story 4.15: Summarizer Under-Production on ES2002b and ES2004a'
 type: 'feature'
 created: '2026-09-21'
 status: 'in-progress'
-status_detail: 'AC1/AC2/AC3 landed, reviewed, and run live (diarized arm: 14/19 = 74%), matching the full pipeline. AC4 (the stop condition) is open: needs either a recorded full-pipeline run reaching 16/19 (blocked on Story 4.14 landing its retention metric/rerun on origin/main, and weak evidence from one run given confirmed temperature-1.0 variance) or a maintainer ruling written into expected.json notes.'
+status_detail: 'AC1/AC2/AC3 landed, reviewed, and run live (diarized arm: one bench draw at 14/19 = 74%, matching the full pipeline). AC4 (the stop condition) was amended by the maintainer given the confirmed temperature-1.0 variance: 16/19 as the median of three recorded full-pipeline runs under the same revision (Story 4.14 is adding this to report() and recording the two further runs), or a maintainer ruling written into expected.json notes. Neither is met: only one full-pipeline run is recorded, and the diarized arm has one bench draw, not three.'
 baseline_revision: 'e88e2e542ac2c73b9f8265d512c81561e0585bc4'
 review_loop_iteration: 0
 followup_review_recommended: false

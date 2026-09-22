@@ -196,19 +196,25 @@ New observation, not present on any prior arm: 4 ungrounded quotes this run
 (0 on every un-diarized arm). Not investigated further — recorded as a data
 point for whoever runs the next arm, not a blocker.
 
-## Stop condition
+## Stop condition (amended)
 
-Not met: the diarized arm reached 14/19 = 74%, short of 16/19. Per the spec's
-Never constraint, this story does not pick a reading: it does not fabricate a
-16/19 recorded run, and it does not write a fixture ruling into
+Given the confirmed temperature-1.0 variance above, the maintainer amended the
+stop condition: **16/19 as the median of three recorded full-pipeline runs
+under the same revision**, not a single run — Story 4.14 is adding the median
+to `report()` and recording the two further runs. The same bar applies to any
+bench arm before it is claimed to move recall: three bench runs, median
+reported. This story's diarized arm has one bench draw (14/19), not three, so
+it does not itself demonstrate a recall change — it sits inside the 10-to-14
+spread already seen on byte-identical input.
+
+Not met, under either the amended condition or the fixture-ruling path. Per
+the spec's Never constraint, this story does not pick a reading: it does not
+fabricate a recorded median, and it does not write a fixture ruling into
 `expected.json`'s notes on its own authority. Two paths remain open:
 
-1. A full-pipeline run recorded to `history.jsonl` once Story 4.14 lands its
-   retention metric and rerun — the actual gate the epic names, not a bench
-   number. Given the confirmed temperature-1.0 variance (10 to 14 of 19 on
-   byte-identical input across three prior runs), one recorded run is a weak
-   basis for a 16/19 decision either way; repeat runs would say whether 74%
-   is the mean or an edge of the distribution.
+1. Three full-pipeline runs recorded to `history.jsonl` under the same
+   revision, median computed, once Story 4.14 lands its retention metric,
+   rerun, and the median-of-three `report()` change.
 2. The maintainer rules that ES2004a's three items leave the fixture, with
    the rationale written into `expected.json`'s `notes` field verbatim —
    unaffected by the above, since ES2004a scored 0/3 on every arm tried,
