@@ -170,26 +170,46 @@ map is the identity map (`Speaker_N` to itself) for every meeting — no human
 named the speakers on this run — so the arm's per-speaker labels are still
 `Speaker_1`..`Speaker_5`, just no longer collapsed onto one placeholder.
 
-Running `Tests/scripts/run-recall-bench.sh --repo-root
-<absolute path>/Tests/fixtures/recall-bench-output/2026-09-21-diarized --arm
-substring --diarized` spends live Anthropic API credit. This session's own
-permission mode blocks reading Keychain/config state directly (confirmed: even
-a plain `cat ~/.auricle/config.toml` is refused as credential exploration) — a
-key may still exist on this machine, as it did for the session that ran the
-full-pipeline measurement this story builds on. Whether to run this from here
-or have the maintainer run it is their call to make, not something to route
-around.
+**Run, 2026-09-22, one arm, live:** `Tests/scripts/run-recall-bench.sh
+--repo-root .../2026-09-21-diarized --arm substring --diarized` —
+
+| meeting | un-diarized (run1/run2) | diarized |
+|---|---:|---:|
+| ES2002a | 3/3 / 3/3 | 3/3 |
+| ES2002b | 2/8 / 3/8 (act 0-1/4) | **6/8 (act 4/4)** |
+| ES2003a | 1/1 / 1/1 | 1/1 |
+| ES2003b | 4/4 / 3/4 | 4/4 |
+| ES2004a | 0/3 / 0/3 | 0/3 |
+| **total** | **10/19 / 10/19** | **14/19 = 74%** |
+
+Matches the full pipeline's 14/19 exactly, item for item on the meetings that
+moved: ES2002b's action items go from 0-1/4 to 4/4 kept, the same recovery the
+full pipeline showed over the un-diarized bench. This is one run, not three —
+consistent with a real diarization effect (a plausible mechanism: with every
+utterance labelled identically, the model may struggle to bind a commitment to
+a distinct owner) but not distinguishable from a favorable roll of the
+temperature-1.0 variance documented above without repeat runs. ES2004a stays
+at 0/3 regardless of diarization, holding the AC2 finding: its three items are
+never proposed on any transcript source or labelling tried so far.
+
+New observation, not present on any prior arm: 4 ungrounded quotes this run
+(0 on every un-diarized arm). Not investigated further — recorded as a data
+point for whoever runs the next arm, not a blocker.
 
 ## Stop condition
 
-Not yet met. Per the spec's Never constraint, this story does not pick a
-reading: it does not fabricate a 16/19 recorded run, and it does not write a
-fixture ruling into `expected.json`'s notes on its own authority. Two paths
-remain open, both requiring a live Anthropic call and, for the first, Story
-4.14's still-unlanded retention metric and recorded rerun:
+Not met: the diarized arm reached 14/19 = 74%, short of 16/19. Per the spec's
+Never constraint, this story does not pick a reading: it does not fabricate a
+16/19 recorded run, and it does not write a fixture ruling into
+`expected.json`'s notes on its own authority. Two paths remain open:
 
-1. Run the diarized arm above (and any other single-variable arm the
-   findings motivate) through the bench, then a full-pipeline run once Story
-   4.14 lands, and record whichever reaches 16/19.
+1. A full-pipeline run recorded to `history.jsonl` once Story 4.14 lands its
+   retention metric and rerun — the actual gate the epic names, not a bench
+   number. Given the confirmed temperature-1.0 variance (10 to 14 of 19 on
+   byte-identical input across three prior runs), one recorded run is a weak
+   basis for a 16/19 decision either way; repeat runs would say whether 74%
+   is the mean or an edge of the distribution.
 2. The maintainer rules that ES2004a's three items leave the fixture, with
-   the rationale written into `expected.json`'s `notes` field verbatim.
+   the rationale written into `expected.json`'s `notes` field verbatim —
+   unaffected by the above, since ES2004a scored 0/3 on every arm tried,
+   diarized included.
