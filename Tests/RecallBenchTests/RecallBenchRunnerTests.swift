@@ -12,7 +12,15 @@ private func benchFixture(id: String = "ES0001a", directory: URL) -> RecallBench
     RecallBenchFixture(id: id, directory: directory, transcript: widgetTranscript)
 }
 
-private let passingScore = RecallBenchScore(keptItems: 2, ungroundedQuotes: 0, expectedItems: 2, recalledItems: 2, falseKeeps: 0)
+private let passingScore = RecallBenchScore(
+    keptItems: 2,
+    ungroundedQuotes: 0,
+    expectedItems: 2,
+    recalledItems: 2,
+    falseKeeps: 0,
+    actionItems: RecallBenchSectionScore(kept: 2, expected: 2, recalled: 2, falseKeeps: 0),
+    decisions: RecallBenchSectionScore(kept: 0, expected: 0, recalled: 0, falseKeeps: 0),
+)
 
 private func stubScorer(
     _ capture: (@Sendable (URL, [String]) -> Void)? = nil,
@@ -25,6 +33,14 @@ private func stubScorer(
             "expected_items": passingScore.expectedItems,
             "recalled_items": passingScore.recalledItems,
             "false_keeps": passingScore.falseKeeps,
+            "kept_action_items": passingScore.actionItems.kept,
+            "expected_action_items": passingScore.actionItems.expected,
+            "recalled_action_items": passingScore.actionItems.recalled,
+            "false_keep_action_items": passingScore.actionItems.falseKeeps,
+            "kept_decisions": passingScore.decisions.kept,
+            "expected_decisions": passingScore.decisions.expected,
+            "recalled_decisions": passingScore.decisions.recalled,
+            "false_keep_decisions": passingScore.decisions.falseKeeps,
         ])
     }
 }

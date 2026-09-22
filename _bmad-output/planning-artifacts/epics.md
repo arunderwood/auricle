@@ -2399,6 +2399,12 @@ So that Epic 4's exit gate is met by the summarizer actually surfacing what the 
 **Then** it ends at the maintainer decision gate rather than at a prompt change nobody measured: at 65% to 79% the maintainer chooses between a multi-pass amendment (PM and Architect, reopening FR32, FR71 and Decision 5.6) and moving Story 4.10's floor to the achieved number with the rationale written into `epics.md`; below 65% it escalates
 **And** FR32 ("a single primary Claude call per meeting; chain-of-summarize is explicitly deferred to v2+") stands until such an amendment lands, so no arm in this story makes more than one primary call
 
+**Given** the story ran and disproved the premise its decision gate was written on (`spec-4-13-prompt-recall-pass.md`, 2026-09-21)
+**When** the gate above is exercised
+**Then** the multi-pass option is struck: the same prompt scores 84% on reference transcripts and 74% on the pipeline's own WhisperKit output of the same audio, which is 14% to 34% shorter, so the binding constraint is transcription and a second summarization pass cannot recover text that was never transcribed
+**And** the choice is between the Parakeet-TDT alternate ASR path that `prd.md:426` already names as the designed response to inadequate transcription, and moving Story 4.10's floor to what the pipeline achieves
+**And** the 80% floor is reachable on clean text, so moving the floor forecloses a ceiling that exists
+
 ---
 
 **Epic 4 summary:**

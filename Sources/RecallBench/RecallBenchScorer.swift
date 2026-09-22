@@ -4,12 +4,32 @@ import Foundation
 /// only in that script — Swift decodes the result and never re-derives it, so
 /// the bench and the AMI regression suite can never disagree about what counts
 /// as recalled.
+/// One section's counts. Action items and decisions fail in opposite
+/// directions — the summarizer under-produces the first and over-produces the
+/// second — so a prompt that moves items between them holds every total flat
+/// while changing what is being measured.
+public struct RecallBenchSectionScore: Decodable, Sendable, Equatable {
+    public let kept: Int
+    public let expected: Int
+    public let recalled: Int
+    public let falseKeeps: Int
+
+    public init(kept: Int, expected: Int, recalled: Int, falseKeeps: Int) {
+        self.kept = kept
+        self.expected = expected
+        self.recalled = recalled
+        self.falseKeeps = falseKeeps
+    }
+}
+
 public struct RecallBenchScore: Decodable, Sendable, Equatable {
     public let keptItems: Int
     public let ungroundedQuotes: Int
     public let expectedItems: Int
     public let recalledItems: Int
     public let falseKeeps: Int
+    public let actionItems: RecallBenchSectionScore
+    public let decisions: RecallBenchSectionScore
 
     enum CodingKeys: String, CodingKey {
         case keptItems = "kept_items"
@@ -17,14 +37,57 @@ public struct RecallBenchScore: Decodable, Sendable, Equatable {
         case expectedItems = "expected_items"
         case recalledItems = "recalled_items"
         case falseKeeps = "false_keeps"
+        case keptActionItems = "kept_action_items"
+        case expectedActionItems = "expected_action_items"
+        case recalledActionItems = "recalled_action_items"
+        case falseKeepActionItems = "false_keep_action_items"
+        case keptDecisions = "kept_decisions"
+        case expectedDecisions = "expected_decisions"
+        case recalledDecisions = "recalled_decisions"
+        case falseKeepDecisions = "false_keep_decisions"
     }
 
-    public init(keptItems: Int, ungroundedQuotes: Int, expectedItems: Int, recalledItems: Int, falseKeeps: Int) {
+    /// `score.py` emits the per-section keys flat rather than nested, so that
+    /// a `history.jsonl` row written before they existed is missing keys
+    /// rather than missing a sub-object. They are grouped here because every
+    /// reader wants them per section.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        keptItems = try container.decode(Int.self, forKey: .keptItems)
+        ungroundedQuotes = try container.decode(Int.self, forKey: .ungroundedQuotes)
+        expectedItems = try container.decode(Int.self, forKey: .expectedItems)
+        recalledItems = try container.decode(Int.self, forKey: .recalledItems)
+        falseKeeps = try container.decode(Int.self, forKey: .falseKeeps)
+        actionItems = try RecallBenchSectionScore(
+            kept: container.decode(Int.self, forKey: .keptActionItems),
+            expected: container.decode(Int.self, forKey: .expectedActionItems),
+            recalled: container.decode(Int.self, forKey: .recalledActionItems),
+            falseKeeps: container.decode(Int.self, forKey: .falseKeepActionItems),
+        )
+        decisions = try RecallBenchSectionScore(
+            kept: container.decode(Int.self, forKey: .keptDecisions),
+            expected: container.decode(Int.self, forKey: .expectedDecisions),
+            recalled: container.decode(Int.self, forKey: .recalledDecisions),
+            falseKeeps: container.decode(Int.self, forKey: .falseKeepDecisions),
+        )
+    }
+
+    public init(
+        keptItems: Int,
+        ungroundedQuotes: Int,
+        expectedItems: Int,
+        recalledItems: Int,
+        falseKeeps: Int,
+        actionItems: RecallBenchSectionScore,
+        decisions: RecallBenchSectionScore,
+    ) {
         self.keptItems = keptItems
         self.ungroundedQuotes = ungroundedQuotes
         self.expectedItems = expectedItems
         self.recalledItems = recalledItems
         self.falseKeeps = falseKeeps
+        self.actionItems = actionItems
+        self.decisions = decisions
     }
 }
 

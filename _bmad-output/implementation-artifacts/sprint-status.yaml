@@ -82,7 +82,7 @@ development_status:
   4-10-exit-criteria-gate-ci-pipeline-test-live-run: in-progress
   4-11-offline-recall-bench: backlog
   4-12-item-text-recall-and-false-keep-scoring: backlog
-  4-13-prompt-recall-pass: backlog
+  4-13-prompt-recall-pass: done
   epic-4-retrospective: done
 
   epic-5: backlog
@@ -448,3 +448,26 @@ action_items:
     owner: "maintainer"
     status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
+  - id: "story-4-13-decide-the-epic-4-exit-lever-asr-or-a-lower-floor"
+    epic: 4
+    action: "Decide how Epic 4 exits, now that Story 4.13 has shown transcription
+      rather than summarization is the binding constraint: pursue the Parakeet-TDT
+      alternate ASR path that prd.md:426 names as the designed response, or move
+      Story 4.10's 80% floor to the roughly 74% the pipeline achieves. The
+      summarizer reaches 84% on reference transcripts and 74% on WhisperKit output
+      of the same audio, which is 14% to 34% shorter, so the ceiling exists and
+      moving the floor forecloses it. Multi-pass summarization is struck as an
+      option: a second pass cannot recover text that was never transcribed."
+    owner: "maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
+  - id: "story-4-13-rerun-part-b-under-the-promoted-prompt"
+    epic: 4
+    action: "Rerun Story 4.10 Part B under the promoted sections-independent prompt
+      and record it, so Tests/fixtures/epic4-exit-results.md and
+      Tests/regression/ami/history.jsonl carry a full-pipeline number for it. Until
+      one exists, min_item_recall stays at 0.35 and cannot be raised to guard the
+      new baseline. Expect roughly 74%, not a pass."
+    owner: "maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
