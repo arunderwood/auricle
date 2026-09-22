@@ -1,8 +1,5 @@
-import ClaudeSummarizer
-import Core
 import Foundation
 import Observation
-import Persist
 
 /// Opens a URL through the OS and reports whether it reported success.
 /// `AuricleApp` supplies `NotificationDelegate.openInDefaultApp` as the
@@ -10,62 +7,103 @@ import Persist
 /// ever actually opened.
 public typealias URLOpener = @Sendable (URL) async -> Bool
 
-/// The Configure step's four sub-steps (vault path, Obsidian check, API key,
-/// expectations) per Story 5.7's Configure AC. Which sub-step is current is
-/// `ConfigureStepView`'s own local state — this model only holds the
-/// validated data and side effects each sub-step needs.
+/// A vault path failed `validateVaultPath`. Mirrors `VaultWriter.WriteError`'s
+/// two relevant cases without depending on `Persist` from `AppUI` — the
+/// composition root translates between them.
+public enum VaultPathValidationError: Error, Sendable, Equatable {
+    case missing(path: String)
+    case notWritable(path: String)
+    case other(String)
+}
+
+/// The Configure step's sub-steps, advanced in this order as each completes.
+/// `.selfWikilink` is an inert placeholder: no view renders anything for it
+/// and `advancePastSelfWikilinkPlaceholder()` is the only way through it,
+/// until a real one is registered here.
+public enum ConfigureSubStep: CaseIterable, Sendable, Equatable {
+    case vaultPath
+    case selfWikilink
+    case obsidian
+    case apiKey
+    case expectations
+}
+
+/// Owns every Configure sub-step's data, validation, and advance decision —
+/// `ConfigureStepView` only renders the current `subStep` and forwards user
+/// actions here.
 @MainActor @Observable
 public final class OnboardingConfigureModel {
     /// Raised by `finish()` when it is called before a vault path has
-    /// validated — `ConfigureStepView` never advances past the vault picker
-    /// without one, so this only fires if a caller skips that gate.
+    /// validated — the sub-step sequence never reaches `finish()` without
+    /// one, so this only fires if a caller skips that gate.
     public enum FinishError: Error, Sendable, Equatable {
         case vaultPathNotSelected
     }
 
+    public private(set) var subStep = ConfigureSubStep.vaultPath
     /// `nil` until the Obsidian check runs; then whether the opener reported
     /// success. Drives the non-blocking "Install Obsidian" message — the
     /// check never fails the step.
     public private(set) var obsidianOpened: Bool?
     /// The last vault-path validation failure, if any. Cleared once a path
     /// validates.
-    public private(set) var vaultPathError: VaultWriter.WriteError?
-    /// The validated vault path, once one has passed `VaultWriter.validateVaultPath`.
+    public private(set) var vaultPathError: VaultPathValidationError?
+    /// The validated vault path, once one has passed `validateVaultPath`.
     public private(set) var vaultPath: URL?
 
     private let opener: URLOpener
+    private let validateVaultPath: @Sendable (URL) throws -> Void
     private let writeVaultPath: @Sendable (URL) throws -> Void
     private let writeAPIKey: @Sendable (String) throws -> Void
+    private let configuredVaultPath: @Sendable () -> URL?
 
     public init(
         opener: @escaping URLOpener,
-        writeVaultPath: @escaping @Sendable (URL) throws -> Void = { try ConfigWriter.set("vault_path", to: $0.path) },
-        writeAPIKey: @escaping @Sendable (String) throws -> Void = { try KeychainAPIKey.write($0) },
+        validateVaultPath: @escaping @Sendable (URL) throws -> Void,
+        writeVaultPath: @escaping @Sendable (URL) throws -> Void,
+        writeAPIKey: @escaping @Sendable (String) throws -> Void,
+        configuredVaultPath: @escaping @Sendable () -> URL?,
     ) {
         self.opener = opener
+        self.validateVaultPath = validateVaultPath
         self.writeVaultPath = writeVaultPath
         self.writeAPIKey = writeAPIKey
+        self.configuredVaultPath = configuredVaultPath
+    }
+
+    /// Prefills the picker at the configured vault path, or
+    /// `~/checkouts/SecondBrain` (AR-DATA-9) when none is set yet — a prefill
+    /// only, never written unless the user confirms a folder.
+    public var defaultVaultDirectory: URL {
+        configuredVaultPath() ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("checkouts/SecondBrain", isDirectory: true)
     }
 
     /// Validates `path` (an existing, writable directory) without creating
     /// the vault or a meetings subdirectory — the picker never creates
-    /// anything. Throws and leaves `vaultPath` unset on a validation
-    /// failure, so the caller knows not to advance past the picker.
+    /// anything — and advances past the picker on success. Throws and
+    /// leaves `vaultPath` unset on a validation failure.
     public func selectVaultPath(_ path: URL) throws {
         do {
-            try VaultWriter.validateVaultPath(path)
-        } catch let error as VaultWriter.WriteError {
+            try validateVaultPath(path)
+        } catch let error as VaultPathValidationError {
             vaultPathError = error
             throw error
         }
         vaultPathError = nil
         vaultPath = path
+        advanceSubStep()
+    }
+
+    /// Advances past the inert self.wikilink placeholder.
+    public func advancePastSelfWikilinkPlaceholder() {
+        advanceSubStep()
     }
 
     /// Opens `obsidian://open?vault=<name>` for the validated vault path's
-    /// own directory name. A `false` result only records `obsidianOpened`
-    /// for the view's non-blocking message — this never throws and the
-    /// caller always advances after it returns.
+    /// own directory name. Never fails the step — the result only drives the
+    /// non-blocking "Install Obsidian" message. Does not itself advance;
+    /// `continueFromObsidian()` does once the result has been shown.
     public func checkObsidian() async {
         guard let vaultPath else { return }
         var components = URLComponents()
@@ -79,10 +117,22 @@ public final class OnboardingConfigureModel {
         obsidianOpened = await opener(url)
     }
 
-    /// Stores `key` in Keychain. Skipping this sub-step (never calling it)
-    /// leaves Keychain untouched — there is no separate "skip" method.
+    /// Advances past the Obsidian sub-step once its result has been shown.
+    public func continueFromObsidian() {
+        advanceSubStep()
+    }
+
+    /// Stores a trimmed `key` in Keychain and advances. Trimming matters
+    /// because a key pasted with surrounding whitespace would otherwise
+    /// fail Anthropic's auth silently at summarization time.
     public func setAPIKey(_ key: String) throws {
-        try writeAPIKey(key)
+        try writeAPIKey(key.trimmingCharacters(in: .whitespacesAndNewlines))
+        advanceSubStep()
+    }
+
+    /// Skips the API key sub-step, leaving Keychain untouched.
+    public func skipAPIKey() {
+        advanceSubStep()
     }
 
     /// Writes the validated vault path to `~/.auricle/config.toml`.
@@ -90,5 +140,11 @@ public final class OnboardingConfigureModel {
     public func finish() throws {
         guard let vaultPath else { throw FinishError.vaultPathNotSelected }
         try writeVaultPath(vaultPath)
+    }
+
+    private func advanceSubStep() {
+        let steps = ConfigureSubStep.allCases
+        guard let index = steps.firstIndex(of: subStep), index + 1 < steps.count else { return }
+        subStep = steps[index + 1]
     }
 }

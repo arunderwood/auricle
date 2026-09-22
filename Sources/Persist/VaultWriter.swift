@@ -92,9 +92,9 @@ public enum VaultWriter {
     /// that exists but is a plain file throws the same `.vaultPathMissing`
     /// as a fully-missing path, per Decision 2.5. Never auto-created here or
     /// anywhere else in this function. Public so a caller that only needs
-    /// this check — the onboarding vault picker (Story 5.7) — can validate a
-    /// chosen path without going through `resolveMeetingsDirectory`, which
-    /// also resolves and creates a meetings subdirectory it has no need for.
+    /// this check — a picker that must never create the vault or a meetings
+    /// subdirectory — can validate a chosen path without going through
+    /// `resolveMeetingsDirectory`, which resolves and creates one.
     public static func validateVaultPath(_ vaultPath: URL) throws {
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: vaultPath.path, isDirectory: &isDirectory)

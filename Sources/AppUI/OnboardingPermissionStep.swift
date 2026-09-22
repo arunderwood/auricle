@@ -1,26 +1,25 @@
 import Permissions
 
-/// What a permission step decided after `request(using:)` ran. Story 5.8's
-/// richer steps use `.remainWithStatus` to keep the coordinator on a
-/// denied/not-determined step so its view can show remediation copy; this
-/// story's `DefaultPermissionStep` never returns it.
+/// What a permission step decided after `request(using:)` ran. A richer step
+/// uses `.remainWithStatus` to keep the coordinator on a denied/not-determined
+/// step so its view can show remediation copy; `DefaultPermissionStep` never
+/// returns it.
 public enum OnboardingPermissionOutcome: Sendable, Equatable {
     case advance
     case remainWithStatus(PermissionStatus)
 }
 
-/// The seam Story 5.8 plugs its per-permission-step copy and buttons into:
-/// it only decides whether `OnboardingCoordinator` advances past a
-/// permission step. It never renders anything — views stay in `App/`.
+/// The seam a permission step's own copy and buttons plug into: it only
+/// decides whether `OnboardingCoordinator` advances past a permission step.
+/// It never renders anything — views stay in `App/`.
 public protocol OnboardingPermissionStep: Sendable {
     var category: TCCCategory { get }
     func request(using checker: PermissionChecking) async -> OnboardingPermissionOutcome
 }
 
-/// This story's placeholder for all three permission steps: prompts once
-/// through `checker` and always advances, regardless of the resulting
-/// status. Story 5.8 supplies the conforming steps that inspect the status
-/// and remain on a denied/not-determined step instead.
+/// No-op step used until a real permission step is registered for this
+/// category: prompts once through `checker` and always advances, regardless
+/// of the resulting status.
 public struct DefaultPermissionStep: OnboardingPermissionStep {
     public let category: TCCCategory
 

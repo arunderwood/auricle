@@ -1,12 +1,12 @@
 import AppUI
 import SwiftUI
 
-/// This story's single placeholder screen for all three permission steps
-/// (Microphone, System Audio, Notifications): one button that runs the
-/// current step's request and advances regardless of outcome. Story 5.8
-/// replaces this with per-step copy, denied-state handling, and Open
-/// Settings/Skip/Try Again buttons, driven by the same
-/// `OnboardingPermissionStep` seam this story defines.
+/// No-op screen shared by all three permission steps (Microphone, System
+/// Audio, Notifications) until a real per-step screen is registered: one
+/// button that runs the current step's request and advances regardless of
+/// outcome. A real screen would show per-step copy, denied-state handling,
+/// and Open Settings/Skip/Try Again buttons, driven by the same
+/// `OnboardingPermissionStep` seam this one uses.
 struct PermissionStepView: View {
     let coordinator: OnboardingCoordinator
 

@@ -1,29 +1,23 @@
 import AppKit
 import AppUI
-import Core
-import Persist
 import SwiftUI
 
-/// Sequences the Configure step's four sub-steps (vault path, Obsidian
-/// check, API key, expectations) per Story 5.7's Configure AC. Which
-/// sub-step is showing is this view's own local state; every validation and
-/// side effect lives in `OnboardingConfigureModel`.
+/// Renders the current `ConfigureSubStep` and forwards user actions to
+/// `OnboardingConfigureModel` — sub-step sequencing, validation, and the
+/// default-vault-path rule all live in that model, not here.
 struct ConfigureStepView: View {
-    private enum SubStep {
-        case vaultPath, obsidian, apiKey, expectations
-    }
-
     let coordinator: OnboardingCoordinator
 
-    @State private var subStep = SubStep.vaultPath
     @State private var apiKeyText = ""
     @State private var apiKeyError: String?
 
     var body: some View {
         VStack(spacing: 20) {
-            switch subStep {
+            switch coordinator.configure.subStep {
             case .vaultPath:
                 vaultPathSubStep
+            case .selfWikilink:
+                selfWikilinkSubStep
             case .obsidian:
                 obsidianSubStep
             case .apiKey:
@@ -51,6 +45,16 @@ struct ConfigureStepView: View {
         }
     }
 
+    /// Inert until a real sub-step is registered here — see
+    /// `ConfigureSubStep.selfWikilink`'s doc comment.
+    private var selfWikilinkSubStep: some View {
+        Button("Continue") {
+            coordinator.configure.advancePastSelfWikilinkPlaceholder()
+        }
+        .accessibilityLabel("Continue")
+        .buttonStyle(.borderedProminent)
+    }
+
     private var obsidianSubStep: some View {
         VStack(spacing: 12) {
             Text("Let's confirm Obsidian can open your vault")
@@ -61,7 +65,7 @@ struct ConfigureStepView: View {
                         .foregroundStyle(.secondary)
                 }
                 Button("Continue") {
-                    subStep = .apiKey
+                    coordinator.configure.continueFromObsidian()
                 }
                 .accessibilityLabel("Continue")
                 .buttonStyle(.borderedProminent)
@@ -91,7 +95,7 @@ struct ConfigureStepView: View {
             }
             HStack {
                 Button("Skip") {
-                    subStep = .expectations
+                    coordinator.configure.skipAPIKey()
                 }
                 .accessibilityLabel("Skip API key")
                 Button("Save") { saveAPIKey() }
@@ -114,47 +118,33 @@ struct ConfigureStepView: View {
         }
     }
 
-    /// Prefills the picker at the configured `vault_path`, or
-    /// `~/checkouts/SecondBrain` (AR-DATA-9) when none is set yet — a prefill
-    /// only, never written unless the user confirms a folder.
     private func chooseVaultFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.directoryURL = defaultVaultDirectory
+        panel.directoryURL = coordinator.configure.defaultVaultDirectory
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try coordinator.configure.selectVaultPath(url)
-            subStep = .obsidian
-        } catch {
-            // `selectVaultPath` already recorded the error on
-            // `coordinator.configure.vaultPathError`, which `vaultPathSubStep`
-            // renders; staying on this sub-step is the point.
-        }
+        // `selectVaultPath` records a failure on `coordinator.configure.vaultPathError`,
+        // which `vaultPathSubStep` renders; staying on this sub-step is the point.
+        try? coordinator.configure.selectVaultPath(url)
     }
 
     private func saveAPIKey() {
         do {
             try coordinator.configure.setAPIKey(apiKeyText)
-            subStep = .expectations
         } catch {
             apiKeyError = "Couldn't save the API key. Try again."
         }
     }
 
-    private var defaultVaultDirectory: URL {
-        (try? Config.load())?.vaultPath
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("checkouts/SecondBrain", isDirectory: true)
-    }
-
-    private func message(for error: VaultWriter.WriteError) -> String {
+    private func message(for error: VaultPathValidationError) -> String {
         switch error {
-        case let .vaultPathMissing(path):
+        case let .missing(path):
             "\(path) doesn't exist or isn't a folder."
-        case let .vaultPathNotWritable(path):
+        case let .notWritable(path):
             "\(path) isn't writable."
-        case .meetingsSubdirIsNotADirectory, .meetingsSubdirNotWritable, .meetingsSubdirCreationFailed, .collisionRetriesExhausted:
+        case .other:
             "That folder can't be used."
         }
     }

@@ -164,7 +164,7 @@ let package = Package(
         .target(name: "TestSupport", dependencies: ["Core"], path: "Sources/TestSupport"),
 
         // === GUI-facing views ===
-        .target(name: "AppUI", dependencies: ["Core", "Persist", "Permissions", "ClaudeSummarizer"], path: "Sources/AppUI"),
+        .target(name: "AppUI", dependencies: ["Core", "Permissions"], path: "Sources/AppUI"),
 
         // === Test targets (one per source target) ===
         .testTarget(name: "CoreTests", dependencies: ["Core", "TestSupport", "ClaudeSummarizer"], path: "Tests/CoreTests"),
@@ -314,7 +314,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppUITests",
-            dependencies: ["AppUI", "Persist", "Permissions"],
+            dependencies: ["AppUI", "Permissions"],
             path: "Tests/AppUITests",
         ),
     ],

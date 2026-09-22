@@ -4,8 +4,8 @@ import Permissions
 
 /// Drives the J0 onboarding narrative (UX-DR41): Welcome → Microphone →
 /// System Audio → Notifications → Configure → Done. Permission steps are
-/// injected as `OnboardingPermissionStep`s so Story 5.8 can supply its
-/// richer conforming steps without this type changing; `PermissionChecking`
+/// injected as `OnboardingPermissionStep`s, so a richer conforming step can
+/// replace the placeholder without this type changing; `PermissionChecking`
 /// is injected too — `AuricleApp` passes the one shared `PermissionChecker`
 /// instance the rest of the app uses (AR-PAT-4) rather than this type
 /// constructing its own.
@@ -21,8 +21,8 @@ public final class OnboardingCoordinator {
     public init(
         checker: any PermissionChecking,
         configure: OnboardingConfigureModel,
+        applicationSupportDirectory: URL,
         permissionSteps: [TCCCategory: any OnboardingPermissionStep]? = nil,
-        applicationSupportDirectory: URL = .applicationSupportDirectory,
     ) {
         self.checker = checker
         self.configure = configure

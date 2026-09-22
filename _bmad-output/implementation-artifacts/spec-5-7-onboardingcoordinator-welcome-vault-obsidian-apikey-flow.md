@@ -21,18 +21,20 @@ deferred:
       that AC, not a silent deviation here. Settles by: testing the URI against a
       freshly-picked, never-opened-in-Obsidian vault, or checking Obsidian's own URI docs.
     location: >-
-      Sources/AppUI/OnboardingConfigureModel.swift:421-432
+      Sources/AppUI/OnboardingConfigureModel.swift:107 (checkObsidian)
     severity: medium (unverified)
   - summary: >-
-      Branch claude/story-5-7-completion-f04b9b violates AGENTS.md's branch-naming policy
-      (semantic type/short-kebab-description names, never the claude/ auto-generated prefix).
+      closes: Branch claude/story-5-7-completion-f04b9b violates AGENTS.md's
+      branch-naming policy.
     evidence: |-
-      Real and current, but pre-existing — the branch was already named this at session
-      start, not produced by this diff, so no code change in this spec can fix it. Handle
-      operationally by shipping from a compliantly-named branch for the PR.
+      Resolved during this same run: the branch was renamed to
+      feat/story-5-7-onboarding-coordinator (a compliant type/short-kebab-description
+      name) before pushing and opening the PR, so this entry no longer describes current
+      state. The original location field ("git branch") was itself a review-pass mistake:
+      this deferred list is for spec/source findings, not repository metadata.
     location: >-
       git branch (repository-level, not a source file)
-    severity: medium
+    severity: medium (resolved)
 ---
 
 <intent-contract>
@@ -138,6 +140,19 @@ deferred:
   - `[low]` `[reject]` intent-alignment: `AuricleApp.swift`'s marker-gated root-view selection (the actual "onboarding runs" / "is skipped" behavior) has no automated coverage — only its two testable halves (`OnboardingMarker`, `OnboardingCoordinator`'s initial state) do, per the `App/`-vs-`Sources/` split. — same accepted, non-trivial-to-fix limitation as the blind-hunter test-coverage row above; not this story's problem to solve.
   - `[low]` `[reject]` intent-alignment: the Configure/Permission/Welcome/Done SwiftUI views' behaviors (Skip semantics, button flows, exact copy) are untested for the same `App/`-vs-`Sources/` reason. — same as the row above.
   - `[false]` `[reject]` intent-alignment: notes the self-authored spec's own verification bar doesn't demand `App/`-layer coverage the way epics.md's narrative phrasing might suggest to an outside reader. — refutation: this restates the two rows above without identifying an additional defect; a spec's verification section matching its own stated scope is not itself a defect.
+
+### 2026-09-22 — PR #115 review (Epic 5 overview session)
+- verdicts: 6 findings — high 0, medium 6, low 0, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` epic-5-overview: Configure sub-step sequencing, Skip/Continue advance, the non-blocking Obsidian advance, and the default-vault-path rule all lived in `ConfigureStepView` — the spec's own AC requires all logic in `AppUI`. — patch: moved every sub-step behind a new `ConfigureSubStep` enum and `OnboardingConfigureModel.advanceSubStep()`; the view now only reads `coordinator.configure.subStep` and forwards user actions.
+  - `[medium]` `[patch]` epic-5-overview: `skippingAPIKeyNeverWritesToKeychain` and `obsidianOpenerFalseDoesNotBlock` asserted only a flag, not the actual skip/advance behavior; no test covered the default-vault-path rule. — patch: rewrote both tests to assert `subStep` actually advances, and added `defaultVaultDirectoryFallsBackToSecondBrainWhenNoneConfigured`/`defaultVaultDirectoryPrefersTheConfiguredVaultPath`.
+  - `[medium]` `[patch]` epic-5-overview: Story 5.9's `self.wikilink` sub-step had no seam — the sub-step enum was private to the view. — patch: `ConfigureSubStep.selfWikilink` is now a registered, inert placeholder sub-step between `.vaultPath` and `.obsidian`, mirroring the `OnboardingPermissionStep` seam.
+  - `[medium]` `[patch]` epic-5-overview: the API key was written untrimmed — the trim only gated the Save button's `.disabled`, not the value passed to `setAPIKey`. — patch: `OnboardingConfigureModel.setAPIKey` now trims before writing; added `providingAPIKeyTrimsSurroundingWhitespaceBeforeWriting`.
+  - `[medium]` `[patch]` epic-5-overview: `AppUI` depended on `ClaudeSummarizer` and `Persist` only for `OnboardingConfigureModel`'s default `writeAPIKey`/`validateVaultPath` closures, pulling in `Summarize`/`Attribute`/`Orchestrator`/`State`/`GRDB`/`VaultGlossary` transitively. — patch: removed both dependencies from `Package.swift`; `AuricleApp` now injects `KeychainAPIKey.write` and a `VaultWriter.validateVaultPath`-backed closure (translated to a new `VaultPathValidationError` local to `AppUI`) from its composition root.
+  - `[medium]` `[patch]` epic-5-overview: `OnboardingConfigureModel`'s default closures and `OnboardingCoordinator`'s `applicationSupportDirectory` default pointed at the real config file, Keychain, and Application Support directory — a future test that forgot to override one would silently touch the maintainer's real state. — patch: removed every default; all five are now required parameters, supplied by `AuricleApp`'s composition root.
+- Also addressed (comment-rule violations, not separately verdicted — this repo's own standing rule against narrating the current story in comments): reworded every "Story 5.7"/"Story 5.8" comment in the touched files to describe current behavior instead (`VaultWriter.swift`, `OnboardingConfigureModel.swift`, `OnboardingCoordinator.swift`, `OnboardingPermissionStep.swift`, `PermissionStepView.swift`, `ConfigureStepView.swift`).
+- Deferred (2, logged to `deferred-work.md` per the reviewer's request rather than this spec's own `deferred` list): the multi-window marker-gate gap (pre-existing `WindowGroup` behavior, not this story's to fix); the `obsidian://open?vault=` URI resolution question (already tracked here — corrected its `location` field, which cited diff line numbers instead of the file's own).
+- Also corrected: this spec's own `deferred` frontmatter had a stale branch-naming entry (the branch was already renamed to `feat/story-5-7-onboarding-coordinator` before this entry was written) — marked `closes:`/`severity: medium (resolved)` rather than left open.
 
 ## Auto Run Result
 

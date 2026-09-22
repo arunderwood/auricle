@@ -2,7 +2,6 @@
 import Foundation
 import os
 import Permissions
-import Persist
 import Testing
 
 // MARK: - Test doubles
@@ -61,13 +60,46 @@ private func chmod(_ url: URL, _ permissions: Int) throws {
     try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
 }
 
+/// Mirrors `VaultWriter.validateVaultPath`'s own exists+writable check
+/// without depending on `Persist` from this test target — `AppUI` doesn't
+/// depend on it either, so the model is exercised exactly as `AuricleApp`
+/// wires it, translating into the same `VaultPathValidationError` cases.
+private func validateVaultPath(_ url: URL) throws {
+    var isDirectory: ObjCBool = false
+    let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+    guard exists, isDirectory.boolValue else {
+        throw VaultPathValidationError.missing(path: url.path)
+    }
+    guard FileManager.default.isWritableFile(atPath: url.path) else {
+        throw VaultPathValidationError.notWritable(path: url.path)
+    }
+}
+
+/// Walks a freshly-made model from `.vaultPath` to `.apiKey`, so tests that
+/// only care about the API key sub-step don't have to restate every prior
+/// step's setup.
+@MainActor
+private func advanceToAPIKeySubStep(_ model: OnboardingConfigureModel, vaultDirectory: URL) throws {
+    try model.selectVaultPath(vaultDirectory)
+    model.advancePastSelfWikilinkPlaceholder()
+    model.continueFromObsidian()
+}
+
 @MainActor
 private func makeConfigureModel(
     opener: @escaping URLOpener = { _ in true },
+    validateVaultPath: @escaping @Sendable (URL) throws -> Void = validateVaultPath,
     writeVaultPath: @escaping @Sendable (URL) throws -> Void = { _ in },
     writeAPIKey: @escaping @Sendable (String) throws -> Void = { _ in },
+    configuredVaultPath: @escaping @Sendable () -> URL? = { nil },
 ) -> OnboardingConfigureModel {
-    OnboardingConfigureModel(opener: opener, writeVaultPath: writeVaultPath, writeAPIKey: writeAPIKey)
+    OnboardingConfigureModel(
+        opener: opener,
+        validateVaultPath: validateVaultPath,
+        writeVaultPath: writeVaultPath,
+        writeAPIKey: writeAPIKey,
+        configuredVaultPath: configuredVaultPath,
+    )
 }
 
 // MARK: - OnboardingMarker
@@ -96,7 +128,7 @@ struct OnboardingMarkerTests {
 
 @MainActor
 struct OnboardingConfigureModelTests {
-    @Test func validVaultPathValidatesAndStores() throws {
+    @Test func validVaultPathValidatesStoresAndAdvances() throws {
         let directory = makeTestDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -104,40 +136,59 @@ struct OnboardingConfigureModelTests {
         try model.selectVaultPath(directory)
         #expect(model.vaultPath == directory)
         #expect(model.vaultPathError == nil)
+        #expect(model.subStep == .selfWikilink)
     }
 
-    @Test func missingVaultPathThrowsAndDoesNotStore() {
+    @Test func missingVaultPathThrowsAndDoesNotStoreOrAdvance() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let model = makeConfigureModel()
 
-        do {
+        #expect(throws: VaultPathValidationError.missing(path: missing.path)) {
             try model.selectVaultPath(missing)
-            Issue.record("expected selectVaultPath to throw for a nonexistent path")
-        } catch let VaultWriter.WriteError.vaultPathMissing(path) {
-            #expect(path == missing.path)
-        } catch {
-            Issue.record("expected .vaultPathMissing, got \(error)")
         }
         #expect(model.vaultPath == nil)
-        #expect(model.vaultPathError != nil)
+        #expect(model.vaultPathError == .missing(path: missing.path))
+        #expect(model.subStep == .vaultPath)
     }
 
-    @Test func notWritableVaultPathThrowsAndDoesNotStore() throws {
+    @Test func notWritableVaultPathThrowsAndDoesNotStoreOrAdvance() throws {
         let directory = makeTestDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try chmod(directory, 0o500)
         defer { try? chmod(directory, 0o700) }
 
         let model = makeConfigureModel()
-        do {
+        #expect(throws: VaultPathValidationError.notWritable(path: directory.path)) {
             try model.selectVaultPath(directory)
-            Issue.record("expected selectVaultPath to throw for a read-only path")
-        } catch let VaultWriter.WriteError.vaultPathNotWritable(path) {
-            #expect(path == directory.path)
-        } catch {
-            Issue.record("expected .vaultPathNotWritable, got \(error)")
         }
         #expect(model.vaultPath == nil)
+        #expect(model.subStep == .vaultPath)
+    }
+
+    @Test func defaultVaultDirectoryFallsBackToSecondBrainWhenNoneConfigured() {
+        let model = makeConfigureModel(configuredVaultPath: { nil })
+        let expected = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("checkouts/SecondBrain", isDirectory: true)
+        #expect(model.defaultVaultDirectory == expected)
+    }
+
+    @Test func defaultVaultDirectoryPrefersTheConfiguredVaultPath() {
+        let configured = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: configured) }
+
+        let model = makeConfigureModel(configuredVaultPath: { configured })
+        #expect(model.defaultVaultDirectory == configured)
+    }
+
+    @Test func advancePastSelfWikilinkPlaceholderMovesToObsidian() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let model = makeConfigureModel()
+        try model.selectVaultPath(directory)
+        #expect(model.subStep == .selfWikilink)
+
+        model.advancePastSelfWikilinkPlaceholder()
+        #expect(model.subStep == .obsidian)
     }
 
     @Test func obsidianOpenerTrueDoesNotShowInstallMessage() async throws {
@@ -146,6 +197,7 @@ struct OnboardingConfigureModelTests {
 
         let model = makeConfigureModel(opener: { _ in true })
         try model.selectVaultPath(directory)
+        model.advancePastSelfWikilinkPlaceholder()
         await model.checkObsidian()
         #expect(model.obsidianOpened == true)
     }
@@ -156,8 +208,12 @@ struct OnboardingConfigureModelTests {
 
         let model = makeConfigureModel(opener: { _ in false })
         try model.selectVaultPath(directory)
+        model.advancePastSelfWikilinkPlaceholder()
         await model.checkObsidian()
         #expect(model.obsidianOpened == false)
+
+        model.continueFromObsidian()
+        #expect(model.subStep == .apiKey)
     }
 
     @Test func checkObsidianOpensTheVaultURLForTheSelectedPath() async throws {
@@ -170,23 +226,48 @@ struct OnboardingConfigureModelTests {
             return true
         })
         try model.selectVaultPath(directory)
+        model.advancePastSelfWikilinkPlaceholder()
         await model.checkObsidian()
 
         let expectedURL = try #require(URL(string: "obsidian://open?vault=\(directory.lastPathComponent)"))
         #expect(openedURLs.values == [expectedURL])
     }
 
-    @Test func skippingAPIKeyNeverWritesToKeychain() {
-        let recorder = Recorder<String>()
-        _ = makeConfigureModel(writeAPIKey: { recorder.record($0) })
-        // The skip path is simply never calling `setAPIKey`.
-        #expect(recorder.values.isEmpty)
-    }
+    @Test func skippingAPIKeyNeverWritesToKeychainAndAdvances() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
 
-    @Test func providingAPIKeyWrites() throws {
         let recorder = Recorder<String>()
         let model = makeConfigureModel(writeAPIKey: { recorder.record($0) })
+        try advanceToAPIKeySubStep(model, vaultDirectory: directory)
+
+        model.skipAPIKey()
+
+        #expect(recorder.values.isEmpty)
+        #expect(model.subStep == .expectations)
+    }
+
+    @Test func providingAPIKeyWritesAndAdvances() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let recorder = Recorder<String>()
+        let model = makeConfigureModel(writeAPIKey: { recorder.record($0) })
+        try advanceToAPIKeySubStep(model, vaultDirectory: directory)
+
         try model.setAPIKey("sk-ant-test")
+        #expect(recorder.values == ["sk-ant-test"])
+        #expect(model.subStep == .expectations)
+    }
+
+    @Test func providingAPIKeyTrimsSurroundingWhitespaceBeforeWriting() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let recorder = Recorder<String>()
+        let model = makeConfigureModel(writeAPIKey: { recorder.record($0) })
+        try advanceToAPIKeySubStep(model, vaultDirectory: directory)
+        try model.setAPIKey("  sk-ant-test\n")
         #expect(recorder.values == ["sk-ant-test"])
     }
 
@@ -203,13 +284,8 @@ struct OnboardingConfigureModelTests {
 
     @Test func finishWithoutAVaultPathThrows() {
         let model = makeConfigureModel()
-        do {
+        #expect(throws: OnboardingConfigureModel.FinishError.vaultPathNotSelected) {
             try model.finish()
-            Issue.record("expected finish() to throw without a validated vault path")
-        } catch OnboardingConfigureModel.FinishError.vaultPathNotSelected {
-            // expected
-        } catch {
-            Issue.record("expected .vaultPathNotSelected, got \(error)")
         }
     }
 }
@@ -219,13 +295,21 @@ struct OnboardingConfigureModelTests {
 @MainActor
 struct OnboardingCoordinatorTests {
     @Test func startsAtWelcome() {
-        let coordinator = OnboardingCoordinator(checker: FakePermissionChecker(), configure: makeConfigureModel())
+        let coordinator = OnboardingCoordinator(
+            checker: FakePermissionChecker(),
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: makeTestDirectory(),
+        )
         #expect(coordinator.step == .welcome)
     }
 
     @Test func advanceWalksEveryStepInOrder() async {
         let checker = FakePermissionChecker()
-        let coordinator = OnboardingCoordinator(checker: checker, configure: makeConfigureModel())
+        let coordinator = OnboardingCoordinator(
+            checker: checker,
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: makeTestDirectory(),
+        )
 
         #expect(coordinator.step == .welcome)
         coordinator.advance()
@@ -241,7 +325,11 @@ struct OnboardingCoordinatorTests {
     }
 
     @Test func advanceIsANoOpOnceDone() {
-        let coordinator = OnboardingCoordinator(checker: FakePermissionChecker(), configure: makeConfigureModel())
+        let coordinator = OnboardingCoordinator(
+            checker: FakePermissionChecker(),
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: makeTestDirectory(),
+        )
         for _ in OnboardingStep.allCases {
             coordinator.advance()
         }
@@ -255,7 +343,11 @@ struct OnboardingCoordinatorTests {
     ])
     func defaultPermissionStepAlwaysAdvances(status: PermissionStatus) async {
         let checker = FakePermissionChecker(requestResult: status)
-        let coordinator = OnboardingCoordinator(checker: checker, configure: makeConfigureModel())
+        let coordinator = OnboardingCoordinator(
+            checker: checker,
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: makeTestDirectory(),
+        )
         coordinator.advance() // welcome -> microphone
 
         await coordinator.requestCurrentPermission()
@@ -266,7 +358,11 @@ struct OnboardingCoordinatorTests {
 
     @Test func requestCurrentPermissionIsANoOpOffAPermissionStep() async {
         let checker = FakePermissionChecker()
-        let coordinator = OnboardingCoordinator(checker: checker, configure: makeConfigureModel())
+        let coordinator = OnboardingCoordinator(
+            checker: checker,
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: makeTestDirectory(),
+        )
 
         await coordinator.requestCurrentPermission() // step is .welcome
 
