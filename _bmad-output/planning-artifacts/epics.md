@@ -2521,7 +2521,7 @@ So that the capture stage, onboarding, Doctor (Epic 9), and the notification pat
 
 As the single user,
 I want `Capture/CaptureSession.swift` to capture all system audio through a Core Audio global process tap (FR4) and the microphone through AVAudioEngine (FR5), mixed into one mono 16kHz PCM stream by `Capture/AudioMixer.swift`,
-So that the captured audio is Whisper-native and covers any meeting platform (Zoom, Meet, Teams, Discord, FaceTime, browser audio) without bot integration.
+So that the captured audio is Whisper-native and covers any meeting platform (Zoom, Meet, Teams, Discord, browser audio) without bot integration.
 
 **Acceptance Criteria:**
 
@@ -2551,7 +2551,7 @@ So that the captured audio is Whisper-native and covers any meeting platform (Zo
 **Given** the test suite
 **When** I run `Tests/CaptureTests/`
 **Then** tests cover: `AudioMixer` resamples and mixes synthetic input (44.1kHz mic + 48kHz system → 16kHz mono); the watchdog rebuild rule against a fake `SystemAudioSource`; mic-denied records system audio only; start/stop lifecycle is idempotent
-**And** a manual check, recorded in the story spec, captures 5 minutes each from Microsoft Teams, Google Meet in Chrome, Zoom and FaceTime on the maintainer's Mac and confirms the far side is audible in `audio.wav`
+**And** a manual check, recorded in the story spec, captures 5 minutes each from Microsoft Teams, Google Meet in Chrome and Zoom on the maintainer's Mac and confirms the far side is audible in `audio.wav`
 **And** a manual 60-minute soak, recorded in the story spec, reports exact-zero seconds and watchdog rebuilds, and whether an ad-hoc rebuild of the app re-prompts for System Audio Recording
 **And** if the Teams / Meet / Zoom check fails, the story stops and the ScreenCaptureKit fallback in the research report becomes a correct-course decision
 

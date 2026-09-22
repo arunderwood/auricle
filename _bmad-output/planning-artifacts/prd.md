@@ -32,7 +32,7 @@ The target user is a single individual on a single Mac who attends many meetings
 
 auricle is defined by a stack of opinionated constraints that, together, are not occupied by any existing product:
 
-- **No bot in the meeting.** Capture is OS-level loopback, invisible to other participants, and meeting-platform-agnostic. Works with anything that plays audio through the system — Zoom, Google Meet, Teams, Discord, FaceTime, a recorded video. Removes the entire category of "should I add a bot to this call?" friction.
+- **No bot in the meeting.** Capture is OS-level loopback, invisible to other participants, and meeting-platform-agnostic. Works with anything that plays audio through the system — Zoom, Google Meet, Teams, Discord, a recorded video. Removes the entire category of "should I add a bot to this call?" friction.
 - **Local-first by construction.** Transcription, diarization, vault-glossary correction, and persistence all run on-device. Summarization is the only stage that may make a remote call (Claude), and a local-LLM path is in the post-MVP escape hatch.
 - **Vault-native, not export.** auricle writes directly to Obsidian with atomic-write semantics (temp file → fsync → rename — never edits existing files), speakers as `[[wikilinks]]`, calendar metadata in frontmatter, and a stable schema that downstream BASB/SecondBrain workflows can rely on.
 - **Quote-grounded extraction.** Every action item and decision must cite a verbatim transcript quote, validated by grep against the source transcript. Items missing a valid quote are dropped. Hallucinated commitments are eliminated by construction, not by prompting.
@@ -179,7 +179,7 @@ auricle has exactly one human user. "Multiple personas" is the wrong frame — t
 
 ### Persona: the single user
 
-- **Situation:** Independent engineer / maker. Attends 10–25 meetings per week across Zoom, Google Meet, occasional Discord and FaceTime calls. Maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that they treat as a working memory layer — daily notes, project notes, person notes, idea inbox.
+- **Situation:** Independent engineer / maker. Attends 10–25 meetings per week across Zoom, Google Meet, occasional Discord calls. Maintains a personal Obsidian vault at `~/checkouts/SecondBrain` that they treat as a working memory layer — daily notes, project notes, person notes, idea inbox.
 - **Pre-auricle reality:** Splits attention between participating and typing notes. Misses commitments. Some meetings end with no notes at all because the next thing on the calendar starts immediately. SaaS notetakers (Otter, Fireflies, Fathom) were ruled out: they require a bot to join the call, which is socially awkward, requires attendee consent, and exfiltrates audio to a vendor. Manual capture into Obsidian after the fact suffers from recall decay and inconsistent structure.
 - **What they want:** To stop thinking about notes. Show up to the meeting, have the conversation, walk away with a faithful, structured, vault-native record of what was said, decided, and committed to.
 - **Obstacle:** The local-ML-on-Apple-Silicon and OS-audio-loopback capabilities to make this work without bots/SaaS only became viable in the last ~24 months and no shipping product yet occupies the intersection.
@@ -469,7 +469,7 @@ These functional requirements are **the capability contract** for auricle. UX de
 - **FR1 [MVP]:** The user can start audio capture for a meeting via a prominent control in the auricle main window.
 - **FR2 [MVP]:** The user can stop audio capture via the same control, ending the recording and triggering the post-capture pipeline.
 - **FR3 [MVP]:** The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
-- **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio: Zoom, Google Meet, Teams, Discord, FaceTime, browser audio, video playback) without requiring integration with the meeting platform.
+- **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio: Zoom, Google Meet, Teams, Discord, browser audio, video playback) without requiring integration with the meeting platform.
 - **FR5 [MVP]:** auricle can simultaneously capture the user's microphone audio and mix it with system audio for a complete two-sided recording.
 - **FR6 [MVP]:** auricle can request and handle macOS System Audio Recording and Microphone permissions, with clear in-app explanation if permission is denied.
 - **FR7 [MVP]:** The user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.

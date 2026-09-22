@@ -170,7 +170,7 @@ These feed `epics.md` Epic 5, `architecture.md` AR-FAIL-6 and Decision 1.4, and 
    - a global exclude-self tap
    - an all-zero-buffer watchdog that performs a full rebuild [24]
    - resampling to 16 kHz in `AudioMixer`
-   - a manual live check on Teams, Meet in Chrome, Zoom and FaceTime before the story closes
+   - a manual live check on Teams, Meet in Chrome and Zoom before the story closes
    - Confidence: medium.
 4. **Story 5.8:** the second gauntlet step becomes "System Audio Recording". It triggers the prompt by starting a 1-second capture, because no request API exists [3][4].
 5. **Maintainer decision:** whether the Debug build's ad-hoc signing stays, given the TCC re-grant churn on each rebuild [5]. This is inference and should be confirmed on the first Story 5.2 build.

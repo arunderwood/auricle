@@ -30,7 +30,7 @@ The UX premise is the elimination of the meeting-notes tax: *Be in the meeting. 
 
 ### Target Users
 
-A single human user, observed across multiple modes rather than multiple personas. They are an independent engineer/maker, attend 10–25 voice meetings per week across Zoom / Google Meet / Discord / FaceTime, and maintain a personal Obsidian vault at `~/checkouts/SecondBrain` that they treat as working memory. They are highly tech-savvy and comfortable in a terminal.
+A single human user, observed across multiple modes rather than multiple personas. They are an independent engineer/maker, attend 10–25 voice meetings per week across Zoom / Google Meet / Discord, and maintain a personal Obsidian vault at `~/checkouts/SecondBrain` that they treat as working memory. They are highly tech-savvy and comfortable in a terminal.
 
 The eight UX-relevant modes that shape the surface:
 

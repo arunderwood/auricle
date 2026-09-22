@@ -21,7 +21,7 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
 
 ## Requirements & Constraints
 
-- Captures all system audio from any meeting app (Zoom, Teams, Meet in a browser, FaceTime) plus the user's microphone. Capture is passive: no added latency and no muting. Nothing signals capture to other participants.
+- Captures all system audio from any meeting app (Zoom, Teams, Meet in a browser) plus the user's microphone. Capture is passive: no added latency and no muting. Nothing signals capture to other participants.
 - Output is one mono 16kHz PCM 16-bit WAV per meeting in the cache directory. The file is 0600 inside a 0700 directory, and partial audio always survives a failure.
 - Nothing blocks a start:
   - A denied microphone records system audio only, and the metadata says so.
@@ -82,7 +82,7 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
   - Capture track: 5.1 → 5.3 → 5.2 → 5.4 → 5.5 → 5.6.
   - Onboarding track: 5.10 → 5.7 → 5.8 (needs 5.1) → 5.9.
   - The tracks meet at 5.6's dogfood run.
-- **Story 5.2 carries a manual gate.** A 5-minute capture each from Teams, Meet in Chrome, Zoom and FaceTime must be audible, plus a 60-minute soak. A failure stops the story and triggers a correct-course to the ScreenCaptureKit fallback.
+- **Story 5.2 carries a manual gate.** A 5-minute capture each from Teams, Meet in Chrome and Zoom must be audible, plus a 60-minute soak. A failure stops the story and triggers a correct-course to the ScreenCaptureKit fallback.
 - **Later epics own:**
   - Story 6.2: deleting the debug trigger and moving the indicator
   - Story 6.3: the empty meeting list
