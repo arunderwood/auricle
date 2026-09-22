@@ -33,6 +33,12 @@ struct RecallBenchVerb: AsyncParsableCommand {
     )
     var arms: [String] = []
 
+    @Flag(
+        name: .customLong("diarized"),
+        help: "Join diarization.json and attribution.json beside a fixture's transcript.json for real per-speaker labels. Falls back per fixture when either file is missing.",
+    )
+    var diarized = false
+
     func run() async throws {
         let repoRootURL = Self.directoryURL(repoRoot)
         let outputDirectory = Self.directoryURL(output)
@@ -40,7 +46,7 @@ struct RecallBenchVerb: AsyncParsableCommand {
 
         let fixtures: [RecallBenchFixture]
         do {
-            fixtures = try RecallBenchFixtureLoader.load(repoRoot: repoRootURL)
+            fixtures = try RecallBenchFixtureLoader.load(repoRoot: repoRootURL, diarized: diarized)
         } catch let error as RecallBenchFixtureLoader.LoadError {
             writeStderr("__recall-bench: \(error.localizedDescription)")
             throw ExitCode(1)
@@ -69,7 +75,8 @@ struct RecallBenchVerb: AsyncParsableCommand {
         let plannedCalls = fixtures.count * specs.count
         writeStderr(
             "__recall-bench: \(plannedCalls) live Anthropic API call(s) planned "
-                + "(\(fixtures.count) transcript(s) x \(specs.count) arm(s), model \(config.modelIdentifier)).",
+                + "(\(fixtures.count) transcript(s) x \(specs.count) arm(s), model \(config.modelIdentifier), "
+                + "diarized: \(diarized)).",
         )
 
         let result = await RecallBenchRunner.run(

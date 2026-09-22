@@ -23,7 +23,13 @@
 # Extra arguments go to the verb. `--arm substring --arm substring:<dir>`
 # compares two prompt sets over the same transcripts; <dir> holds the prompt
 # files to override (system.md, substring.md), and any file it lacks falls back
-# to the bundled one.
+# to the bundled one. `--diarized` joins diarization.json and attribution.json
+# beside each fixture's transcript.json, so utterances carry real per-speaker
+# labels instead of one placeholder; a fixture missing either file falls back
+# to its transcript as written. --repo-root can point at a "shadow root" that
+# only holds Tests/regression/ami/{manifest.json,score.py,thresholds.json} and
+# reference/<id>/ fixtures, not a full checkout, which is how a WhisperKit
+# transcript set (not the committed human reference) gets benched.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
