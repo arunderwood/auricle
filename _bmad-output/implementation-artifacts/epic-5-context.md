@@ -4,7 +4,7 @@
 
 ## Goal
 
-Let auricle record meetings itself instead of only importing files. A fresh Mac walks through a trust-building onboarding flow: mic, system audio, notifications, then vault, Obsidian and API key. The user then starts and stops a recording of any meeting app with no bot joining the call. The recording lands as a Whisper-native WAV and flows into the Epic 4 pipeline up to `awaiting_attribution`. The recording indicator is the visible privacy promise. The main window and its Record button are Epic 6, so this epic ships a debug-only trigger to exercise capture end to end.
+On a fresh Mac, a user grants permissions through a 4-step onboarding gauntlet, starts a recording, and auricle captures the meeting (system audio from a Core Audio process tap, mixed with the microphone) into a Whisper-native WAV file; the pipeline then advances automatically to `awaiting_attribution`. Capture runs only inside the GUI process in this epic — the CLI `record`/`stop` verbs stay stubs. The `RecordingIndicator` is the visible proof of the app's privacy contract, and mid-capture permission revocation is handled so partial audio is never silently lost. This is the epic that turns the pipeline (built in Epics 1–4) from "runs on pre-existing recordings" into "runs on audio auricle itself captured."
 
 ## Stories
 
@@ -13,7 +13,7 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
 - Story 5.3: WAVWriter — Streaming PCM 16-bit 16kHz Mono WAV
 - Story 5.4: Capture Stage + State-Machine Integration + Crash Recovery + Mid-Capture Revocation
 - Story 5.5: RecordingIndicator Atomic Component (Privacy Contract Surface)
-- Story 5.6: Throwaway Debug Record Trigger (Epic 6 Deletes It)
+- Story 5.6: Throwaway Debug Record Trigger (Epic 6 deletes it)
 - Story 5.7: OnboardingCoordinator + Welcome / Vault / Obsidian / API Key / Expectation Flow
 - Story 5.8: J0 Permission Steps (Microphone, System Audio, Notifications)
 - Story 5.9: self.wikilink Setup During Onboarding
@@ -21,74 +21,33 @@ Let auricle record meetings itself instead of only importing files. A fresh Mac 
 
 ## Requirements & Constraints
 
-- Captures all system audio from any meeting app (Zoom, Teams, Meet in a browser) plus the user's microphone. Capture is passive: no added latency and no muting. Nothing signals capture to other participants.
-- Output is one mono 16kHz PCM 16-bit WAV per meeting in the cache directory. The file is 0600 inside a 0700 directory, and partial audio always survives a failure.
-- Nothing blocks a start:
-  - A denied microphone records system audio only, and the metadata says so.
-  - macOS offers no public way to read or request the System Audio Recording grant, so auricle treats it as unknown. Onboarding triggers the system prompt through `Capture`'s `SystemAudioPermissionProbe`, a 1-second capture. `Permissions` cannot call it, because `Capture` depends on `Permissions`.
-- Exact-zero system buffers are ambiguous. They can mean silence, a missing grant, or a known OS fault. Never fail a capture on them; count them.
-- Idle CPU with the app open and not recording stays ≤1%. The story measures it.
-- Onboarding copy is plain and purpose-first, and each permission step has a "why" line. Denied Notifications and a missing API key degrade gracefully and never block.
-- Accessibility: VoiceOver labels are set, Reduce Motion disables the pulse, color is never the only signal, and Light, Dark and Increased Contrast all hold.
-- The minimum macOS is 14.4, the process-tap floor. Development and testing happen on the current macOS release.
+- Start/stop capture via a prominent control (the button itself lands in Epic 6; this epic wires the underlying path), with an unambiguous recording-state indicator visible throughout.
+- System audio must capture without any per-platform integration (Zoom, Meet, Teams, Discord, browser audio all work the same way) and mix with the microphone into one recording.
+- Permission requests explain themselves in plain language and degrade gracefully on denial — nothing about starting a recording is ever blocked by a missing grant; missing permissions are detectable on launch with a clear remediation path.
+- User-editable config lives in a plain, hand-editable file under `~/.auricle/`, edited key-by-key without disturbing other keys/comments; secrets never go there.
+- Idle CPU stays ≤1% when not recording; active capture adds no perceivable audio latency to the meeting app; cached audio is 0600 and confined to user-owned directories; auricle gives other participants no indication capture is occurring.
+- Accessibility: real VoiceOver labels, state never conveyed by color alone, Reduce Motion simplifies/removes animation. Every stage stays idempotent; a revoked Notifications permission degrades to a log line, never a crash.
 
 ## Technical Decisions
 
-- **System audio comes from a Core Audio global process tap:**
-  - The tap excludes auricle's own process and is read through a private aggregate device and an IOProc.
-  - The microphone comes from AVAudioEngine.
-  - `AudioMixer` resamples both to 16kHz with `AVAudioConverter` and mixes them to mono.
-  - A `SystemAudioSource` seam keeps a ScreenCaptureKit fallback swappable.
-  - A watchdog rebuilds the tap, the aggregate device and the IOProc after 30s of exact zeros, at most once per 30s.
-- **`Info.plist` must carry `NSAudioCaptureUsageDescription` as a literal key.** A missing key fails silently with zero buffers. `scripts/check.sh app` asserts the key. `NSScreenCaptureUsageDescription` goes away.
-- **`PermissionChecker` is the only place that queries or requests permissions,** and a lint rule enforces this:
-  - Status values are `.granted`, `.denied`, `.notDetermined` and `.unknown`.
-  - `check` and `request` are async, and deep links are `URL?`.
-  - Each deep link is verified on the target macOS before it is recorded.
-- **Capture runs in the GUI process only.** TCC grants belong to the app bundle. The `auricle record` and `stop` verbs stay stubs until Story 9.5.
-- **Capture bypasses the per-stage runner:**
-  - `StateStore.beginCapture` inserts the `recording` row with its start event, `capture_started_at`, `audio_cache_path` and the IANA `capture_time_zone`.
-  - `StateStore.finishCapture` is the end transaction.
-  - Transitions add capture: `recording` → `captured` or `capture_failed`.
-- **After `captured`, the GUI runs the existing pipeline runner in-process** up to review-diarization, so the meeting rests at `awaiting_attribution`.
-- **On launch, an orphaned `recording` row is recovered.** If it has audio, its WAV header is repaired and it moves to `captured`. If it has none, it moves to `capture_failed` with reason `interrupted`.
-- **`WAVWriter` is the one recorded exemption from the atomic-write rule.** It streams through a `FileHandle` and patches the header on finalize and on recovery. It reuses the importer's WAV header code and cache path helpers.
-- **Local dates use the stored capture zone,** falling back to the current zone. A re-publish's re-run date uses the current zone.
-- **A reported revocation fails the capture:** it saves the partial audio, marks `capture_failed` with `permission_revoked_midstream`, and notifies through a capture-failure notifier call. If notifications are denied, it logs instead.
-- **GUI logic that needs tests lives in a new `AppUI` SwiftPM target.** That covers the recording indicator's appearance mapping, the onboarding coordinator, and the permission and self-wikilink steps. `App/` holds only views and wiring, and no snapshot-testing dependency is added.
-- **Config is written through a key-preserving `ConfigWriter`,** because the maintainer edits the file by hand. Onboarding runs when no completion marker exists in Application Support, not when the config file is missing.
-- **A configured `self.wikilink` wins over the calendar-derived identity.**
+- **Capture backend:** system audio comes from a Core Audio global process tap excluding auricle's own process (aggregate device + IOProc); the microphone comes from `AVAudioEngine`. Both feed an `AudioMixer` that resamples to 16kHz mono PCM-16. System audio sits behind a `SystemAudioSource` seam so ScreenCaptureKit can replace the tap later without touching the mixer/writer/stage — the recorded fallback if live testing against Teams/Meet/Zoom fails. macOS floor rises to 14.4 (the tap's minimum). A watchdog rebuilds the tap/device/IOProc after 30s of exact-zero buffers (max once per 30s) but never fails the capture, since exact zeros are indistinguishable from silence, a missing grant, or a real fault.
+- **`WAVWriter` is the one recorded exemption from atomic temp-write+rename:** a ~115MB stream that must survive a crash partially can't be written atomically. It streams via `FileHandle`, creates the file 0600 in a 0700 directory up front, and patches the RIFF/data header on finalize or crash-recovery repair.
+- **Capture bypasses the per-stage `StageRunner`** (built for one closure over an existing row) since start/stop are independent, user-paced calls hours apart. `StateStore.beginCapture`/`finishCapture` run the same start/end two-transaction pattern directly; `(.capture, .recording) → [.captured, .captureFailed]` is added to the transition table. No permission ever blocks a start. An orphaned `recording` row with no live session is repaired at next launch: audio bytes present → header repaired, moves to `captured`; none → `capture_failed` (`interrupted`).
+- **Mid-capture revocation the OS reports** finalizes the partial WAV, moves to `capture_failed` (`permission_revoked_midstream`), and notifies (or logs `warn` if notifications are denied). A revocation the OS doesn't report only shows as exact zeros. Transient stream errors restart inline, capped at 3 within 30s before failing permanently.
+- **Time zone:** `capture_started_at` is UTC; a new nullable `meetings.capture_time_zone` stores the IANA zone at capture start (NULL for imported rows). Note/filename dates use that zone, falling back to the current zone when NULL; a re-run's date suffix always uses the *current* zone.
+- **`PermissionChecker`** is the sole choke point (lint-enforced) for TCC state across four categories (system-audio, microphone, notifications, calendar OAuth) and four statuses (granted/denied/notDetermined/unknown). System-audio always reports `unknown` (no read API exists); its actual OS prompt fires separately through `Capture`'s `SystemAudioPermissionProbe`, since `Permissions` can't depend on `Capture`. Status is memoized per process, invalidated by `refresh()`. Each category maps to a verified System Settings deep link except calendar OAuth (a re-auth flow instead). The literal `NSAudioCaptureUsageDescription` Info.plist key is required — a missing key silently zero-buffers capture.
+- A new **`AppUI`** SwiftPM target holds GUI view models/components with real logic so `swift test` covers them; `App/` stays thin views-and-wiring, and no snapshot-testing dependency is introduced.
+- **`ConfigWriter`** (in `Core`) edits one key at a time in `~/.auricle/config.toml` atomically, preserving every other key/comment, and never writes secrets; `Config` gains `selfWikilink: String?`. Onboarding gates on a completion marker in Application Support, not config-file presence. `self.wikilink` pre-fills from the system account name and, once set, always wins over a later calendar-derived identity.
 
 ## UX & Interaction Patterns
 
-- Onboarding runs in the existing single window and never opens a new one: Welcome ("4 quick steps"), then Microphone, System Audio, Notifications, Configure, Done.
-- A denied permission step offers Open Settings, Skip and Try Again. Try Again appears only while the status is not yet determined.
-- The System Audio step never claims success, because the grant cannot be read.
-- The Configure step:
-  - the vault picker validates and never creates the vault
-  - the Obsidian check opens the vault by URL and does not block if Obsidian is missing
-  - the API key step is skippable
-  - the self wikilink is pre-filled from the account name, with vault suggestions
-  - the expectations explainer comes last
-- Done shows a quiet "You're set up" state.
-- The recording indicator:
-  - active: filled red `record.circle.fill` with a 1.4s pulse and the label "Recording"
-  - idle: outlined, with the label "Not recording"
-  - it sits in the window toolbar until Epic 6's header takes it
+- J0 flow: Welcome (names the 4 steps, no TCC prompt yet) → Microphone → System Audio → Notifications → Configure (vault path, Obsidian-open check, API key, `self.wikilink`, first-meeting expectations) → quiet "you're set up" Done. Each permission step shows a plain-language *why* line before the system dialog, so it's never a surprise. Denials never hard-block: denied mic still records (system-audio-only) with a settings deep link; the System Audio grant can't be read back, so copy hedges ("if you chose Allow, you're done…"); denied Notifications just goes quiet, with the meeting list as fallback visibility.
+- `RecordingIndicator` is a pure `(isRecording, reduceMotion) → appearance` mapping: active = filled red icon pulsing 0.7↔1.0 over 1.4s (no pulse under Reduce Motion) + label "Recording"; idle = outline icon, secondary tint, "Not recording." Label always accompanies the symbol — color is never the sole signal. Lives in the window toolbar this epic; Epic 6 moves it into the main-window header.
+- A `#if DEBUG`-only Cmd-Shift-R record/stop trigger stands in for the real Record button so capture can be exercised before Epic 6 exists.
 
 ## Cross-Story Dependencies
 
-- **Build order:**
-  - Wave 1, all parallel: 5.1, 5.3, 5.10, 5.5. Land 5.5 early, because it adds the `AppUI` target.
-  - Wave 2: 5.2 (after 5.1 and 5.3) and 5.7 (after 5.10 and `AppUI`).
-  - Wave 3: 5.4 (after 5.2), 5.8 (after 5.1, 5.2's probe and 5.7), and 5.9 (after 5.7 and 5.10).
-  - Wave 4: 5.6 (after 5.4 and 5.5), the dogfood run.
-  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6.
-- **Story 5.2 carries a manual gate.** A 5-minute capture each from Teams, Meet in Chrome and Zoom must be audible, plus a 60-minute soak. A failure stops the story and triggers a correct-course to the ScreenCaptureKit fallback.
-- **Later epics own:**
-  - Story 6.2: deleting the debug trigger and moving the indicator
-  - Story 6.3: the empty meeting list
-  - Story 9.2: the silent post-onboarding doctor run
-  - Story 9.5: the `record` and `stop` CLI verbs and how they reach the app
-  - Epic 7: the "Set me first…" state
-- **Open maintainer decision:** ad-hoc Debug signing likely makes each rebuild re-prompt for permissions, and it may block cross-process Keychain reads. The choice is to keep ad-hoc until Story 9.3 or pull its signing identity forward.
+- Build waves: (1) 5.1, 5.3, 5.10, 5.5 — no deps; land 5.5 early since it adds the `AppUI` target 5.7 needs. (2) 5.2 (needs 5.1, 5.3) and 5.7 (needs 5.10, `AppUI`). (3) 5.4 (needs 5.2), 5.8 (needs 5.1, 5.2's probe, 5.7), 5.9 (needs 5.7, 5.10). (4) 5.6 (needs 5.4, 5.5), then end-to-end dogfood. Critical path: 5.1/5.3 → 5.2 → 5.4 → 5.6.
+- Story 5.2's manual live-app gate (Teams/Meet/Zoom) and 60-minute soak need the maintainer; a failed gate triggers a correct-course to the ScreenCaptureKit fallback, reopening the permission surface in 5.1/5.8.
+- Forward references, resolved in later epics and non-blocking here: 6.2 deletes 5.6's debug trigger and relocates the indicator; 6.3 owns the empty meeting list; 9.2 runs Doctor once after onboarding; 9.5 decides how CLI `record`/`stop` reach the GUI process; Epic 7 owns the "set me first" empty-`self.wikilink` state.
+- Shared files across stories: `Package.swift` (5.1, 5.2, 5.4, 5.5); `Info.plist`/`scripts/check.sh` (5.1 only); `StateStore`/`PipelineTransitions` (5.4 only).
