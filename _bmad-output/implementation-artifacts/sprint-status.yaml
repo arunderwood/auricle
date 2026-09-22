@@ -83,6 +83,8 @@ development_status:
   4-11-offline-recall-bench: backlog
   4-12-item-text-recall-and-false-keep-scoring: backlog
   4-13-prompt-recall-pass: done
+  4-14-retention-unset-first-token-gate-measure-dropped-text: backlog
+  4-15-summarizer-under-production-es2002b-es2004a: backlog
   epic-4-retrospective: done
 
   epic-5: backlog
@@ -459,7 +461,11 @@ action_items:
       moving the floor forecloses it. Multi-pass summarization is struck as an
       option: a second pass cannot recover text that was never transcribed."
     owner: "maintainer"
-    status: open
+    status: done
+    resolution: "2026-09-21. Lever: a WhisperKit decoding gate (firstTokenLogProbThreshold
+      -1.5 with temperatureFallbackCount 0) was dropping whole windows; fixed in
+      Story 4.14, no ASR swap. Floor: stands at 80%; Story 4.15 owns the summarizer
+      residual. sprint-change-proposal-2026-09-21.md."
     ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"
   - id: "story-4-13-rerun-part-b-under-the-promoted-prompt"
     epic: 4
@@ -467,7 +473,9 @@ action_items:
       and record it, so Tests/fixtures/epic4-exit-results.md and
       Tests/regression/ami/history.jsonl carry a full-pipeline number for it. Until
       one exists, min_item_recall stays at 0.35 and cannot be raised to guard the
-      new baseline. Expect roughly 74%, not a pass."
+      new baseline. Expect roughly 74%, not a pass. Run it under Story 4.14's fix so
+      the recorded row is the fixed pipeline. Unrecorded run on 2026-09-21 under the
+      fix: 14/19 = 74%, WER 0.20 to 0.25, false keeps 3."
     owner: "maintainer"
     status: open
     ref: "_bmad-output/implementation-artifacts/spec-4-13-prompt-recall-pass.md"

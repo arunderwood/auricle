@@ -268,7 +268,7 @@ deferred:
 
 `TranscriberStrategy` has no diarization input, so a transcript from this story can carry one placeholder speaker only. How real diarized labels reach an immutable `transcript.json` is Story 4.2's decision, and it is logged as deferred work rather than guessed here.
 
-Temperature fallback is disabled because Whisper's fallback samples at a raised temperature, which would break the byte-identical re-run the acceptance criteria require. Real audio may show repetition loops that fallback would have recovered, so Story 4.9's evidence decides whether to revisit it.
+Temperature fallback is disabled because Whisper's fallback samples at a raised temperature, which would break the byte-identical re-run the acceptance criteria require. Real audio may show repetition loops that fallback would have recovered, so Story 4.9's evidence decides whether to revisit it. Revisited 2026-09-21: the fallback stays off, and the first-token gate goes with it (Story 4.14, `sprint-change-proposal-2026-09-21.md`).
 
 The worker provisions a missing model before `StageRunner.run` opens Txn A, so a first-run download cannot consume the 60s `transcribing` stale budget. Transcription still runs with `download: false`. Onboarding or `doctor` should own provisioning later.
 
