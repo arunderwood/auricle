@@ -11,15 +11,21 @@ deferred:
   - summary: >-
       WAVWriter has no Sendable/actor isolation and no lock, with no stated
       concurrency contract for how write()/finalize()/repairHeader(at:) may
-      be called relative to each other.
+      be called relative to each other; finalize() is not idempotent and
+      write() after finalize() fails on a closed handle rather than being a
+      defined no-op.
     evidence: |-
       If true, this is medium: a data race on `bytesWritten` or the shared
       `FileHandle` under concurrent calls. Unverifiable within Story 5.3,
       which has no concurrent caller — WAVWriter is only exercised
-      single-threaded from WAVWriterTests. Settled by Story 5.4's actual
-      usage pattern: which task/thread CaptureStage uses to create and drive
-      a WAVWriter, and whether write() can be called while finalize() or
-      repairHeader() run.
+      single-threaded from WAVWriterTests. Per epic-5-context.md's build
+      order, Story 5.2 (Process-Tap + AVAudioEngine Capture Session +
+      AudioMixer), not 5.4, is WAVWriter's direct consumer (5.2 depends on
+      5.1 and 5.3) and is likely to drive it from a real-time audio
+      callback. Settled by Story 5.2's actual usage pattern: which
+      task/thread creates and drives a WAVWriter, whether write() can be
+      called while finalize()/repairHeader() run, and whether finalize()
+      needs to be idempotent.
     location: >-
       Sources/Capture/WAVWriter.swift
     severity: medium (unverified)
@@ -101,6 +107,21 @@ baseline_revision: '07d3c28cc0ff71d1551cdc30becb2540d9c189b0'
   - `[low]` `[reject]` (blind-hunter) no test exercises `write(_:)` after `finalize()` or a double `finalize()` — unlikely in everyday use (Story 5.4's real caller is expected to sequence these correctly) and the fix requires defining new lifecycle-misuse behavior, not a direct correction.
   - `[low]` `[patch]` (blind-hunter) `repairHeader(at:)`'s exactly-44-byte (zero-sample) boundary is untested — only the 9-byte too-short rejection is covered; fix: add a test for the zero-duration recovery case.
 
+### 2026-09-22 — Review pass (external, PR #112)
+A peer session reviewing PR #112 on the maintainer's behalf. All 8 findings verified by direct code inspection (and, for the epic-5-context.md claim, by checking `git show 55c2522` and `deferred-work.md` directly) before acting.
+- verdicts: 8 findings — high 1, medium 6, low 0, false 0, maybe-false 1
+- findings:
+  - `[high]` `[patch]` neither `finalize()` nor `repairHeader(at:)` called `handle.synchronize()` (unlike `AtomicWriter`, which fsyncs) — a patched header could survive only in the page cache; power loss right after `finalize()` commits `captured` leaves the on-disk header at data size 0 and the meeting transcribes as empty, with no recovery path since it's no longer in `recording`. Fix: `synchronize()` after `patchSizes` in both paths.
+  - `[medium]` `[patch]` the prior pass's overflow fix was incomplete: `36 + dataSize` in `patchSizes` still traps for `dataSize` within 36 of `UInt32.max`, and nothing bounded `write(_:)` itself, so a capture past ~4GiB could never be finalized or repaired once written. Fix: `maxDataSize = UInt32.max - 36` constant, enforced by `write(_:)` refusing (not just failing later at `finalize`) any write that would cross it.
+  - `[medium]` `[patch]` `write(_:)` accepted an odd byte count, and `repairHeader` could patch an odd `data` chunk size with no pad byte and report a duration including half a sample. Fix: `write(_:)` rejects odd-length data; `repairHeader` rounds its recovered size down to the last whole sample.
+  - `[medium]` `[patch]` `repairHeader(at:)` patched offsets 4-7/40-43 of any file ≥44 bytes without checking it was actually a WAV. Fix: `validateWAVHeader` confirms `RIFF`/`WAVE`/`data` at their fixed offsets first.
+  - `[medium]` `[patch]` `epic-5-context.md`'s regeneration (step-01 of this run) was a false positive: commit `55c2522`, already in this run's baseline, had already updated it: the file's mtime looked stale only because a git-worktree checkout doesn't preserve original commit timestamps. The regenerated version dropped the "Edit freely" marker, rewrote hand-edited prose, and asserted the capture fallback is tracked in `deferred-work.md`, which `grep` confirms it is not. Fix: reverted to the baseline version (`git checkout 07d3c28 -- epic-5-context.md`).
+  - `[medium]` `[patch]` (revises this pass's earlier `reject` on the same root cause) `init` created the file via `FileManager.createFile` + a separate `setAttributes`, so 0600 landed after the file existed, a pre-existing `audio.wav` was silently overwritten, and a pre-existing directory kept its prior permissions. The earlier rejection held because the only fix on the table added guard branches; this pass's concrete fix is a direct swap, not an addition: `open(2)` with `O_CREAT|O_EXCL|O_WRONLY` mode 0600 (atomically refuses an existing file) and an unconditional `setAttributes` on the directory. Also let `.swiftlint.yml` drop the `atomic_writer_bypass` exclusion for `WAVWriter.swift`, since neither pattern it matches appears anymore.
+  - `[medium]` `[patch]` `WAVWriterTests.swift`'s EBADF test called `close(writer.handle.fileDescriptor)` directly; Swift Testing runs suites in parallel, so the freed fd number could be reassigned to an unrelated concurrently-open file before the test's next write, risking cross-test flakiness or corruption. Fix: `dup2` a read-only `/dev/null` onto the same fd number instead of closing it, so the number is never released back to the OS.
+  - `[maybe-false]` `[defer]` (revises this pass's `Story 5.4` reference) `WAVWriter` has no `Sendable`/isolation and `finalize()` isn't idempotent — still unverifiable without a concurrent caller, but per `epic-5-context.md`'s build order it's Story 5.2 (Process-Tap + AVAudioEngine Capture Session), not 5.4, that depends directly on 5.3 and is the actual consumer likely driving `WAVWriter` from a real-time audio callback. Frontmatter `deferred` entry corrected to name 5.2 and to include `finalize()` idempotency as part of what that story must settle.
+
+Applying these fixes also surfaced one implementation bug in the fixes themselves, caught by `swift test` before commit: `repairHeader(at:)`'s new header-validation step needed to *read* bytes, but the function opened the file `FileHandle(forWritingTo:)` (write-only) — reading from it threw `EBADF`. Fixed by opening `FileHandle(forUpdating:)` (read-write) instead.
+
 ## Design Notes
 
 The header is written twice, not once: a placeholder 44-byte header goes out at `init` (so the file is non-empty and byte-sliceable immediately, and so `finalize()`/`repairHeader` always patch a header of the same known shape), then `finalize()` (or `repairHeader` after a crash) overwrites only bytes 4-7 and 40-43 in place via `FileHandle.seek(toOffset:)` — the rest of the header and all sample data are untouched. This is why only two offsets matter regardless of how the header was built.
@@ -114,22 +135,23 @@ The header is written twice, not once: a placeholder 44-byte header goes out at 
 
 ## Auto Run Result
 
-**Summary:** Implemented `WAVWriter`, a `FileHandle`-based streaming WAV writer for `Capture`: creates the 0700 cache directory and 0600 `audio.wav` before any sample write, streams PCM via `write(_:)`, patches the RIFF/data chunk sizes on `finalize()`, and recovers a crashed file's header via `static repairHeader(at:)`. Widened `AudioImporter.wavFile(pcm:)` to module-internal so both types share one header byte layout. A review pass found 4 groups of real defects (2 medium, 2 low), all patched; 3 groups were rejected as low-severity/out-of-scope, 1 false, 1 deferred.
+**Summary:** Implemented `WAVWriter`, a `FileHandle`-based streaming WAV writer for `Capture`: creates the 0700 cache directory and 0600 `audio.wav` (via `open(2)` with `O_CREAT|O_EXCL`, refusing a pre-existing file) before any sample write, streams PCM via `write(_:)` (rejecting odd-length or over-limit writes), patches and fsyncs the RIFF/data chunk sizes on `finalize()`, and recovers a crashed file's header via `static repairHeader(at:)` (which validates the file is actually a WAV first, and rounds an odd trailing byte down to the last whole sample). Widened `AudioImporter.wavFile(pcm:)` to module-internal so both types share one header byte layout. Two review passes ran: this workflow's own 4-layer review (17 findings), and an external peer-session review of the opened PR (8 findings, including 1 high-severity durability bug). All confirmed-real findings from both passes are patched.
 
 **Files changed:**
-- `Sources/Capture/WAVWriter.swift` (new) — the writer itself: init/write/finalize/repairHeader, overflow-guarded chunk-size patching, `FileHandle` failures mapped to `CaptureError` at every write site, handle closed via `defer`.
+- `Sources/Capture/WAVWriter.swift` (new) — the writer: init/write/finalize/repairHeader, overflow-bounded chunk-size patching (`maxDataSize`), whole-sample-only writes, `RIFF`/`WAVE`/`data` validation before `repairHeader` patches anything, `synchronize()` after every header patch, `FileHandle` failures mapped to `CaptureError` at every write site, handle closed via `defer`, exclusive file creation via raw `open(2)`.
 - `Sources/Capture/AudioImporter.swift` — `wavFile(pcm:)` widened from `private` to module-internal; no behavior change.
-- `Tests/CaptureTests/WAVWriterTests.swift` (new) — 9 tests covering the I/O matrix plus the zero-duration `repairHeader` boundary added during review.
-- `.swiftlint.yml` — added `WAVWriter.swift` and its test file to the `atomic_writer_bypass` exclusion list (Decision 1.4's recorded exemption).
-- `_bmad-output/implementation-artifacts/epic-5-context.md` — recompiled (step-01) because planning docs had changed since the cached version; not WAVWriter-specific.
+- `Tests/CaptureTests/WAVWriterTests.swift` (new) — 12 tests covering the I/O matrix, the zero-duration and non-WAV-file `repairHeader` boundaries, odd-byte-count rejection, and odd-trailing-byte recovery; the simulated-write-failure test uses `dup2` onto `/dev/null` rather than closing the real fd, so it can't leak a reusable fd number into a concurrently-running test.
+- `.swiftlint.yml` — added, then removed, an `atomic_writer_bypass` exclusion for `WAVWriter.swift` itself (no longer needed once file creation moved off `FileManager.createFile`); kept the exclusion for the test file's own fixture writes.
+- `_bmad-output/implementation-artifacts/epic-5-context.md` — **unchanged from baseline.** This run's step-01 regenerated it based on a stale mtime comparison that doesn't hold in a git worktree (checkout order, not edit history); the peer review caught that commit `55c2522`, already in this run's baseline, had already updated it, and that the regenerated version fabricated a claim not present in `deferred-work.md`. Reverted.
 
-**Review findings breakdown (17 findings across blind-hunter, edge-case-hunter, verification-gap, intent-alignment; see `## Review Triage Log` for full detail):**
-- Patched (4 entries, 8 rows): UInt32 overflow trap in `finalize()`/`repairHeader(at:)` on >37h captures (medium) — now throws `.streamInterrupted` via `UInt32(exactly:)`; inconsistent `CaptureError` mapping on `init`'s header write and `patchSizes` (medium) — now wrapped through `captureError(for:)` everywhere `write(_:)` is; `FileHandle` leak if `patchSizes` throws before close (low) — now closed via `defer`; `repairHeader`'s zero-byte boundary untested (low) — test added.
-- Rejected (3 entries, 5 rows): silent overwrite of a pre-existing `audio.wav`/stale directory permissions on re-init (low, unlikely given fresh-`MeetingID`-per-session and non-trivial fix); spec's own Verification section omitting lint commands (fix would edit the spec itself, out of scope for triage); no test for write-after-finalize/double-finalize misuse (low, unlikely, non-trivial).
-- False (1): `handle`'s internal (not `private`) visibility — refuted as this codebase's established same-module-test-access pattern, matching `AudioImporter.wavFile`/`SnippetExtractor.wavData` precedent.
-- Deferred (1): no `Sendable`/isolation contract on `WAVWriter` — real only if Story 5.4 introduces concurrent access; recorded in frontmatter `deferred` for that story to settle.
+**Review findings breakdown (see `## Review Triage Log` for full per-finding detail):**
+- Pass 1 (this workflow's 4 layers, 17 findings): 4 entries patched (2 medium: overflow-trap guard, `CaptureError` mapping consistency; 2 low: `FileHandle` leak on throw, untested `repairHeader` zero-byte boundary). 3 entries rejected as low-severity/non-trivial at the time. 1 false (test-access visibility). 1 deferred (concurrency contract).
+- Pass 2 (external peer review of PR #112, 8 findings, all confirmed real): 1 high (missing `fsync` — a patched header could survive only in the page cache, so power loss right after `finalize()` leaves a `captured` meeting with a 0-byte-duration header and no recovery path). 6 medium, all patched: the overflow fix from pass 1 was itself incomplete (`36 + dataSize` could still overflow, and nothing bounded `write(_:)`); odd-byte-count handling was missing entirely; `repairHeader` never validated the file was actually a WAV before patching it; the epic-5-context.md regeneration (above); the pass-1 "reject" on silent-overwrite/stale-permissions was revised to patch once a genuinely trivial fix (`open(2)` with `O_EXCL`) was available; the EBADF test's direct fd-close was a latent CI-flakiness risk. 1 finding revised the pass-1 `deferred` entry's target story from 5.4 to 5.2 (WAVWriter's actual direct consumer per the build order) and added `finalize()` idempotency to what that story must settle.
+- Applying pass 2's fixes surfaced one bug in the fixes themselves before commit: `repairHeader`'s new WAV-validation needed to read the file, but it was opened write-only — `swift test` caught the resulting `EBADF` immediately; fixed by opening `forUpdating:` instead.
 
-**Follow-up review recommendation:** `true`. Two medium-severity entries were patched this pass (the overflow-trap fix and the error-mapping fix), both touching `WAVWriter`'s core write/finalize/repair paths — worth a fresh pass to confirm the patches didn't introduce their own gap before Story 5.4 builds on this surface.
+**Verification performed:** `swift build` clean; `swift test --filter CaptureTests` 22/22 pass (12 `WAVWriterTests` + 10 `AudioImporterTests`); `swiftformat --lint` and `swiftlint` clean on all changed files.
+
+**Follow-up review recommendation:** `true`. This pass patched 1 high and 6 medium findings against code that had already been through one review round — including a data-loss-on-power-failure bug that round missed entirely — which is reason enough for a fresh pass before Story 5.2 builds on this surface.
 
 **Verification performed:** `swift build` clean; `swift test --filter WAVWriterTests` 9/9 pass; `swift test --filter CaptureTests` 19/19 pass (9 new + 10 existing `AudioImporterTests`, confirming the `wavFile` visibility change didn't regress the importer). Matrix Test Audit: all 5 I/O-matrix rows covered by a passing test.
 

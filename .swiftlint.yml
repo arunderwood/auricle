@@ -134,11 +134,6 @@ custom_rules:
     excluded:
       # The primitive's own implementation.
       - ".*/Sources/Core/AtomicWriter\\.swift$"
-      # Decision 1.4's recorded exemption: a multi-hour capture cannot
-      # buffer its whole recording in memory to write atomically at the
-      # end, so WAVWriter streams through its own FileHandle and patches
-      # the header in place instead of going through AtomicWriter.
-      - ".*/Sources/Capture/WAVWriter\\.swift$"
       # Write a throwaway executable shell-script fixture for subprocess
       # dispatch tests — a test tool, not a vault/cache artifact, so it
       # sits outside AtomicWriter's domain entirely.

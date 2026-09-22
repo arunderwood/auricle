@@ -137,10 +137,15 @@ struct WAVWriterTests {
         try writer.write(tonePCM(seconds: 0.1))
         let bytesBeforeFailure = try Data(contentsOf: fixture.audioURL())
 
-        // Closing the raw descriptor out from under the handle forces the
+        // Redirecting the descriptor to a read-only /dev/null forces the
         // next write to fail with EBADF — a real, non-ENOSPC POSIX failure,
-        // without needing an actually full disk.
-        close(writer.handle.fileDescriptor)
+        // without needing an actually full disk. Using dup2 rather than
+        // close(writer.handle.fileDescriptor) never releases the real fd
+        // number back to the OS, so Swift Testing's parallel suites can't
+        // reassign it to an unrelated file mid-test.
+        let devNull = open("/dev/null", O_RDONLY)
+        defer { close(devNull) }
+        dup2(devNull, writer.handle.fileDescriptor)
 
         do {
             try writer.write(tonePCM(seconds: 0.1))
@@ -197,6 +202,52 @@ struct WAVWriterTests {
 
         #expect(throws: CaptureError.self) {
             try WAVWriter.repairHeader(at: fixture.audioURL())
+        }
+    }
+
+    @Test func repairHeaderRejectsAFileThatIsNotAWav() throws {
+        let fixture = WriterFixture()
+        defer { fixture.cleanUp() }
+        try FileManager.default.createDirectory(at: fixture.directory(), withIntermediateDirectories: true)
+        // 50 zero bytes: long enough to pass the size check, but none of
+        // RIFF/WAVE/data appear where a real header would put them.
+        try Data(repeating: 0, count: 50).write(to: fixture.audioURL())
+
+        #expect(throws: CaptureError.self) {
+            try WAVWriter.repairHeader(at: fixture.audioURL())
+        }
+    }
+
+    @Test func repairHeaderRoundsAnOddTrailingByteDownToTheLastWholeSample() throws {
+        let fixture = WriterFixture()
+        defer { fixture.cleanUp() }
+        let writer = try fixture.makeWriter()
+        try writer.write(tonePCM(seconds: 1))
+
+        // One extra byte past the last whole sample, simulating an OS-level
+        // partial write mid-sample — appended directly to the file, since
+        // `write(_:)` itself rejects an odd-length call.
+        let handle = try FileHandle(forWritingTo: fixture.audioURL())
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data([0x2A]))
+        try handle.close()
+
+        let recovered = try WAVWriter.repairHeader(at: fixture.audioURL())
+
+        let bytes = try Data(contentsOf: fixture.audioURL())
+        let dataSize = bytes[40 ..< 44].withUnsafeBytes { $0.load(as: UInt32.self) }
+        #expect(dataSize.isMultiple(of: 2))
+        #expect(Int(dataSize) == Int(16000 * 2))
+        #expect(recovered == 1)
+    }
+
+    @Test func writeRejectsAnOddNumberOfBytes() throws {
+        let fixture = WriterFixture()
+        defer { fixture.cleanUp() }
+        let writer = try fixture.makeWriter()
+
+        #expect(throws: CaptureError.self) {
+            try writer.write(Data([0x01, 0x02, 0x03]))
         }
     }
 }
