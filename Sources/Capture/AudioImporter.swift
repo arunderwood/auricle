@@ -239,8 +239,11 @@ public struct AudioImporter: Sendable {
         return PCM(samples: samples, frameCount: frameCount)
     }
 
-    /// A canonical 44-byte RIFF/WAVE header followed by the samples.
-    private static func wavFile(pcm samples: Data) -> Data {
+    /// A canonical 44-byte RIFF/WAVE header followed by the samples. Also
+    /// `WAVWriter`'s source for that same 44-byte layout — an empty `pcm`
+    /// yields just the header, which is what a streaming writer needs as its
+    /// placeholder before it knows the final size.
+    static func wavFile(pcm samples: Data) -> Data {
         var data = Data()
         func append(_ text: String) {
             data.append(Data(text.utf8))
