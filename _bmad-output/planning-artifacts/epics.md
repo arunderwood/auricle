@@ -2421,8 +2421,12 @@ So that a decoding gate cannot remove a fifth of a meeting without a number chan
 **Then** it adds the reference content words that fall in a run of 25 or more with no hypothesis text, as a count and a fraction, and `report` prints the fraction per meeting and enforces `max_dropped_reference_fraction` from `thresholds.json`
 
 **Given** the fix and the promoted prompt
-**When** Story 4.10 Part B is rerun with `AURICLE_AMI_RECORD=1`
-**Then** `history.jsonl` carries the first full-pipeline row for the promoted prompt and `min_item_recall` is raised to guard it
+**When** Story 4.10 Part B is rerun with `AURICLE_AMI_RECORD=1` three times
+**Then** `history.jsonl` carries three complete full-pipeline runs under the promoted prompt, `report` gates item recall, false keeps and dropped fraction on the median of the newest three complete runs under the current revision and prints older runs for context only, and `min_item_recall` is raised from that median with one item of slack
+
+**Given** the summarizer samples at the API default temperature, which `claude-opus-5` does not let a request change, and three runs of byte-identical input scored 10, 10 and 14 of 19
+**When** any recall number is recorded or gated
+**Then** a single run is a draw, never a result: the gate is the median of three (maintainer, 2026-09-21), and the bar stays 16 of 19
 
 ### Story 4.15: Summarizer Under-Production on ES2002b and ES2004a
 
@@ -2446,8 +2450,8 @@ So that the next prompt change targets a reproduced defect rather than the whole
 **When** they score 14 of 19 and 10 of 19
 **Then** the story names the summarizer input that differs between `SummarizeStage.summarize` and the bench runner before any prompt arm is run
 
-**Given** arms run one finding at a time
-**When** a recorded full-pipeline run reaches 16 of 19, or the maintainer rules that ES2004a's items leave the fixture with the rationale in its `expected.json` notes
+**Given** arms run one finding at a time, each claim of movement resting on the median of three bench runs
+**When** the median of three recorded full-pipeline runs under one revision reaches 16 of 19, or the maintainer rules that ES2004a's items leave the fixture with the rationale in its `expected.json` notes
 **Then** the story stops and Epic 4 exits through Story 4.10
 
 ---
