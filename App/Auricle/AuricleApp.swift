@@ -47,8 +47,7 @@ struct AuricleApp: App {
     }
 }
 
-/// `isRecording` is local UI state; nothing in the codebase observes real
-/// capture state yet, so it never reflects an actual recording.
+/// `isRecording` is local view state; no capture source drives it.
 private struct AuricleRootView: View {
     @State private var isRecording = false
 

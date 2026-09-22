@@ -123,7 +123,7 @@ func recordingIndicatorAppearance(isRecording: Bool, reduceMotion: Bool) -> Reco
 
 **Files changed:**
 - `Package.swift` -- added `AppUI` library product, `.target`, and `AppUITests` `.testTarget`.
-- `App/Project.swift` -- added `AppUI` to `auricleKitProducts` so both Xcode composition roots see it.
+- `App/Project.swift` -- added `AppUI` to `AuricleApp`'s own dependencies (not the shared `auricleKitProducts`, since `auricle-cli` doesn't need a SwiftUI module).
 - `App/Auricle/AuricleApp.swift` -- replaced the bare `Text("auricle")` window body with `AuricleRootView`, which toolbars a `RecordingIndicator` backed by a local `@State isRecording`.
 - `Sources/AppUI/RecordingIndicatorAppearance.swift` (new) -- pure `recordingIndicatorAppearance(isRecording:reduceMotion:)` mapping to symbol/tint/label/pulse.
 - `Sources/AppUI/RecordingIndicator.swift` (new) -- the SwiftUI view; reads Reduce Motion itself, pulses opacity 1.0→0.7→1.0 over a 1.4s full cycle when active and motion is allowed.
@@ -144,5 +144,16 @@ func recordingIndicatorAppearance(isRecording: Bool, reduceMotion: Bool) -> Reco
 - `cd App && tuist generate --no-open && xcodebuild -workspace App/Auricle.xcworkspace -scheme AuricleApp build` -- **BUILD SUCCEEDED**, both before and after patches.
 
 **Residual risks:**
-- The manual screenshot check (Light/Dark/Increased Contrast) called for in `## Verification` was not performed — this is a GUI-visual check with no CLI equivalent, and `isRecording` is still hardcoded `false` (Stories 5.4/5.6 wire the real signal), so only the idle state is currently observable anyway. Worth doing once Story 5.6 lands and both states are reachable.
 - View-level rendering (the toolbar item, the pulse's live state transitions) has no automated coverage, by design for this story (see deferred/rejected findings above).
+
+## Follow-up review pass (2026-09-22)
+
+A peer session relayed maintainer review feedback on the PR. Three findings, verified against the code before acting:
+
+- **Fixed** — `App/Project.swift` added `AppUI` to the shared `auricleKitProducts` list, so `auricle-cli` linked a SwiftUI-only module it never imports. Moved `AppUI` to `AuricleApp`'s own `dependencies` only; updated the header comment to say so. Verified: both `AuricleApp` and `auricle-cli` schemes build clean via `xcodebuild`.
+- **Fixed** — `AuricleRootView`'s doc comment said "nothing... observes real capture state *yet*," which reads as stale once Story 5.4/5.6 land. Reworded to the lasting fact: `"isRecording" is local view state; no capture source drives it.`
+- **Manual screenshot check, completed with a scope adjustment:** rendered the real `RecordingIndicator`/`RecordingIndicatorAppearance` production code through a throwaway `ImageRenderer` harness (outside the repo, deleted after use) forcing `colorScheme` — no system settings touched. Idle and recording states both confirmed correct in Light and Dark: filled red `record.circle.fill` + "Recording" vs. outlined `record.circle` + "Not recording" secondary tint, label always beside the symbol, legible on both backgrounds. **Increased Contrast and Reduce Motion could not be forced this way** — on this SDK, `colorSchemeContrast` and `accessibilityReduceMotion` are get-only `EnvironmentValues` properties (they read live OS state; `.environment()` can no longer override them), and forcing them for real would mean toggling the maintainer's actual System Settings > Accessibility, which this session won't do unprompted. Asked the maintainer directly; they chose to accept reasoning over a live check:
+  - *Increased Contrast*: `RecordingIndicator` draws only `Color(.systemRed)` and `.secondary` — both system semantic colors — so it inherits Increased Contrast support the same way the already-confirmed Light/Dark rendering does, with no app-specific logic to diverge.
+  - *Reduce Motion pulse-cancellation*: `RecordingIndicator.swift`'s `.animation(appearance.pulse ? .easeInOut(...).repeatForever(...) : .default, value: isPulsing)` re-evaluates the `Animation?` argument on every `isPulsing` transition; when `appearance.pulse` flips to `false` (Reduce Motion turning on mid-recording), the next `onChange` reassigns `isPulsing`, and SwiftUI applies the now-current `.default` animation to that transition, replacing the in-flight `repeatForever`. This is standard, documented `.animation(_:value:)` behavior, not living code, and not live-observed here.
+
+Status stays `done` on the maintainer's explicit call.
