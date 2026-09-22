@@ -1,7 +1,9 @@
 import AppUI
+import ClaudeSummarizer
 import Core
 import Notifications
 import Permissions
+import Persist
 import State
 import SwiftUI
 import UserNotifications
@@ -22,7 +24,52 @@ struct AuricleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AuricleRootView()
+            if OnboardingMarker.exists(applicationSupportDirectory: .applicationSupportDirectory) {
+                AuricleRootView()
+            } else {
+                OnboardingRootView(coordinator: Self.makeOnboardingCoordinator())
+            }
+        }
+    }
+
+    /// `configure`'s `URLOpener` reuses `NotificationDelegate.openInDefaultApp`
+    /// rather than a second `NSWorkspace.open` call site — one place decides
+    /// what "opened successfully" means. Every closure here binds `AppUI` to
+    /// this process's real config file, Keychain, and Application Support
+    /// directory — a test builds its own `OnboardingConfigureModel` instead
+    /// of relying on a default that could silently touch any of them.
+    @MainActor
+    private static func makeOnboardingCoordinator() -> OnboardingCoordinator {
+        let configure = OnboardingConfigureModel(
+            opener: { url in
+                await (try? NotificationDelegate.openInDefaultApp(url)) != nil
+            },
+            validateVaultPath: { url in
+                do {
+                    try VaultWriter.validateVaultPath(url)
+                } catch let error as VaultWriter.WriteError {
+                    throw vaultPathValidationError(from: error)
+                }
+            },
+            writeVaultPath: { try ConfigWriter.set("vault_path", to: $0.path) },
+            writeAPIKey: { try KeychainAPIKey.write($0) },
+            configuredVaultPath: { (try? Config.load())?.vaultPath },
+        )
+        return OnboardingCoordinator(
+            checker: permissionChecker,
+            configure: configure,
+            applicationSupportDirectory: .applicationSupportDirectory,
+        )
+    }
+
+    private static func vaultPathValidationError(from error: VaultWriter.WriteError) -> VaultPathValidationError {
+        switch error {
+        case let .vaultPathMissing(path):
+            .missing(path: path)
+        case let .vaultPathNotWritable(path):
+            .notWritable(path: path)
+        default:
+            .other(String(describing: error))
         }
     }
 
