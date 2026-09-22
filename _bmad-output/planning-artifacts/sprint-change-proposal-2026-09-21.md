@@ -109,15 +109,15 @@ Re-enabling the fallback instead recovers less, is non-deterministic, and costs
 
 ### F2. The fix does not move the item gate
 
-Full pipeline, diarized text, promoted prompt: 74% before the fix (Story 4.13's
-expectation for the rerun) and 74% after it. The two items still missing sit in
+Full pipeline, promoted prompt: 74% before the fix (Story 4.13's expectation for
+the rerun) and 74% after it. The two items still missing sit in
 ES2002b (6 of 8) and ES2004a (0 of 3). ES2004a's three expected-item quotes are
 present in the fixed transcript at overlaps of 0.50, 0.95 and 1.00, and the
 summarizer emits zero items for that meeting on every transcript source Story
 4.13 tried, the human reference included. That is a summarizer behaviour, not a
 transcription one.
 
-### F3. On un-diarized text, more transcript meant fewer items
+### F3. On the bench, more transcript meant fewer items
 
 Same day, same prompt, offline bench, all utterances labelled `Speaker_1`:
 
@@ -132,10 +132,12 @@ runs. Story 4.13 inferred a two to three item transcription cost by comparing
 reference against WhisperKit text, but the reference also carries four real
 speaker labels and verbatim disfluencies, so that comparison changed three
 variables. The single-variable comparison says completeness alone does not move
-the item count, and on un-diarized text it moves it the wrong way. The bench in
-Story 4.11 is therefore an upper bound on prompt quality only when its
-transcripts carry speaker labels; it is not a proxy for the pipeline on
-transcription changes.
+the item count, and on the bench it moves it the wrong way. The pipeline scored
+14 of 19 on the same transcripts byte for byte, and the summarize stage hands
+the summarizer the raw `transcript.json` with every utterance labelled
+`Speaker_1`, so speaker labels are not the difference. Some other summarizer
+input differs between the two call sites, and until it is named the bench is
+not a proxy for the pipeline on transcription changes.
 
 ### F4. Word error rate hid the drop
 
@@ -209,7 +211,7 @@ plain statement the maintainer asked for: moving the floor to 74% would foreclos
 recovering two items that the summarizer extracts from clean text and does not
 extract from the pipeline's text of the same meetings, and one meeting on which
 the summarizer produces nothing at all from any text. Those are defects with
-reproductions, not noise.
+reproductions, not noise. (Approved 2026-09-21.)
 
 What the floor now waits on is Story 4.15, a bounded summarizer story with a
 different shape from Story 4.13. Story 4.13 varied the prompt over the whole set.
@@ -221,7 +223,7 @@ that ES2004a's three items leave the fixture with the rationale in that fixture'
 are explicit.
 
 The alternative, for the maintainer to choose instead: move the floor to 74%, the
-measured full-pipeline figure on diarized text under the fix, and exit Epic 4 on
+measured full-pipeline figure under the fix, and exit Epic 4 on
 the recorded rerun. If chosen, `epics.md` records that 84% on reference
 transcripts is the known ceiling and that the residual is summarizer
 under-production on ES2002b and ES2004a, so nobody later reads 74% as the model's
@@ -255,11 +257,12 @@ change is one option with a byte-for-byte reproduction on both sides.
 - Reproduce ES2004a's zero output on the reference transcript and characterise
   it: which rule the three expected items fall under, and whether the model
   reasons them out or never proposes them.
-- One arm per finding, single-variable, through the recall bench, with speaker
-  labels present in the bench transcripts so the bench stops measuring a
-  condition the pipeline never runs. The reference fixtures already carry labels;
-  a WhisperKit-transcript arm needs the diarized text from the cache, which the
-  bench can read once its loader accepts `attribution.json`.
+- One arm per finding, single-variable, through the recall bench. A diarized
+  WhisperKit-transcript arm, read through `attribution.json`, tests whether
+  per-speaker labels are a recall lever; today's summarize stage does not pass
+  them, so that arm measures a possible pipeline change, not the pipeline as
+  shipped. The first single-variable check is the pipeline-versus-bench gap on
+  identical text (F3).
 - Stop condition as stated under Decision 2.
 
 Effort: one to two days, about $3 in bench runs. Risk: medium. The first two
@@ -287,9 +290,10 @@ $5 in API credit. Epic 4 remains `in-progress` until Story 4.15 stops.
 - **Determinism claim.** The regression suite asserts nothing about byte-identical
   re-runs today. The fixed transcripts were identical between the CLI and the
   app on all five meetings, which is the same evidence Story 4.1 relied on.
-- **The bench diverges from the pipeline on transcription changes.** F3 shows it.
-  Story 4.15's first task is to bring speaker labels into the bench, and until
-  then a bench number about a transcript change is not a pipeline number.
+- **The bench diverges from the pipeline on transcription changes.** F3 shows it,
+  on identical text. Story 4.15's first task is to find the summarizer input
+  that differs between the two call sites, and until then a bench number about
+  a transcript change is not a pipeline number.
 
 ---
 
@@ -351,7 +355,7 @@ Insert after Story 4.13, in the same format as Stories 4.11 to 4.13:
 >
 > **Given** the bench's fixture loader
 > **When** a WhisperKit-transcript arm is added
-> **Then** the arm carries the diarized speaker labels from `attribution.json`, so the bench no longer measures a `Speaker_1`-only condition the pipeline never runs
+> **Then** the arm can carry the diarized speaker labels from `attribution.json`, so the bench can test whether per-speaker labels are a recall lever; the summarize stage as shipped passes the `Speaker_1`-only `transcript.json`, so this arm measures a possible pipeline change, not the pipeline as shipped
 >
 > **Given** arms run one finding at a time
 > **When** a recorded full-pipeline run reaches 16 of 19, or the maintainer rules that ES2004a's items leave the fixture with the rationale in its `expected.json` notes
