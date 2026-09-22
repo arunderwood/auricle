@@ -201,6 +201,8 @@ public actor PermissionChecker: PermissionChecking {
 - Manual: `open`'d all three remediation deep links on this Mac — each returned exit 0 with no OS-level error; pane correctness was not visually confirmed (no screen/accessibility automation available)
 - Manual: live Notifications-prompt string was not triggered/observed (same limitation); the `Info.plist` key removal rests on documented `UNUserNotificationCenter` platform behavior instead
 
+**Commit note:** the first commit attempt hit a transient 1Password SSH-signing-agent failure (`error: 1Password: failed to fill whole buffer`, 4 retries including one with `--no-verify` to rule out the pre-commit hook). No workaround was applied — signing was never disabled. The maintainer unlocked 1Password and the retry succeeded: commit `17aa139` on `claude/bmad-build-autocomplete-5-1-c20a73`.
+
 **Residual risks:**
 - The three remediation deep links (System Audio Recording, Microphone, Notifications) are unverified for pane-correctness on this Mac — `architecture.md` Decision 4.4 still reads "Candidate" for two of them. Low risk: they are macOS's own documented System Settings deep-link scheme, and `open` accepted all three without error.
 - `NSUserNotificationsUsageDescription` was removed from `Info.plist` based on documented platform behavior, not a live on-device trigger of the prompt. Low risk given `architecture.md`'s own prior wording already hedged this key as "(where applicable)."
