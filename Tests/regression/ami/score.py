@@ -108,6 +108,9 @@ def matches(expected, kept, item_text_overlap):
     )
 
 
+SECTIONS = {"Action Items": "action_items", "Decisions": "decisions"}
+
+
 def score_note(note, hypothesis, expected, item_text_overlap):
     """Scores one note's Action Items and Decisions against the reference.
 
@@ -116,20 +119,33 @@ def score_note(note, hypothesis, expected, item_text_overlap):
     the reference transcript the note was summarized from. Both get the same
     two tests over the same note, so the bench and this suite cannot report
     different recall for the same output.
+
+    Every count is reported per section as well as in total, because the two
+    sections fail in opposite directions and a total hides it: the summarizer
+    under-produces action items and over-produces decisions, so a prompt that
+    moves items from one section to the other holds the total flat while
+    changing the thing being measured. The totals stay for the rows already
+    committed to history.jsonl, which carry no per-section keys.
     """
     kept = note_items(note)
     wanted = {"Action Items": expected["action_items"], "Decisions": expected["decisions"]}
-    return {
+    result = {
         "kept_items": sum(len(v) for v in kept.values()),
         "ungrounded_quotes": sum(1 for v in kept.values() for i in v if i["quote"] not in hypothesis),
         "expected_items": sum(len(v) for v in wanted.values()),
-        "recalled_items": sum(
-            1 for heading, items in wanted.items() for e in items if any(matches(e, k, item_text_overlap) for k in kept[heading])
-        ),
-        "false_keeps": sum(
-            1 for heading, items in kept.items() for k in items if not any(matches(e, k, item_text_overlap) for e in wanted[heading])
-        ),
+        "recalled_items": 0,
+        "false_keeps": 0,
     }
+    for heading, suffix in SECTIONS.items():
+        recalled = sum(1 for e in wanted[heading] if any(matches(e, k, item_text_overlap) for k in kept[heading]))
+        false_keeps = sum(1 for k in kept[heading] if not any(matches(e, k, item_text_overlap) for e in wanted[heading]))
+        result[f"kept_{suffix}"] = len(kept[heading])
+        result[f"expected_{suffix}"] = len(wanted[heading])
+        result[f"recalled_{suffix}"] = recalled
+        result[f"false_keep_{suffix}"] = false_keeps
+        result["recalled_items"] += recalled
+        result["false_keeps"] += false_keeps
+    return result
 
 
 def thresholds_beside_this_script():
@@ -264,6 +280,23 @@ def report(thresholds_path, results_path):
     print(f"item recall {recalled}/{expected} = {recall:.0%}")
     if recall < limits["min_item_recall"]:
         breaches.append(f"item recall {recall:.0%} < {limits['min_item_recall']:.0%}")
+
+    # Per section on the total line only. The two sections fail in opposite
+    # directions, so a set total that moves by nothing can still hide items
+    # migrating from one to the other; per-row columns would make the table
+    # unreadable for a number that is only legible in aggregate anyway.
+    split = [r for r in rows if "recalled_action_items" in r]
+    if not split:
+        print(f"per-section recall not measured: all {len(rows)} rows predate the split")
+    else:
+        coverage = "" if len(split) == len(rows) else f" over {len(split)} of {len(rows)} rows; the rest predate the split"
+        parts = []
+        for suffix, label in (("action_items", "action items"), ("decisions", "decisions")):
+            got = sum(r[f"recalled_{suffix}"] for r in split)
+            want = sum(r[f"expected_{suffix}"] for r in split)
+            bad = sum(r[f"false_keep_{suffix}"] for r in split)
+            parts.append(f"{label} {got}/{want} (false {bad})")
+        print("  " + ", ".join(parts) + coverage)
 
     # The total covers only the rows that carry a count. A partial total is
     # still a floor on the set, so it is checked; it is labelled so nobody

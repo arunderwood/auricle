@@ -4,15 +4,16 @@ import Foundation
 /// arm, then the run's wall clock. The shape mirrors `score.py report`, so a
 /// bench run and a regression run read the same way.
 ///
-///     arm                     meeting     kept  false  ungnd   recall       cost
-///     substring:recall-v2     ES2002a        4      1      0      3/3   $ 0.0550
-///     substring:recall-v2  item recall 7/11 = 64%, false keeps 3, ungrounded 0, $ 0.1527
+///     arm                     meeting     kept  false  ungnd      act      dec   recall       cost
+///     substring:recall-v2     ES2002a        4      1      0      3/3      0/0      3/3   $ 0.0550
+///     substring:recall-v2  item recall 7/11 = 64% (act 4/8, dec 3/3), false keeps 3 (act 1, dec 2), ungrounded 0, $ 0.1527
 ///     elapsed 41s
 public enum RecallBenchReportRenderer {
     private static let meetingWidth = 7
     private static let keptWidth = 9
     private static let falseWidth = 7
     private static let ungroundedWidth = 7
+    private static let sectionWidth = 9
     private static let recallWidth = 9
     private static let costWidth = 11
 
@@ -39,6 +40,8 @@ public enum RecallBenchReportRenderer {
             + padLeft("kept", keptWidth)
             + padLeft("false", falseWidth)
             + padLeft("ungnd", ungroundedWidth)
+            + padLeft("act", sectionWidth)
+            + padLeft("dec", sectionWidth)
             + padLeft("recall", recallWidth)
             + padLeft("cost", costWidth)
     }
@@ -54,6 +57,8 @@ public enum RecallBenchReportRenderer {
             + padLeft(String(score.keptItems), keptWidth)
             + padLeft(String(score.falseKeeps), falseWidth)
             + padLeft(String(score.ungroundedQuotes), ungroundedWidth)
+            + padLeft("\(score.actionItems.recalled)/\(score.actionItems.expected)", sectionWidth)
+            + padLeft("\(score.decisions.recalled)/\(score.decisions.expected)", sectionWidth)
             + padLeft("\(score.recalledItems)/\(score.expectedItems)", recallWidth)
             + padLeft(cost(row.costUSD), costWidth)
     }
@@ -86,7 +91,15 @@ public enum RecallBenchReportRenderer {
             let percent = expected == 0 ? 0 : Int((Double(recalled) / Double(expected) * 100).rounded())
             let failed = armRows.count { $0.failureReason != nil }
             let failures = failed == 0 ? "" : ", \(failed) failed"
-            return "\(arm)  item recall \(recalled)/\(expected) = \(percent)%, false keeps \(falseKeeps), "
+            let actRecalled = armRows.reduce(0) { $0 + ($1.score?.actionItems.recalled ?? 0) }
+            let actExpected = armRows.reduce(0) { $0 + ($1.score?.actionItems.expected ?? 0) }
+            let decRecalled = armRows.reduce(0) { $0 + ($1.score?.decisions.recalled ?? 0) }
+            let decExpected = armRows.reduce(0) { $0 + ($1.score?.decisions.expected ?? 0) }
+            let actFalse = armRows.reduce(0) { $0 + ($1.score?.actionItems.falseKeeps ?? 0) }
+            let decFalse = armRows.reduce(0) { $0 + ($1.score?.decisions.falseKeeps ?? 0) }
+            return "\(arm)  item recall \(recalled)/\(expected) = \(percent)% "
+                + "(act \(actRecalled)/\(actExpected), dec \(decRecalled)/\(decExpected)), "
+                + "false keeps \(falseKeeps) (act \(actFalse), dec \(decFalse)), "
                 + "ungrounded \(ungrounded), \(cost(totalCost))\(failures)"
         }
     }

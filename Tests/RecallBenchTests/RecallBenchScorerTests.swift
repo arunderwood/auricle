@@ -6,12 +6,26 @@ private let scriptURL = URL(fileURLWithPath: "/nowhere/score.py")
 
 @Test
 func decodesTheScorersSnakeCaseObject() throws {
-    let stdout = #"{"kept_items":4,"ungrounded_quotes":0,"expected_items":3,"recalled_items":2,"false_keeps":1}"#
+    let stdout = #"""
+    {"kept_items":4,"ungrounded_quotes":0,"expected_items":3,"recalled_items":2,"false_keeps":1,
+     "kept_action_items":3,"expected_action_items":2,"recalled_action_items":1,"false_keep_action_items":1,
+     "kept_decisions":1,"expected_decisions":1,"recalled_decisions":1,"false_keep_decisions":0}
+    """#
     let scorer = RecallBenchScorer(scriptURL: scriptURL) { _, _ in Data(stdout.utf8) }
 
     let score = try scorer.score(notePath: scriptURL, expectedPath: scriptURL, transcriptPath: scriptURL)
 
-    #expect(score == RecallBenchScore(keptItems: 4, ungroundedQuotes: 0, expectedItems: 3, recalledItems: 2, falseKeeps: 1))
+    #expect(
+        score == RecallBenchScore(
+            keptItems: 4,
+            ungroundedQuotes: 0,
+            expectedItems: 3,
+            recalledItems: 2,
+            falseKeeps: 1,
+            actionItems: RecallBenchSectionScore(kept: 3, expected: 2, recalled: 1, falseKeeps: 1),
+            decisions: RecallBenchSectionScore(kept: 1, expected: 1, recalled: 1, falseKeeps: 0),
+        ),
+    )
 }
 
 @Test
@@ -19,7 +33,11 @@ func passesTheNoteSubcommandAndItsThreePositionalPaths() throws {
     nonisolated(unsafe) var seen: (url: URL, arguments: [String])?
     let scorer = RecallBenchScorer(scriptURL: scriptURL) { url, arguments in
         seen = (url, arguments)
-        return Data(#"{"kept_items":0,"ungrounded_quotes":0,"expected_items":0,"recalled_items":0,"false_keeps":0}"#.utf8)
+        return Data(#"""
+        {"kept_items":0,"ungrounded_quotes":0,"expected_items":0,"recalled_items":0,"false_keeps":0,
+         "kept_action_items":0,"expected_action_items":0,"recalled_action_items":0,"false_keep_action_items":0,
+         "kept_decisions":0,"expected_decisions":0,"recalled_decisions":0,"false_keep_decisions":0}
+        """#.utf8)
     }
 
     _ = try scorer.score(
@@ -81,7 +99,17 @@ func theRealScorerScoresARenderedNote() async throws {
         transcriptPath: root.url.appendingPathComponent("transcript.json"),
     )
 
-    #expect(score == RecallBenchScore(keptItems: 1, ungroundedQuotes: 0, expectedItems: 1, recalledItems: 1, falseKeeps: 0))
+    #expect(
+        score == RecallBenchScore(
+            keptItems: 1,
+            ungroundedQuotes: 0,
+            expectedItems: 1,
+            recalledItems: 1,
+            falseKeeps: 0,
+            actionItems: RecallBenchSectionScore(kept: 1, expected: 1, recalled: 1, falseKeeps: 0),
+            decisions: RecallBenchSectionScore(kept: 0, expected: 0, recalled: 0, falseKeeps: 0),
+        ),
+    )
 }
 
 /// `false_keeps` counts a kept bullet that no expected item under its OWN

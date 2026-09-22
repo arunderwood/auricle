@@ -142,7 +142,11 @@ with tempfile.TemporaryDirectory() as scratch:
     check("the note subcommand prints what score_note returned", json.loads(printed) == scored)
     check(
         "the note subcommand reports every key the bench decodes",
-        set(json.loads(printed)) == {"kept_items", "ungrounded_quotes", "expected_items", "recalled_items", "false_keeps"},
+        set(json.loads(printed)) == {
+            "kept_items", "ungrounded_quotes", "expected_items", "recalled_items", "false_keeps",
+            "kept_action_items", "expected_action_items", "recalled_action_items", "false_keep_action_items",
+            "kept_decisions", "expected_decisions", "recalled_decisions", "false_keep_decisions",
+        },
     )
     check("the note subcommand uses the recorded item-text threshold", score.thresholds_beside_this_script()["item_text_overlap"] == ITEM_TEXT_OVERLAP)
 
@@ -256,3 +260,47 @@ for name in failures:
     print(f"test_score: FAILED: {name}", file=sys.stderr)
 print(f"test_score: {len(failures)} failed")
 sys.exit(1 if failures else 0)
+
+
+# The summarizer under-produces action items and over-produces decisions, so a
+# total can stay flat while the sections move in opposite directions. These pin
+# that the split is reported and that it is consistent with the totals.
+NOTE_SPLIT = """## Action Items
+
+## Decisions
+
+- The team will target the fifteen to thirty five age bracket.
+  > aiming the product at the fifteen to thirty five age bracket
+- Something nobody decided at all.
+  > a passage that matches no expected item whatsoever here
+"""
+EXPECTED_SPLIT = {
+    "action_items": [
+        {"text": "Marketing will do trend watching before the next session.", "quote": "and marketing you're gonna be thinking about trend watching"},
+    ],
+    "decisions": [
+        {"text": "Target the product at the fifteen to thirty five age bracket.", "quote": "aiming the product at the fifteen to thirty five age bracket"},
+    ],
+}
+split = score.score_note(NOTE_SPLIT, NOTE_SPLIT, EXPECTED_SPLIT, ITEM_TEXT_OVERLAP)
+check("a section that produced nothing recalls nothing", split["recalled_action_items"] == 0)
+check("the empty section still reports its expected count", split["expected_action_items"] == 1)
+check("the other section recalls its item", split["recalled_decisions"] == 1)
+check("the unmatched decision is a false keep in its own section", split["false_keep_decisions"] == 1)
+check("no false keep is attributed to the empty section", split["false_keep_action_items"] == 0)
+check(
+    "the per-section recalled counts sum to the total",
+    split["recalled_action_items"] + split["recalled_decisions"] == split["recalled_items"],
+)
+check(
+    "the per-section false keeps sum to the total",
+    split["false_keep_action_items"] + split["false_keep_decisions"] == split["false_keeps"],
+)
+check(
+    "the per-section kept counts sum to the total",
+    split["kept_action_items"] + split["kept_decisions"] == split["kept_items"],
+)
+check(
+    "the per-section expected counts sum to the total",
+    split["expected_action_items"] + split["expected_decisions"] == split["expected_items"],
+)
