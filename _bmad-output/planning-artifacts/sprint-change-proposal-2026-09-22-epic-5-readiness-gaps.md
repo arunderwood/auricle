@@ -58,7 +58,7 @@ The readiness gate for Epic 5 returned **FAIL**. Five of the nine stories depend
 | D2 | The minimum macOS rises from 14.0 to **14.4**, the process-tap floor. Development targets the current release. | The maintainer ruled "target latest"; 14.4 is the lowest version the API allows |
 | D3 | `TCCCategory.screenCapture` becomes `.systemAudioCapture`. `PermissionStatus` gains `.unknown`. `check` and `request` are async. The deep link is `URL?`. | macOS has no public API to read or request the tap grant |
 | D4 | `NSAudioCaptureUsageDescription` goes in as a literal Info.plist key, and `scripts/check.sh app` asserts it. `NSScreenCaptureUsageDescription` is removed. | A missing key fails silently with zero buffers |
-| D5 | A 30s exact-zero watchdog does a full rebuild, never fails the capture, and counts what it does. Story 5.2 carries a manual live-app gate and a 60-minute soak. | An open zero-buffer report on a macOS 26 beta, and the tap's evidence gap on Teams and Meet |
+| D5 | A 30s exact-zero watchdog does a full rebuild, never fails the capture, and counts what it does. The live check runs in Story 5.6, through the maintainer's normal meetings, once a Record hotkey exists. | An open zero-buffer report on a macOS 26 beta, and the tap's evidence gap on Teams and Meet |
 | D6 | Capture runs in the GUI process only in Epic 5. The CLI `record` and `stop` verbs stay stubs. Story 9.5 decides how they reach the app without XPC. | Decision 1.1, and TCC grants belong to `com.auricle.app` |
 | D7 | Capture bypasses `StageRunner.run` through `StateStore.beginCapture` and `finishCapture`, plus a `(.capture, .recording)` transition entry | The runner wraps one closure over an existing row |
 | D8 | On launch, an orphaned `recording` row is recovered: header repair then `captured`, or `capture_failed` with reason `interrupted` | DP3: audio is the only recovery layer |
@@ -119,7 +119,7 @@ The readiness gate for Epic 5 returned **FAIL**. Five of the nine stories depend
    - pull the Story 9.3 signing identity forward for Debug builds.
 
    `architecture.md` already says TCC stability needs that identity. Tracked in `deferred-work.md`.
-2. **Capture fallback trigger.** If Story 5.2's live check misses Teams, Meet or Zoom audio, the story stops and a correct-course switches `SystemAudioSource` to ScreenCaptureKit. That adds the Screen Recording grant back into 5.1 and 5.8.
+2. **Capture fallback trigger.** If a real meeting recorded in Story 5.6 misses Teams, Meet or Zoom audio, a correct-course switches `SystemAudioSource` to ScreenCaptureKit. That adds the Screen Recording grant back into 5.1 and 5.8.
 
 ## 5. Verification
 
