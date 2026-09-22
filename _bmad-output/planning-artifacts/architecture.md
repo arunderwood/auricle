@@ -1189,9 +1189,9 @@ Required permissions, in dependency order:
 
 | Permission | TCC category | When required | Remediation deep link |
 |---|---|---|---|
-| System Audio Recording | `kTCCServiceAudioCapture` | Prompted on the first capture; macOS has no public API to read or request it, so it always reads as unknown | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` (Story 5.1 verifies and records the working URL) |
-| Microphone | `kTCCServiceMicrophone` | Before any capture attempt; denied records system audio only | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone` (Story 5.1 verifies) |
-| Notifications | TCC via `UNUserNotificationCenter` | Before notify stage; not strictly blocking (Decision 4.2) | `x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications` |
+| System Audio Recording | `kTCCServiceAudioCapture` | Prompted on the first capture; macOS has no public API to read or request it, so it always reads as unknown | `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` — opens "Screen & System Audio Recording", including the "System Audio Recording Only" section |
+| Microphone | `kTCCServiceMicrophone` | Before any capture attempt; denied records system audio only | `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone` — opens "Microphone" |
+| Notifications | TCC via `UNUserNotificationCenter` | Before notify stage; not strictly blocking (Decision 4.2) | `x-apple.systempreferences:com.apple.Notifications-Settings.extension` — opens "Notifications", with its Application Notifications list |
 | Calendar (Google OAuth) | Not TCC; OAuth refresh-token in Keychain | Before calendar enrichment in summarize stage | Re-auth flow via system browser; on persistent failure, meeting publishes with `auricle/needs-calendar-enrichment` tag (graceful degradation per FR54) |
 
 **Detection points:**

@@ -158,7 +158,7 @@ public actor PermissionChecker: PermissionChecking {
         case .microphone:
             URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone")
         case .notifications:
-            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications")
+            URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
         case .calendarOAuth:
             nil
         }

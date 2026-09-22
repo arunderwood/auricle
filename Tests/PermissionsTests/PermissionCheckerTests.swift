@@ -138,7 +138,7 @@ struct PermissionCheckerTests {
         let (checker, _) = makeChecker()
         #expect(
             checker.remediationDeepLink(for: .notifications)
-                == URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"),
+                == URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"),
         )
     }
 
