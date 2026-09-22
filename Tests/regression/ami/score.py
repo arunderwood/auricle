@@ -178,10 +178,14 @@ def report(thresholds_path, results_path):
     print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
     for r in rows:
+        # A row written before false keeps were measured prints `-`, never 0: a
+        # zero here would assert a count nobody took, and would satisfy
+        # max_false_keeps on the strength of it.
+        false = f"{r['false_keeps']:6d}" if "false_keeps" in r else f"{'-':>6}"
         print(
             f"{r['ami_id']:9} {r['wer']:6.3f} {r['realtime_factor']:6.3f} "
             f"{r['diarized_speakers']}/{r['expected_speakers']:<3} {r['kept_items']:5d} {r['drop_count']:5d} "
-            f"{r['recalled_items']}/{r['expected_items']:<5} {r['false_keeps']:6d} ${r['cost_usd']:7.4f}"
+            f"{r['recalled_items']}/{r['expected_items']:<5} {false} ${r['cost_usd']:7.4f}"
         )
         name = r["ami_id"]
         checks = [
@@ -195,15 +199,24 @@ def report(thresholds_path, results_path):
         breaches += [f"{name}: {why}" for ok, why in checks if not ok]
     expected = sum(r["expected_items"] for r in rows)
     recalled = sum(r["recalled_items"] for r in rows)
-    false_keeps = sum(r["false_keeps"] for r in rows)
-    kept = sum(r["kept_items"] for r in rows)
     recall = recalled / expected if expected else 1.0
     print(f"item recall {recalled}/{expected} = {recall:.0%}")
-    print(f"false keeps {false_keeps}/{kept}")
     if recall < limits["min_item_recall"]:
         breaches.append(f"item recall {recall:.0%} < {limits['min_item_recall']:.0%}")
-    if false_keeps > limits["max_false_keeps"]:
-        breaches.append(f"false keeps {false_keeps} > {limits['max_false_keeps']}")
+
+    # The total covers only the rows that carry a count. A partial total is
+    # still a floor on the set, so it is checked; it is labelled so nobody
+    # reads it as the whole set's.
+    scored = [r for r in rows if "false_keeps" in r]
+    if not scored:
+        print(f"false keeps not measured: all {len(rows)} rows predate the count")
+    else:
+        false_keeps = sum(r["false_keeps"] for r in scored)
+        kept = sum(r["kept_items"] for r in scored)
+        coverage = "" if len(scored) == len(rows) else f" over {len(scored)} of {len(rows)} rows; the rest predate the count"
+        print(f"false keeps {false_keeps}/{kept}{coverage}")
+        if false_keeps > limits["max_false_keeps"]:
+            breaches.append(f"false keeps {false_keeps} > {limits['max_false_keeps']}")
     for breach in breaches:
         print(f"REGRESSION: {breach}", file=sys.stderr)
     sys.exit(1 if breaches else 0)

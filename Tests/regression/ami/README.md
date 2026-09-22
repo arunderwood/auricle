@@ -37,7 +37,9 @@ The second test exists because the first one asks whether the model picked the s
 
 The report aggregates over the meetings in one invocation, and `min_item_recall` is calibrated for the whole set: on the re-scored 2026-09-21 notes recall runs 58% across all five but 50% on ES2002b, 75% on ES2003b and 0% on ES2004a. Naming a single meeting on the command line therefore checks it against a limit it was never meant to clear on its own. Read a one-meeting run for its WER, realtime factor and cost, and judge recall from a full run.
 
-The rows already in `history.jsonl` were scored before the second test existed and carry no false-keep count, so their recall numbers are not comparable with anything recorded after it. The next full run re-establishes the baseline.
+The rows already in `history.jsonl` were scored before the second test existed and carry no false-keep count, so their recall numbers are not comparable with anything recorded after it. The next full run re-establishes the baseline. `report` prints `-` for such a row and leaves it out of the set total rather than showing it as zero: a zero would assert a count nobody took, and would satisfy `max_false_keeps` on the strength of it. Do not backfill the rows.
+
+`scripts/check.sh lint` runs `report` over `history.jsonl` on every build. That file is the only committed corpus of real result rows, and its rows were written by older scorers, so it is what a scorer change breaks first. The run asserts that the formatter and the thresholds survive real data; it is not a quality assertion, since the rows mix revisions.
 
 ## Reference transcripts
 

@@ -42,6 +42,14 @@ phase_lint() {
     echo "==> ami scorer self-check"
     python3 Tests/regression/ami/test_score.py
 
+    # history.jsonl is the only committed corpus of real result rows, and a
+    # scorer change breaks it more easily than anything synthetic: its rows
+    # were written by older scorers and need not carry today's fields. This
+    # asserts that the formatter and the thresholds survive real data. It is
+    # not a quality assertion — the rows mix revisions.
+    echo "==> ami report over the recorded history"
+    python3 Tests/regression/ami/score.py report Tests/regression/ami/thresholds.json Tests/regression/ami/history.jsonl
+
     echo "==> actionlint"
     mise exec -- actionlint -color
 

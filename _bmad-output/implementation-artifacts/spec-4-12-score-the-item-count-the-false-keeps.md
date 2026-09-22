@@ -34,6 +34,8 @@ deferred: []
 | Expected item has no `text` | `text` absent or empty in an exit-run expected file | Text test contributes nothing; quote test alone decides | No error expected |
 | Kept item with a short quote | Note block quote under 4 words | Quote test returns 0; text test may still match | No error expected |
 | Set breaches precision | Total `false_keeps` > `max_false_keeps` | `score.py report` prints REGRESSION and exits 1 | Non-zero exit |
+| Result row predates the count | A `history.jsonl` row with no `false_keeps` key | `report` prints `-`, leaves the row out of the set total, and says how much of the set the total covers | No error expected |
+| No row carries a count | Every row predates `false_keeps` | `report` says the count was not measured and does not check `max_false_keeps` | No error expected |
 
 </intent-contract>
 
@@ -60,7 +62,7 @@ deferred: []
 - `Tests/regression/ami/exit-fragments.json` -- delete -- nothing reads it once the exit script matches by overlap.
 - `Tests/regression/ami/README.md` -- rewrite the fragment paragraphs and the `min_item_recall` calibration paragraph for the two-test rule -- the README documents the rule it must now describe.
 - `Tests/regression/ami/test_score.py` -- new; a dependency-free self-check of `note_items`, `matches` and the calibration window, run by `scripts/check.sh lint` -- `swift test` cannot reach Python, and the matching rule now carries a calibrated threshold that must not drift unobserved.
-- `scripts/check.sh`, `AGENTS.md` -- run the scorer self-check in the lint phase and name it in the gate chain -- the gate is the one place a rule change gets caught.
+- `scripts/check.sh`, `AGENTS.md` -- run the scorer self-check and `score.py report` over `Tests/regression/ami/history.jsonl` in the lint phase, and name both in the gate chain -- the gate is the one place a rule change gets caught, and the recorded history is the only committed corpus of real rows a scorer change can break.
 - `Tests/fixtures/epic4-exit-results.md` -- add a "Re-score" section recording the 2026-09-21 run re-scored under the amended scorer: the corrected baseline, the re-scored recall, the false-keep count, the 8-item classification under opaque labels, and the 78.9% cap -- the record is the story's deliverable.
 
 **Acceptance Criteria:**
@@ -76,6 +78,8 @@ deferred: []
 
 **`max_false_keeps = 6` against a baseline of 4.** `min_item_recall` is set below its baseline so ordinary variation does not trip it; `max_false_keeps` is set above its baseline for the same reason. One item is 6.7 percentage points of precision at this set size, so integer counts are coarse and a tight bound would be noise.
 
+**A missing `false_keeps` prints `-`, never 0.** `report` reads rows written by older scorers, and `r.get("false_keeps", 0)` would render an unmeasured row as a clean zero that silently satisfies `max_false_keeps`. A partial total is still a floor on the set, so it is checked, and it is labelled with the coverage it has.
+
 **The exit script prints false keeps but does not gate on them.** epics.md Story 4.10 defines the exit criteria as the pass rate and the cost ceiling. Adding a third gate would change the exit bar, which is not this story's job. `score.py report` enforces the limit; the exit script makes the number visible.
 
 **Why `overlap()` is reused unchanged for item text.** It measures the share of the shorter side's words the longer side also holds, which is what a curated sentence and a model sentence about the same item look like. Its four-word minimum applies to the kept side and excludes nothing real: no item text in the fixture set is that short.
@@ -84,7 +88,7 @@ deferred: []
 
 **Commands:**
 - `python3 Tests/regression/ami/test_score.py` -- expected: `test_score: 0 failed`, exit 0.
-- `python3 Tests/regression/ami/score.py report Tests/regression/ami/thresholds.json <results>` -- expected: a table with a false-keep column and a set total.
+- `python3 Tests/regression/ami/score.py report Tests/regression/ami/thresholds.json Tests/regression/ami/history.jsonl` -- expected: `-` in the false column for every row, "false keeps not measured", exit 0.
 - `bash -n Tests/scripts/run-epic4-exit-criteria.sh Tests/regression/ami/prepare-exit-fixtures.sh` -- expected: no syntax errors.
 - `make check` -- expected: every phase passes.
 

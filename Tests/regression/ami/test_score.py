@@ -105,6 +105,60 @@ check("item_text_overlap stays at or below the weakest same-item pair", ITEM_TEX
 for limit in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "item_text_overlap", "max_false_keeps"):
     check(f"thresholds.json defines {limit}", limit in THRESHOLDS)
 
+
+def run_report(rows):
+    """report() over the given rows: its stdout, and whether it exited 0."""
+    import contextlib
+    import io
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+        path = handle.name
+    out = io.StringIO()
+    try:
+        # report() writes breaches to stderr; swallow them so a deliberate
+        # breach below does not read as this self-check failing.
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            score.report(str(HERE / "thresholds.json"), path)
+    except SystemExit as exit_code:
+        return out.getvalue(), exit_code.code == 0
+    finally:
+        Path(path).unlink()
+    return out.getvalue(), True
+
+
+ROW = {
+    "ami_id": "ES0000a", "state": "awaiting_verification", "verified_at_null": True,
+    "wer": 0.30, "realtime_factor": 0.05, "diarized_speakers": 4, "expected_speakers": 4,
+    "kept_items": 4, "drop_count": 0, "recalled_items": 3, "expected_items": 3,
+    "ungrounded_quotes": 0, "cost_usd": 0.05,
+}
+
+# A row from before false keeps were counted must not crash the report, and must
+# not be reported as a clean zero: that would satisfy max_false_keeps on a
+# measurement nobody took.
+text, ok = run_report([dict(ROW)])
+check("a row without false_keeps does not crash report", ok)
+check("an unmeasured row is not counted as zero false keeps", "false keeps 0/" not in text)
+check("an all-unmeasured set says so", "not measured" in text)
+
+# A mix reports the partial total and says how much of the set it covers.
+text, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=1)])
+check("a mixed set still exits 0 inside the limit", ok)
+check("a mixed set reports its partial total", "false keeps 1/4" in text)
+check("a mixed set labels its coverage", "1 of 2 rows" in text)
+
+# A fully scored set reports the plain total with no coverage caveat.
+text, ok = run_report([dict(ROW, false_keeps=1), dict(ROW, ami_id="ES0000b", false_keeps=1)])
+check("a fully scored set reports a plain total", "false keeps 2/8\n" in text)
+
+# The partial total is still a floor on the set, so it is checked.
+over = THRESHOLDS["max_false_keeps"] + 1
+_, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=over)])
+check("a partial total over the limit still breaches", not ok)
+
 for name in failures:
     print(f"test_score: FAILED: {name}", file=sys.stderr)
 print(f"test_score: {len(failures)} failed")
