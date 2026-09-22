@@ -2401,16 +2401,57 @@ So that Epic 4's exit gate is met by the summarizer actually surfacing what the 
 
 **Given** the story ran and disproved the premise its decision gate was written on (`spec-4-13-prompt-recall-pass.md`, 2026-09-21)
 **When** the gate above is exercised
-**Then** the multi-pass option is struck: the same prompt scores 84% on reference transcripts and 74% on the pipeline's own WhisperKit output of the same audio, which is 14% to 34% shorter, so the binding constraint is transcription and a second summarization pass cannot recover text that was never transcribed
-**And** the choice is between the Parakeet-TDT alternate ASR path that `prd.md:426` already names as the designed response to inadequate transcription, and moving Story 4.10's floor to what the pipeline achieves
-**And** the 80% floor is reachable on clean text, so moving the floor forecloses a ceiling that exists
+**Then** the multi-pass option is struck: the same prompt scores 84% on reference transcripts and 74% on the pipeline's own WhisperKit output of the same audio, so a second summarization pass cannot recover text that was never transcribed
+**And** the transcription shortfall is resolved by Story 4.14, not by an ASR swap: the missing text was whole 30-second windows that WhisperKit's first-token log-probability gate ended empty while the app's disabled temperature fallback refused to retry them (`sprint-change-proposal-2026-09-21.md`); unsetting the gate restores 12 points of reference content and drops no window, and the full pipeline under the fix scores 74% on diarized text with WER 0.20 to 0.25
+**And** the 80% floor stands (maintainer, 2026-09-21): it is reachable on clean text, the residual after the fix is summarizer under-production on ES2002b and ES2004a, and Story 4.15 owns it with a stop condition of 16 of 19 on a recorded full-pipeline run or an explicit fixture ruling
+**And** the Parakeet-TDT path is conditional, not designed: it starts only if a recorded full-pipeline run under Story 4.14 shows expected-item quotes absent from the transcript rather than present and unextracted
+
+### Story 4.14: Retention — Unset the First-Token Gate, Measure Dropped Text
+
+As the maintainer,
+I want the transcribe stage to keep every window WhisperKit can decode and the regression suite to report how much reference text has no transcript at all,
+So that a decoding gate cannot remove a fifth of a meeting without a number changing.
+
+**Given** `WhisperKitTranscriber.decodeOptions`
+**When** the transcribe stage runs
+**Then** `firstTokenLogProbThreshold` is `nil` and `temperatureFallbackCount` stays 0, and the decoding-options test pins both
+
+**Given** `score.py meeting` over a scored meeting
+**When** it reports
+**Then** it adds the reference content words that fall in a run of 25 or more with no hypothesis text, as a count and a fraction, and `report` prints the fraction per meeting and enforces `max_dropped_reference_fraction` from `thresholds.json`
+
+**Given** the fix and the promoted prompt
+**When** Story 4.10 Part B is rerun with `AURICLE_AMI_RECORD=1`
+**Then** `history.jsonl` carries the first full-pipeline row for the promoted prompt and `min_item_recall` is raised to guard it
+
+### Story 4.15: Summarizer Under-Production on ES2002b and ES2004a
+
+As the maintainer,
+I want to know why the summarizer emits nothing for ES2004a from any transcript and fewer items from a fuller un-diarized transcript,
+So that the next prompt change targets a reproduced defect rather than the whole set.
+
+**Given** the 2026-09-21 bench runs over the cached and the fixed transcripts
+**When** their kept items are diffed per meeting
+**Then** the story records what the summarizer stops emitting when the input grows
+
+**Given** ES2004a's reference transcript
+**When** it is summarized with the promoted prompt
+**Then** the story records which rule each of the three expected items falls under and whether the model proposes and discards them or never proposes them
+
+**Given** the bench's fixture loader
+**When** a WhisperKit-transcript arm is added
+**Then** the arm carries the diarized speaker labels from `attribution.json`, so the bench no longer measures a `Speaker_1`-only condition the pipeline never runs
+
+**Given** arms run one finding at a time
+**When** a recorded full-pipeline run reaches 16 of 19, or the maintainer rules that ES2004a's items leave the fixture with the rationale in its `expected.json` notes
+**Then** the story stops and Epic 4 exits through Story 4.10
 
 ---
 
 **Epic 4 summary:**
 - **10 stories** sized for single dev-agent completion
 - **Story sequencing matters:** 4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 → 4.10 (4.9 cannot land before 4.1–4.8; 4.10 is the explicit gate)
-- **Recall remediation (added 2026-09-20, `sprint-change-proposal-2026-09-20.md`):** 4.11 → 4.12 → 4.13 land after 4.10's first Part B run and before its rerun. They exist because Part B measured 42.1% item recall against 4.10's 80% floor. 4.13 ends at a maintainer decision gate; multi-pass extraction is not among its options while FR32 stands.
+- **Recall remediation (added 2026-09-20, `sprint-change-proposal-2026-09-20.md`):** 4.11 → 4.12 → 4.13 land after 4.10's first Part B run and before its rerun. They exist because Part B measured 42.1% item recall against 4.10's 80% floor. 4.13 ended at a maintainer decision gate that `sprint-change-proposal-2026-09-21.md` resolved: 4.14 removes the WhisperKit decoding gate that was dropping whole windows and adds a retention metric; 4.15 owns the summarizer residual. Multi-pass extraction is not among the options while FR32 stands.
 - **All FRs covered:** FR17 (Story 4.1), FR18 (Story 4.2), FR19 (Story 4.1), FR20 (Story 4.1), FR23 data-side (Story 4.6), FR25 CLI publish-anyway (Stories 4.6 + 4.7), FR27 mechanism (Story 4.6 — the `--speakers` batch path; the documented fallback surface stays [v1.1], Story 10.4), FR42 stub (Story 4.9 — full path in Epic 8), FR43 stub (Story 4.9 — full path in Epic 8), FR73 (Story 4.4), FR74 (Stories 4.3 + 4.5)
 - **NFRs primarily verified:** NFR-P3 (Story 4.1 perf test), NFR-P4 (Story 4.2 perf test), NFR-P10 peak memory (Stories 4.1 + 4.2 — WhisperKit subprocess constraint), NFR-Pr1 transcribe local (Story 4.1), NFR-Pr4 first-name speakers + email scrubbing (consumed in Story 4.6 + Epic 3 Story 3.10), NFR-C1 v1.1+ tier (Story 4.5 + Story 4.10 live-run validation), NFR-I8 local-LLM v1.1+ slot (Story 4.4 + Story 4.5 telemetry contract)
 - **All architectural commitments addressed:** AR-AI-1 (Story 4.4), AR-AI-2 (Story 4.5), AR-AI-3 (Story 4.3), AR-AI-4 (Stories 4.1 + 4.2 immutability + Story 4.6 segment_splits), AR-AI-5 (Story 4.6 + Story 4.3 telemetry partitioning), AR-AI-6 (Story 4.6 attribution.json schema), AR-AI-7 Path C MVP slot-laying (Story 4.4), AR-AI-8 kill criteria foundation (Story 4.4 telemetry contract), AR-AI-9 wedge-validation foundation (already in Epic 3 Story 3.12), AR-PIPE-6 primary CLI surface (Story 4.7), AR-PIPE-7 hidden subcommand (woven across Stories 4.1, 4.2, 4.3), AR-PIPE-8 CLI conventions (Story 4.7), AR-PIPE-1 in-process persist wiring (Story 4.7), AR-DATA-6 `auricle/needs-summary` tag (Story 4.7), AR-DATA-7 re-publish notification text (Story 4.9)

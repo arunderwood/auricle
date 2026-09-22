@@ -127,6 +127,14 @@ public actor WhisperKitTranscriber: TranscriberStrategy {
     /// is forced. Temperature fallback is off: a fallback samples at a raised
     /// temperature, and a second run over the same audio must produce the
     /// same words.
+    ///
+    /// The first-token log-probability gate is off as well, and it has to be
+    /// while the fallback is: WhisperKit ends a window with no text when the
+    /// first sampled token falls under that gate and relies on the temperature
+    /// fallback to decode it again. With no fallback the empty window is
+    /// seeked past and its thirty seconds of speech vanish from the transcript
+    /// without an error. On far-field meeting audio that is a tenth to a fifth
+    /// of the words. Silence is still detected by `noSpeechThreshold`.
     static let decodeOptions = DecodingOptions(
         verbose: false,
         task: .transcribe,
@@ -138,6 +146,7 @@ public actor WhisperKitTranscriber: TranscriberStrategy {
         skipSpecialTokens: true,
         withoutTimestamps: false,
         wordTimestamps: false,
+        firstTokenLogProbThreshold: nil,
     )
 
     // MARK: - Mapping

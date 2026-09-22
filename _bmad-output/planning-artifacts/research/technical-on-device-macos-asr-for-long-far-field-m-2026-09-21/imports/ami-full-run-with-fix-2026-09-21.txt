@@ -1,0 +1,9 @@
+meeting      WER    RTF   spk  kept  drop  recall  false     cost
+ES2002a    0.249  0.123 4/4       3     0 3/3          0 $ 0.0576
+ES2002b    0.224  0.054 4/4       7     0 6/8          1 $ 0.1260
+ES2003a    0.211  0.039 4/4       1     0 1/1          0 $ 0.0391
+ES2003b    0.197  0.050 4/4       6     0 4/4          2 $ 0.1172
+ES2004a    0.229  0.049 5/4       0     0 0/3          0 $ 0.0430
+item recall 14/19 = 74%
+  action items 9/12 (false 0), decisions 5/7 (false 3)
+false keeps 3/17

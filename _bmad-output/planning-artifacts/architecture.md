@@ -78,7 +78,7 @@ The architecture-shaping NFRs:
 
 **External dependencies (in order of architectural coupling):**
 
-- **WhisperKit** (Swift Package) — transcribe + built-in diarize. Highest coupling — the model load is the dominant memory cost and the latency floor. Whisper-large-v3-turbo on ANE is the locked default.
+- **WhisperKit** (Swift Package) — transcribe + built-in diarize. Highest coupling — the model load is the dominant memory cost and the latency floor. Whisper-large-v3-turbo on ANE is the locked default. Decoding runs with the temperature fallback off for byte-identical re-runs and, because of that, with WhisperKit's first-token log-probability gate off as well: the gate ends a window empty and relies on the fallback to retry it, so the two options are not independent (Story 4.14).
 - **ScreenCaptureKit** (Apple framework) — system-audio loopback. Apple-controlled API surface, has changed shape across recent macOS versions; capture stage is the most likely site of OS-update breakage.
 - **AVFoundation / CoreAudio** — microphone capture, audio mixing, snippet playback (`AVPlayerView` or `QLPreviewPanel` for in-UI snippets).
 - **Anthropic SDK / HTTPS client** — single Claude Messages API call per meeting. Configurable model identifier (default `claude-sonnet-5` — this line's Sonnet naming predates this proposal and disagrees with NFR-I6's Opus default elsewhere; only the generation number is corrected here, see the 2026-09-16 Claude-model-defaults sprint change proposal). Stage is swappable per FR33.

@@ -62,6 +62,7 @@ import Testing
     #expect(options.skipSpecialTokens)
     #expect(options.temperature == 0)
     #expect(options.temperatureFallbackCount == 0)
+    #expect(options.firstTokenLogProbThreshold == nil)
 }
 
 @Test func timingsFollowTheKeptUtterancesAndAreIndexedByTranscriptPosition() {
