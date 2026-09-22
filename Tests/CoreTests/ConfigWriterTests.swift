@@ -184,3 +184,105 @@ func invalidKeyThrowsBeforeTouchingAnyFile(key: String) throws {
         try ConfigWriter.set("vault_path", to: "/new", homeDirectory: home)
     }
 }
+
+// MARK: - Review pass 3: validate-before-write, secrets, typed values, CRLF
+
+@Test(
+    arguments: [
+        "self = { wikilink = \"[[Old]]\" }\n",
+        "self.other = \"x\"\n",
+        "[self]\n\"wikilink\" = \"[[Old]]\"\n",
+        "self . wikilink = \"[[Old]]\"\n",
+        "[\"self\"]\nwikilink = \"[[Old]]\"\n",
+    ],
+)
+func setThrowsWouldProduceInvalidConfigRatherThanCorruptingAnUnrecognizedShape(existing: String) throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig(existing, inHome: home)
+
+    #expect(throws: ConfigWriter.WriterError.self) {
+        try ConfigWriter.set("self.wikilink", to: "[[New]]", homeDirectory: home)
+    }
+    #expect(try readFile(file) == existing)
+}
+
+@Test func setThrowsWouldProduceInvalidConfigForAMultiLineArrayValue() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    // A line beginning with "[" inside the array (a nested array element) is
+    // misread as a table header by the line-based scanner -- the case this
+    // guard exists to make safe rather than silently corrupting.
+    let existing = "[attribution]\nfoo = [\n  [1],\n]\nbar = 1\n"
+    let file = try writeConfig(existing, inHome: home)
+
+    #expect(throws: ConfigWriter.WriterError.self) {
+        try ConfigWriter.set("attribution.bar", to: "2", homeDirectory: home)
+    }
+    #expect(try readFile(file) == existing)
+}
+
+@Test func setPreservesCRLFLineEndingsWhenTheExistingFileUsesThem() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig("vault_path = \"/a\"\r\n\r\n[self]\r\nwikilink = \"[[A]]\"\r\n", inHome: home)
+
+    try ConfigWriter.set("self.wikilink", to: "[[B]]", homeDirectory: home)
+
+    let text = try readFile(file)
+    #expect(text == "vault_path = \"/a\"\r\n\r\n[self]\r\nwikilink = \"[[B]]\"\r\n")
+    #expect(try Config.parse(text, homeDirectory: home).selfWikilink == "[[B]]")
+}
+
+@Test(arguments: [("anthropic_api_key", "sk-ant-x"), ("google_calendar.refresh_token", "x"), ("some.password", "x")])
+func setRejectsACredentialShapedKey(key: String, value: String) throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig("vault_path = \"/x\"\n", inHome: home)
+
+    #expect(throws: ConfigWriter.WriterError.secretRejected(key: key)) {
+        try ConfigWriter.set(key, to: value, homeDirectory: home)
+    }
+    #expect(try readFile(file) == "vault_path = \"/x\"\n")
+}
+
+@Test func setAllowsTheDocumentedGoogleClientSecretException() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    try ConfigWriter.set("google_calendar.client_secret", to: "shh", homeDirectory: home)
+
+    #expect(try Config.load(homeDirectory: home).googleCalendar.clientSecret == "shh")
+}
+
+@Test func setWritesAnUnquotedBoolLiteralForABoolSchemaKey() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig("[diarization_review]\nenabled = false\n", inHome: home)
+
+    try ConfigWriter.set("diarization_review.enabled", to: "true", homeDirectory: home)
+
+    #expect(try readFile(file) == "[diarization_review]\nenabled = true\n")
+    #expect(try Config.load(homeDirectory: home).diarizationReview.enabled == true)
+}
+
+@Test func setWritesAnUnquotedIntLiteralForAnIntSchemaKey() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    try ConfigWriter.set("attribution.snippet_duration_seconds", to: "12", homeDirectory: home)
+
+    let file = Config.defaultFileURL(homeDirectory: home)
+    #expect(try readFile(file) == "[attribution]\nsnippet_duration_seconds = 12\n")
+    #expect(try Config.load(homeDirectory: home).attribution.snippetDurationSeconds == 12)
+}
+
+@Test func setInsertsABlankLineAfterANewRootKeyThatLandsBeforeAnExistingHeader() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig("# c\n[self]\nwikilink = \"[[A]]\"\n", inHome: home)
+
+    try ConfigWriter.set("vault_path", to: "/v", homeDirectory: home)
+
+    #expect(try readFile(file) == "# c\nvault_path = \"/v\"\n\n[self]\nwikilink = \"[[A]]\"\n")
+}

@@ -71,7 +71,7 @@ public struct Config: Sendable, Equatable {
     public let googleCalendar: GoogleCalendar
     public let attribution: Attribution
     public let diarizationReview: DiarizationReview
-    /// The wikilink text (e.g. `"[[Andrew]]"`) identifying this user, in the
+    /// The wikilink text (e.g. `"[[Jordan]]"`) identifying this user, in the
     /// vault's own wikilink syntax.
     public let selfWikilink: String?
 

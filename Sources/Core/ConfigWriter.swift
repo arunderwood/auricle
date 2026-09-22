@@ -12,25 +12,46 @@ import TOMLKit
 ///
 /// Only two existing representations of a nested key are recognized: a
 /// fully-dotted line (`table.leaf = ...`) at the root, or a `[table]`
-/// section. A table already defined only in inline-table form
-/// (`table = { leaf = ... }`) is not detected, so `set` appends a fresh
-/// `[table]` section alongside it rather than editing it in place.
+/// section. A file using some other valid-but-unrecognized TOML shape for
+/// the same name (an inline table, a quoted key or header, a dotted key
+/// with embedded spaces, ...) isn't edited in place; `set` re-parses the
+/// result with `Config.parse` before writing and throws
+/// `WriterError.wouldProduceInvalidConfig` rather than silently writing an
+/// unreadable file, so the worst case is a safe rejection, never corruption.
 public enum ConfigWriter {
     public enum WriterError: Error, Sendable, Equatable {
-        /// `key` is empty, exactly `"."`, or starts or ends with `.`.
+        /// `key` is empty, exactly `"."`, starts or ends with `.`, or has a
+        /// dot-component containing a character illegal in a bare TOML key.
         case invalidKey(key: String)
+        /// `key` looks credential-shaped (matches NFR-S1's secret patterns)
+        /// and isn't the one documented exception, `google_calendar.client_secret`.
+        case secretRejected(key: String)
         /// The existing file's contents are not valid UTF-8.
         case malformed
+        /// Applying the edit would leave `Config.parse` unable to read the
+        /// file — the file is left untouched when this is thrown.
+        case wouldProduceInvalidConfig(ConfigError)
 
         public var message: String {
             switch self {
             case let .invalidKey(key):
                 "\"\(key)\" is not a valid config key."
+            case let .secretRejected(key):
+                "\"\(key)\" looks like a credential; store it in Keychain, not config.toml."
             case .malformed:
                 "the existing config file is not valid UTF-8."
+            case let .wouldProduceInvalidConfig(underlying):
+                "this edit would make the config unreadable (\(underlying)) — the file was left untouched."
             }
         }
     }
+
+    /// Case-insensitive substrings of a credential-shaped key (NFR-S1).
+    /// `google_calendar.client_secret` is the one documented exception
+    /// (`Config`'s own doc comment): Google issues Desktop-type clients a
+    /// secret it documents as non-confidential.
+    private static let secretKeyPatterns = ["api_key", "token", "secret", "password"]
+    private static let secretKeyExceptions: Set<String> = ["google_calendar.client_secret"]
 
     /// `fileURL`/`homeDirectory` mirror `Config.load`'s own test-seam
     /// parameters, so a caller passing neither writes exactly where
@@ -47,14 +68,29 @@ public enum ConfigWriter {
         guard key.split(separator: ".", omittingEmptySubsequences: false).allSatisfy(isValidBareKeyComponent) else {
             throw WriterError.invalidKey(key: key)
         }
+        guard !isSecretShaped(key) else {
+            throw WriterError.secretRejected(key: key)
+        }
 
         let url = fileURL ?? Config.defaultFileURL(homeDirectory: homeDirectory)
         let existingText = try readExistingText(at: url)
-        let literal = formattedLiteral(for: value)
+        let literal = formattedLiteral(for: value, key: key)
         let updatedText = apply(key: key, literal: literal, to: existingText)
+
+        do {
+            _ = try Config.parse(updatedText, homeDirectory: homeDirectory)
+        } catch let error as ConfigError {
+            throw WriterError.wouldProduceInvalidConfig(error)
+        }
 
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try AtomicWriter.write(Data(updatedText.utf8), to: url)
+    }
+
+    private static func isSecretShaped(_ key: String) -> Bool {
+        guard !secretKeyExceptions.contains(key) else { return false }
+        let lowered = key.lowercased()
+        return secretKeyPatterns.contains { lowered.contains($0) }
     }
 
     /// A missing file reads as empty text — `set` then writes a file
@@ -73,11 +109,39 @@ public enum ConfigWriter {
         return text
     }
 
-    /// `options: []` disables `.allowLiteralStrings`, so a value that would
-    /// otherwise render as a single-quoted TOML literal always renders as a
-    /// double-quoted basic string, matching what `replacingValue` expects to
-    /// find on a later edit.
-    private static func formattedLiteral(for value: String) -> String {
+    /// The non-`String` fields `Config`'s schema declares today. Every other
+    /// key -- including any key this schema doesn't recognize -- is written
+    /// as a string; the `wouldProduceInvalidConfig` guard in `set` catches a
+    /// value that doesn't actually parse as its schema type.
+    private enum LiteralKind {
+        case bool, int, string
+    }
+
+    private static func literalKind(for key: String) -> LiteralKind {
+        switch key {
+        case "diarization_review.enabled": .bool
+        case "attribution.snippet_duration_seconds": .int
+        default: .string
+        }
+    }
+
+    /// `options: []` disables `.allowLiteralStrings`, so a string value that
+    /// would otherwise render as a single-quoted TOML literal always renders
+    /// as a double-quoted basic string, matching what `replacingValue`
+    /// expects to find on a later edit.
+    private static func formattedLiteral(for value: String, key: String) -> String {
+        switch literalKind(for: key) {
+        case .bool:
+            if let boolValue = Bool(value) {
+                return boolValue ? "true" : "false"
+            }
+        case .int:
+            if let intValue = Int(value) {
+                return String(intValue)
+            }
+        case .string:
+            break
+        }
         let rendered = TOMLTable(["v": value]).convert(to: .toml, options: [])
         let prefix = "v = "
         var literal = rendered.hasPrefix(prefix) ? String(rendered.dropFirst(prefix.count)) : rendered
@@ -86,8 +150,25 @@ public enum ConfigWriter {
         }
         return literal
     }
+}
 
-    private static func apply(key: String, literal: String, to text: String) -> String {
+/// The raw-text line search/replace engine `set` above drives. Split into its
+/// own extension so `ConfigWriter`'s two type bodies each stay under
+/// swiftlint's `type_body_length`.
+private extension ConfigWriter {
+    /// Normalizes CRLF to LF before the line-based logic below (which knows
+    /// only `\n`), then restores CRLF on the way out if that's what the
+    /// original file used -- so a Windows-authored or `core.autocrlf`-mangled
+    /// config round-trips with its own line ending, rather than silently
+    /// gaining a mismatched `\n` section that later fails to parse.
+    static func apply(key: String, literal: String, to text: String) -> String {
+        let usesCRLF = text.contains("\r\n")
+        let normalized = usesCRLF ? text.replacingOccurrences(of: "\r\n", with: "\n") : text
+        let result = applyToLFNormalized(key: key, literal: literal, to: normalized)
+        return usesCRLF ? result.replacingOccurrences(of: "\n", with: "\r\n") : result
+    }
+
+    private static func applyToLFNormalized(key: String, literal: String, to text: String) -> String {
         let (table, leaf) = splitKey(key)
         var lines = splitLines(text)
 
@@ -100,6 +181,9 @@ public enum ConfigWriter {
             }
             let insertAt = insertionIndex(atEndOf: 0 ..< rootEnd, in: lines)
             lines.insert("\(leaf) = \(literal)", at: insertAt)
+            if insertAt + 1 < lines.count, isTopLevelHeaderLine(lines[insertAt + 1]) {
+                lines.insert("", at: insertAt + 1)
+            }
             return join(lines)
         }
 
