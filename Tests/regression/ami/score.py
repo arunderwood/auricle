@@ -33,19 +33,90 @@ def words(text):
     return [w for w in text.split() if w not in FILLERS]
 
 
+def align(reference, hypothesis):
+    """Word-level Levenshtein alignment: edit distance, plus which reference
+    words the cheapest path deleted (present in reference, absent from
+    hypothesis).
+
+    One DP over the same two sequences `wer()` always aligned, now keeping a
+    direction per cell so the alignment can be walked back instead of only
+    scored. Directions pack into a flat `bytearray` (0 = diagonal, match or
+    substitution; 1 = up, a reference word with no hypothesis counterpart;
+    2 = left, a hypothesis word with no reference counterpart) rather than a
+    grid of Python objects, because the largest AMI meeting is ~6,600 words a
+    side: a (n+1)x(m+1) table of ints would run to hundreds of MB, while one
+    byte per cell keeps it to tens.
+    """
+    n, m = len(reference), len(hypothesis)
+    width = m + 1
+    directions = bytearray((n + 1) * width)
+    for j in range(1, width):
+        directions[j] = 2  # row 0: hypothesis word j has no reference counterpart.
+    previous = list(range(width))
+    for i in range(1, n + 1):
+        current = [i] + [0] * m
+        directions[i * width] = 1  # column 0: reference word i has no hypothesis counterpart.
+        ref_word = reference[i - 1]
+        for j in range(1, width):
+            diagonal = previous[j - 1] + (ref_word != hypothesis[j - 1])
+            up = previous[j] + 1
+            left = current[j - 1] + 1
+            best = min(diagonal, up, left)
+            current[j] = best
+            directions[i * width + j] = 0 if best == diagonal else (1 if best == up else 2)
+        previous = current
+    deleted = [False] * n
+    i, j = n, m
+    while i > 0 or j > 0:
+        move = directions[i * width + j]
+        if move == 0:
+            i -= 1
+            j -= 1
+        elif move == 1:
+            deleted[i - 1] = True
+            i -= 1
+        else:
+            j -= 1
+    return previous[-1], deleted
+
+
 def wer(reference, hypothesis):
     """Word error rate: word-level edit distance over the reference length."""
-    previous = list(range(len(hypothesis) + 1))
-    for i, ref_word in enumerate(reference, 1):
-        current = [i] + [0] * len(hypothesis)
-        for j, hyp_word in enumerate(hypothesis, 1):
-            current[j] = min(
-                previous[j] + 1,
-                current[j - 1] + 1,
-                previous[j - 1] + (ref_word != hyp_word),
-            )
-        previous = current
-    return previous[-1] / max(len(reference), 1)
+    distance, _ = align(reference, hypothesis)
+    return distance / max(len(reference), 1)
+
+
+def dropped_reference_words(deleted):
+    """Sum of the lengths of every run of 25 or more consecutive deletions.
+
+    A run under 25 is ordinary far-field word error — scattered substitutions
+    and short gaps `wer` already prices. Only a long, unbroken stretch with no
+    hypothesis word at all is the failure mode this metric exists to catch: a
+    whole decoded window silently missing.
+    """
+    total = run = 0
+    for word_was_deleted in deleted:
+        if word_was_deleted:
+            run += 1
+        else:
+            if run >= 25:
+                total += run
+            run = 0
+    if run >= 25:
+        total += run
+    return total
+
+
+def dropped_stats(deleted, reference_length):
+    """The long-deletion-run word count from `align`, and its share of the reference.
+
+    Isolated from `meeting()` so the wiring between `align`'s deletions and the
+    two reported fields can be tested directly, against a synthetic `deleted`
+    array, without a database, cache root, or manifest.
+    """
+    dropped = dropped_reference_words(deleted)
+    fraction = dropped / reference_length if reference_length else 0.0
+    return dropped, fraction
 
 
 def note_items(note):
@@ -215,7 +286,12 @@ def meeting(meeting_id, ami_id, db_path, cache_root, repo_root):
 
     hypothesis = json.load(open(cache / "transcript.json"))["text"]
     reference = json.load(open(reference_dir / "transcript.json"))["text"]
-    result["wer"] = wer(words(reference), words(hypothesis))
+    reference_words = words(reference)
+    distance, deleted = align(reference_words, words(hypothesis))
+    result["wer"] = distance / max(len(reference_words), 1)
+    dropped, fraction = dropped_stats(deleted, len(reference_words))
+    result["dropped_reference_words"] = dropped
+    result["dropped_reference_fraction"] = fraction
 
     diarization = json.load(open(cache / "diarization.json"))
     result["diarized_speakers"] = len({s["speaker_label"] for s in diarization["segments"]})
@@ -252,17 +328,19 @@ def report(thresholds_path, results_path):
     limits = json.load(open(thresholds_path, encoding="utf-8"))
     require_the_rules_own_threshold(limits)
     rows = [json.loads(line) for line in open(results_path) if line.strip()]
-    print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'recall':>7} {'false':>6} {'cost':>8}")
+    print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'refDrop':>7} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
     for r in rows:
-        # A row written before false keeps were measured prints `-`, never 0: a
-        # zero here would assert a count nobody took, and would satisfy
-        # max_false_keeps on the strength of it.
+        # A row written before false keeps, or before dropped-reference-words,
+        # were measured prints `-`, never 0: a zero here would assert a count
+        # nobody took, and would satisfy the corresponding limit on the
+        # strength of it.
         false = f"{r['false_keeps']:6d}" if "false_keeps" in r else f"{'-':>6}"
+        ref_drop = f"{r['dropped_reference_fraction']:7.1%}" if "dropped_reference_fraction" in r else f"{'-':>7}"
         print(
             f"{r['ami_id']:9} {r['wer']:6.3f} {r['realtime_factor']:6.3f} "
             f"{r['diarized_speakers']}/{r['expected_speakers']:<3} {r['kept_items']:5d} {r['drop_count']:5d} "
-            f"{r['recalled_items']}/{r['expected_items']:<5} {false} ${r['cost_usd']:7.4f}"
+            f"{ref_drop} {r['recalled_items']}/{r['expected_items']:<5} {false} ${r['cost_usd']:7.4f}"
         )
         name = r["ami_id"]
         checks = [
@@ -273,6 +351,16 @@ def report(thresholds_path, results_path):
             (r["realtime_factor"] <= limits["max_realtime_factor"], f"realtime factor {r['realtime_factor']:.3f} > {limits['max_realtime_factor']}"),
             (r["cost_usd"] <= limits["max_cost_usd"], f"cost ${r['cost_usd']:.4f} > ${limits['max_cost_usd']}"),
         ]
+        if "dropped_reference_fraction" in r and "max_dropped_reference_fraction" not in limits:
+            sys.exit(
+                "score.py report: this thresholds file has no max_dropped_reference_fraction, "
+                "but the rows carry dropped_reference_fraction. Add the limit, or drop the key from every row."
+            )
+        if "dropped_reference_fraction" in r:
+            checks.append((
+                r["dropped_reference_fraction"] <= limits["max_dropped_reference_fraction"],
+                f"dropped reference fraction {r['dropped_reference_fraction']:.1%} > {limits['max_dropped_reference_fraction']:.0%}",
+            ))
         breaches += [f"{name}: {why}" for ok, why in checks if not ok]
     expected = sum(r["expected_items"] for r in rows)
     recalled = sum(r["recalled_items"] for r in rows)

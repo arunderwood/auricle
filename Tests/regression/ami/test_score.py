@@ -178,7 +178,10 @@ def run_report(limits, rows):
         )
 
 
-gates_only = {k: THRESHOLDS[k] for k in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "max_false_keeps")}
+gates_only = {
+    k: THRESHOLDS[k]
+    for k in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "max_false_keeps", "max_dropped_reference_fraction")
+}
 clean_row = {
     "ami_id": "ES0000a", "state": "awaiting_verification", "verified_at_null": True,
     "wer": 0.1, "realtime_factor": 0.1, "cost_usd": 0.01, "ungrounded_quotes": 0,
@@ -199,8 +202,93 @@ check("the refusal keeps the gates argument meaningful", "drop the key" in disag
 
 
 # report() reads these; a missing one is a crash mid-run rather than a message.
-for limit in ("max_wer", "max_realtime_factor", "max_cost_usd", "min_item_recall", "item_text_overlap", "max_false_keeps"):
+for limit in (
+    "max_wer",
+    "max_realtime_factor",
+    "max_cost_usd",
+    "min_item_recall",
+    "item_text_overlap",
+    "max_false_keeps",
+    "max_dropped_reference_fraction",
+):
     check(f"thresholds.json defines {limit}", limit in THRESHOLDS)
+
+
+# align: the same DP wer() scores must also say which reference words the
+# cheapest path deleted, so dropped_reference_words never runs a second,
+# heuristic alignment over the same two sequences.
+identical = [f"r{i}" for i in range(10)]
+check("align finds no distance for identical sequences", score.align(identical, identical)[0] == 0)
+check("align finds no deletions for identical sequences", not any(score.align(identical, identical)[1]))
+
+reference_60 = [f"r{i}" for i in range(60)]
+
+# A run of exactly 25 missing reference words, with matching context on both
+# sides so the alignment cannot place the deletion anywhere else.
+hypothesis_25_gap = reference_60[:10] + reference_60[35:]
+_, deleted_25 = score.align(reference_60, hypothesis_25_gap)
+check("a 25-word gap is deleted end to end", all(deleted_25[10:35]))
+check("a 25-word gap touches nothing outside it", not any(deleted_25[:10]) and not any(deleted_25[35:]))
+check("dropped_reference_words counts a run of exactly 25", score.dropped_reference_words(deleted_25) == 25)
+
+# One word short of the floor: the same shape, one word narrower.
+hypothesis_24_gap = reference_60[:10] + reference_60[34:]
+_, deleted_24 = score.align(reference_60, hypothesis_24_gap)
+check("dropped_reference_words does not count a run of 24", score.dropped_reference_words(deleted_24) == 0)
+
+# Two separate runs of 25+ in one meeting: both lengths sum into one count.
+reference_100 = [f"r{i}" for i in range(100)]
+hypothesis_two_gaps = reference_100[:10] + reference_100[35:40] + reference_100[70:]
+_, deleted_two_gaps = score.align(reference_100, hypothesis_two_gaps)
+check("two separate 25+ runs both count", score.dropped_reference_words(deleted_two_gaps) == 25 + 30)
+
+# A fully dropped hypothesis: the whole reference is one run.
+_, deleted_all = score.align(reference_60, [])
+check("an empty hypothesis deletes the whole reference", all(deleted_all))
+check("dropped_reference_words counts the whole reference when it's 25 or more", score.dropped_reference_words(deleted_all) == len(reference_60))
+
+# Below the floor even when everything is dropped: no run reaches 25.
+reference_10 = [f"r{i}" for i in range(10)]
+_, deleted_short = score.align(reference_10, [])
+check("a fully dropped reference under 25 words counts nothing", score.dropped_reference_words(deleted_short) == 0)
+
+# wer() must still agree with align()'s own distance: it is the same DP, not a
+# second one that happens to produce compatible deletions.
+check("wer matches align's distance over the reference length", score.wer(reference_60, hypothesis_25_gap) == 25 / len(reference_60))
+
+# A hypothesis word absent from the reference takes the "left" backtrace
+# branch on its own; deleted must stay empty rather than charging the
+# insertion against some reference word.
+reference_ins = ["a", "b", "c"]
+hypothesis_ins = ["a", "x", "b", "c"]
+distance_ins, deleted_ins = score.align(reference_ins, hypothesis_ins)
+check("align charges one edit for a single inserted word", distance_ins == 1)
+check("align marks no reference-side deletions for a pure insertion", not any(deleted_ins))
+
+# Insertion and a true deletion together, far enough apart that substitution
+# is never cheaper: deleted must ignore the inserted word and mark only the
+# reference word the hypothesis actually drops.
+reference_mixed = ["a", "b", "c", "d", "e", "f"]
+hypothesis_mixed = ["a", "x", "b", "c", "d", "f"]
+distance_mixed, deleted_mixed = score.align(reference_mixed, hypothesis_mixed)
+check("align counts an insertion plus a deletion as two edits", distance_mixed == 2)
+check(
+    "align marks only the dropped reference word as deleted, not the inserted one",
+    deleted_mixed == [False, False, False, False, True, False],
+)
+
+# meeting() wires align()'s deletions into dropped_reference_words and
+# dropped_reference_fraction through dropped_stats; test that wiring directly,
+# with an independently computed expectation, rather than only its two pieces.
+dropped_synth, fraction_synth = score.dropped_stats(deleted_25, len(reference_60))
+check("dropped_stats returns the dropped-word count align/dropped_reference_words agree on", dropped_synth == 25)
+check("dropped_stats divides by the reference length, not some other total", fraction_synth == 25 / len(reference_60))
+
+dropped_none, fraction_none = score.dropped_stats([False] * 10, 10)
+check("dropped_stats returns zero count and fraction for no deletions", dropped_none == 0 and fraction_none == 0.0)
+
+dropped_empty, fraction_empty = score.dropped_stats([], 0)
+check("dropped_stats does not divide by zero for an empty reference", fraction_empty == 0.0)
 
 
 def run_report(rows):
@@ -255,6 +343,22 @@ check("a fully scored set reports a plain total", "false keeps 2/8\n" in text)
 over = THRESHOLDS["max_false_keeps"] + 1
 _, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=over)])
 check("a partial total over the limit still breaches", not ok)
+
+# report(): dropped_reference_fraction follows the same "-" convention as
+# false_keeps for a row that predates the metric, and is enforced once present.
+ROW_WITH_DROP = {**ROW, "dropped_reference_fraction": 0.0, "dropped_reference_words": 0}
+
+text, ok = run_report([dict(ROW)])
+check("a row without dropped_reference_fraction does not crash report", ok)
+check("an unmeasured dropped-reference row is not printed as 0.0%", "0.0%" not in text)
+
+text, ok = run_report([dict(ROW_WITH_DROP)])
+check("a row within the dropped-reference limit does not breach", ok)
+check("a measured dropped-reference row prints its fraction", "0.0%" in text)
+
+over_drop = THRESHOLDS["max_dropped_reference_fraction"] + 0.01
+_, ok = run_report([dict(ROW_WITH_DROP, dropped_reference_fraction=over_drop)])
+check("a dropped-reference fraction over the limit breaches", not ok)
 
 for name in failures:
     print(f"test_score: FAILED: {name}", file=sys.stderr)
