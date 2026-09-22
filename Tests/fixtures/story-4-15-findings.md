@@ -284,10 +284,19 @@ the smaller denominator —
 three items this fixture asserted fell outside the shipped rule set's own
 definitions, not because the pipeline recovered anything it was previously
 missing — the same runs, the same rendered notes, a corrected count.
-`Tests/regression/ami/history.jsonl`'s three rows for this revision need the
-same re-score applied so the committed record matches the fixture it is
-scored against; that rewrite is coordinated with Story 4.14 (PR #107, which
-owns those rows and is not yet merged) rather than duplicated here — see the
-spec's residual risks.
+
+`Tests/regression/ami/history.jsonl`'s three rows for this revision are
+re-scored for real (`score.py meeting`, no API cost — PR #107 merged, this
+story rebased and rewrote them in place: same `run_at`/`revision`, only
+`expected_items` and ES2004a's per-section expected counts change).
+`score.py report`'s own output over the corrected file:
+
+```
+item recall, revision 21a5771be6f33b3186ab7613de15c27a32c352e5: median 82% of 3 run(s) (94%, 65%, 82%)
+false keeps: median 4 of 3 runs ([4, 4, 3])
+dropped reference fraction: median 0.0% of 3 runs
+```
+
+The committed record now agrees with the fixture it is scored against.
 
 This story's stop condition is met via path 2. AC4 is satisfied.

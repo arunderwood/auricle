@@ -16,7 +16,7 @@ Setup is the same as `Tests/scripts/run-epic4-exit-criteria.sh`: launch the app 
 - Transcription time over audio length (realtime factor).
 - Speakers the diarizer found, against 4.
 - Grounded items kept, dropped items, and cost.
-- How many of the 19 expected items the note recalls, and how many kept items match no expected item at all (false keeps).
+- How many of the 17 expected items the note recalls, and how many kept items match no expected item at all (false keeps).
 - Reference content words that fall in a run of 25 or more with no transcript text against them, as a count and a fraction of the reference. Word error rate cannot stand in for this: it folds stripped fillers, substitutions and vanished windows into one number, and a decoding gate that removed a fifth of a meeting moved WER from 0.25 to 0.35 while looking like ordinary far-field error.
 
 ## How an item is matched
