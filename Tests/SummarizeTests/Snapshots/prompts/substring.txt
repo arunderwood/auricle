@@ -7,8 +7,9 @@ Rules:
 3. Every action item and decision must be supported by a verbatim quote from the transcript.
 4. If you cannot find a verbatim grounding, omit the item. Do not paraphrase grounding.
 5. Prefer precision over coverage. If you are unsure that something meets the definitions above, leave it out. A short list, or an empty array, is a correct answer. Report each task or decision once.
-6. If a glossary is given below, use it to disambiguate names and terms; if a term in the transcript matches a glossary entry, render it accordingly. If no glossary is given, do not mention it.
-7. Output a one-paragraph summary, then arrays of action items and decisions.
+6. Build the two lists independently. Work through the transcript once for action items and again for decisions. How much you found for one list says nothing about the other: a long decision list is not a reason to report fewer action items, and an empty one is not a reason to report more.
+7. If a glossary is given below, use it to disambiguate names and terms; if a term in the transcript matches a glossary entry, render it accordingly. If no glossary is given, do not mention it.
+8. Output a one-paragraph summary, then arrays of action items and decisions.
 
 Respond with a single JSON object and nothing else: no prose before or after it, and no markdown code fence. Its shape is:
 

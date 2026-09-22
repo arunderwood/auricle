@@ -51,27 +51,70 @@ weaken each.
 
 ES2004a produced nothing at all under the control and under
 `sections-independent`, and one item of three under `action-coverage`. It is the
-only fixture no arm has moved meaningfully, and its three expected items sit
-closest to rule 1 and rule 2's boundaries: a tentative offer, a group
-instruction with no named owner, and a ruling read from a brief.
+only fixture no arm moved meaningfully. Its three expected items do sit close to
+rule 1 and rule 2's boundaries — a tentative offer, a group instruction with no
+named owner, and a ruling read from a brief — but run 2 below gives a simpler
+reason to prefer: its WhisperKit transcript is 34% shorter than the reference,
+the largest loss in the set.
 
-## The unresolved question
+## Run 2 — transcript source held as the only variable
 
-**The control scored 79% here against 57.9% in the Part B re-score, on the same
-prompt, the same expected items and the same scorer.** The one deliberate
-difference is the transcript: this bench feeds the committed reference
-transcripts, and Part B fed WhisperKit output at word error rate 0.28 to 0.38.
+The control scored 79% on run 1 against 57.9% in the Part B re-score, on the
+same prompt, the same expected items and the same scorer. Run 2 settles which
+part of that is the transcript by scoring the same two arms over the WhisperKit
+transcripts the 2026-09-21 run left in the cache. Everything else is identical.
 
-If that gap is transcription, the constraint on Epic 4 is ASR quality rather
-than the summarizer, and a prompt arm that reaches 84% here would still leave
-Part B short of 80%. That is not established: a single run cannot separate a
-transcription penalty from sampling variance, and the control moving 11 to 15
-could be partly noise.
+| arm | reference transcripts | WhisperKit transcripts | difference |
+|---|---:|---:|---:|
+| `substring` (control) | 15/19 = 79% | 12/19 = 63% | **-3 items** |
+| `sections-independent` | 16/19 = 84% | 14/19 = 74% | **-2 items** |
 
-The check that settles it is one bench run over the WhisperKit transcripts the
-2026-09-21 run left in the cache, holding the prompt, the expected items and the
-scorer fixed so the transcript source is the only variable. It has not been run.
+The independent Part B re-score put the control on WhisperKit output at 11/19.
+Run 2 puts it at 12/19. One item apart, which bounds run-to-run sampling
+variance at roughly one item and leaves the rest attributable to the transcript.
 
-Until it has, no arm should be promoted to `Sources/Summarize/Prompts/summarize/`
-and `min_item_recall` should not be raised: both would bank a bench number whose
-relationship to the gate is unknown.
+WhisperKit output is 14% to 34% shorter than the reference for the same audio:
+
+| meeting | reference | WhisperKit | lost |
+|---|---:|---:|---:|
+| ES2002a | 16,486 | 13,690 | 17% |
+| ES2002b | 42,870 | 32,098 | 25% |
+| ES2003a | 11,911 | 9,597 | 19% |
+| ES2003b | 33,124 | 28,401 | 14% |
+| ES2004a | 16,980 | 11,269 | 34% |
+
+That is missing text, not substitution noise. An item whose only statement in
+the meeting was not transcribed cannot be extracted by any prompt.
+
+## Conclusion
+
+**The summarizer is not the constraint. Transcription is.**
+
+Given a clean transcript of the same audio, the shipped prompt already recalls
+79% and the promoted arm 84%, both at or above Story 4.10's floor. On the
+pipeline's own WhisperKit output the same prompts reach 63% and 74%. The
+decomposition, in items out of 19:
+
+- Transcription costs 2 to 3 items.
+- The prompt arm recovers 2 items on WhisperKit output, 1 on clean.
+- Sampling variance is about 1 item.
+
+`sections-independent` is promoted to `Sources/Summarize/Prompts/summarize/`.
+It wins on both transcript sources, adds no cost, and does not trade precision
+for recall — action-item false keeps stay at the control's level. It is the
+right change regardless of how the gate is resolved.
+
+It does not clear the gate. 80% of 19 is 16 items; the promoted arm reaches 14
+on WhisperKit output. The remaining two items are behind transcription, so
+Story 4.13's own stopping condition cannot be met by a prompt.
+
+**Multi-pass summarization is the wrong lever and should not be the
+escalation.** Story 4.13's decision gate offered it for the 65-79% band, but
+that gate was written while the gap was believed to be summarizer recall. A
+second summarization pass cannot recover text that is not in the transcript.
+The PRD already names the right response: "If WhisperKit transcription is
+inadequate, the Parakeet-TDT alternate ASR path is the next step"
+(`prd.md:426`).
+
+`min_item_recall` is left at 0.35. Raising it needs a recorded full-pipeline
+regression run under the promoted prompt, and `history.jsonl` has none yet.

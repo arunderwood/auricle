@@ -82,7 +82,7 @@ development_status:
   4-10-exit-criteria-gate-ci-pipeline-test-live-run: in-progress
   4-11-offline-recall-bench: backlog
   4-12-item-text-recall-and-false-keep-scoring: backlog
-  4-13-prompt-recall-pass: backlog
+  4-13-prompt-recall-pass: done
   epic-4-retrospective: done
 
   epic-5: backlog
