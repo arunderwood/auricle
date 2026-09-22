@@ -35,6 +35,9 @@ private let home = URL(fileURLWithPath: "/fake/home", isDirectory: true)
         [google_calendar]
         client_id = "abc.apps.googleusercontent.com"
         client_secret = "shh"
+
+        [self]
+        wikilink = "[[Jordan]]"
         """,
         homeDirectory: home,
     )
@@ -43,6 +46,12 @@ private let home = URL(fileURLWithPath: "/fake/home", isDirectory: true)
     #expect(config.meetingsSubdir == "Work/Meetings")
     #expect(config.googleCalendar.clientID == "abc.apps.googleusercontent.com")
     #expect(config.googleCalendar.clientSecret == "shh")
+    #expect(config.selfWikilink == "[[Jordan]]")
+}
+
+@Test func selfWikilinkIsNilWhenAbsentOrEmpty() throws {
+    #expect(try Config.parse("", homeDirectory: home).selfWikilink == nil)
+    #expect(try Config.parse("[self]\nwikilink = \"\"\n", homeDirectory: home).selfWikilink == nil)
 }
 
 @Test func emptyDocumentYieldsDefaultsWithNoVaultPath() throws {
