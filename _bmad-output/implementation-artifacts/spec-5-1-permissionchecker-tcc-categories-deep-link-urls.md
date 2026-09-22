@@ -2,7 +2,7 @@
 title: 'Story 5.1: PermissionChecker + TCC Categories + Deep-Link URLs'
 type: 'feature'
 created: '2026-09-22'
-status: 'done'
+status: 'in-review'
 review_loop_iteration: 0
 followup_review_recommended: true
 baseline_revision: '07d3c28cc0ff71d1551cdc30becb2540d9c189b0'
@@ -206,5 +206,7 @@ public actor PermissionChecker: PermissionChecking {
 **Residual risks:**
 - The three remediation deep links (System Audio Recording, Microphone, Notifications) are unverified for pane-correctness on this Mac — `architecture.md` Decision 4.4 still reads "Candidate" for two of them. `open` accepted all three without an OS-level error, and a second attempt at automated verification (`screencapture`, then `osascript`/System Events UI-element access) failed in this environment (`could not create image from display`; error -1719 "not allowed assistive access") — needs the maintainer to glance at each once.
 - `NSUserNotificationsUsageDescription` was removed from `Info.plist` based on documented platform behavior, not a live on-device trigger of the prompt — logged in `deferred-work.md`.
+
+**Status held at `in-review`:** the reviewing session asked to keep this spec below `done`, and `architecture.md` Decision 4.4's "Candidate" wording unchanged, until the maintainer confirms the three deep-link panes. It will send the confirmed URLs when the maintainer reports back — at that point, record them in Decision 4.4 and set status to `done`.
 
 **PR review pass (2026-09-22, external session, PR #113):** an independent Claude session reviewed the merged PR at the maintainer's request and found one real bug this pass's own review missed: `SystemNotificationCenter.isAuthorized()`'s memoized `.notifications` check never invalidated while auricle stayed backgrounded (`shouldRefresh` only fires on our own app's re-activation), so a permission granted in System Settings while the app never came to the foreground would leave every notification silently suppressed by a stale `.denied`. Fixed: `isAuthorized()` now calls `refresh()` before every check, restoring pre-PR always-fresh behavior for this path. The composition also moved into a new `Sources/Notifications/PermissionCheckedNotificationAuthorization.swift` (the `Notifications` target now depends on `Permissions`) with direct test coverage, including a test asserting `refresh()` is called before `check()` — closing the App/-layer coverage gap this spec's own review had deferred. Also landed: two more banned call shapes in `permission_checker_bypass` (`getNotificationSettings(completionHandler:)`, `AVAudioApplication`'s permission APIs) plus fixtures, a negative fixture case, and reworded comments per the review. Declined: reverting the `epic-5-context.md` header wording the reviewer flagged as unrelated — it is the exact required template text from `compile-epic-context.md`'s own output-format spec, produced because that story's epic-context cache was stale and had to be regenerated per step-01, not a stray edit. Still open: the deep-link pane verification above; a lower-probability `check()`-vs-`refresh()` reentrancy race the reviewer additionally flagged, logged to `deferred-work.md`. Re-verified after these fixes: `swift test` 1426/1426, `swiftlint --strict` 0 violations, `verify-custom-lint-rules.sh` 24/24 marked lines, `scripts/check.sh app` passed.
