@@ -26,7 +26,7 @@ Local-first macOS meeting notetaker: capture → transcribe → diarize → attr
 
 ## Conventions that differ from defaults
 
-- Single-implementation primitives — `StateStore` (all state reads/writes), `StageEventLogger` (all `stage_events` writes), `TelemetryRecorder` (all `telemetry` writes), `Log` (all logging), `AtomicWriter` (all file writes), `MeetingIDResolver` (all `<id>` argument parsing) — bypassing one with an inline equivalent is a defect, not a style choice.
+- Single-implementation primitives — `StateStore` (all state reads/writes), `StageEventLogger` (all `stage_events` writes), `TelemetryRecorder` (all `telemetry` writes), `Log` (all logging), `AtomicWriter` (all file writes except the streamed capture WAV, the one exemption architecture Decision 1.4 records), `MeetingIDResolver` (all `<id>` argument parsing) — bypassing one with an inline equivalent is a defect, not a style choice.
 - JSON dialect is chosen by what the JSON is for, not applied globally: snake_case for cache artifacts/vault frontmatter/`stage_events.metadata_json`, camelCase for CLI `--json` output — declare `CodingKeys` explicitly per type, never rely on `.convertFromSnakeCase`.
 
 ## Known pitfalls

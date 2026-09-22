@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: '09-22-2026 10:26'
+last_updated: '09-22-2026 12:00'
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -88,15 +88,16 @@ development_status:
   epic-4-retrospective: done
 
   epic-5: backlog
-  5-1-permissionchecker-scaffold-tcc-categories-deep-link-urls: backlog
-  5-2-screencapturekit-avaudioengine-pipeline-audiomixer: backlog
-  5-3-wavwriter-pcm-16-bit-16khz-mono-wav: backlog
-  5-4-capture-stage-entry-point-state-machine-integration-mid-capt: backlog
+  5-1-permissionchecker-tcc-categories-deep-link-urls: backlog
+  5-2-process-tap-avaudioengine-capture-session-audiomixer: backlog
+  5-3-wavwriter-streaming-pcm-16-bit-16khz-mono-wav: backlog
+  5-4-capture-stage-state-machine-integration-crash-recovery-mid-c: backlog
   5-5-recordingindicator-atomic-component-privacy-contract-surface: backlog
   5-6-throwaway-debug-record-trigger-epic-6-deletes-it: backlog
-  5-7-onboardingcoordinator-welcome-vault-picker-obsidian-handshak: backlog
-  5-8-j0-4-step-permission-gauntlet: backlog
-  5-9-self-wikilink-config-setup-during-onboarding: backlog
+  5-7-onboardingcoordinator-welcome-vault-obsidian-api-key-expecta: backlog
+  5-8-j0-permission-steps-microphone-system-audio-notifications: backlog
+  5-9-self-wikilink-setup-during-onboarding: backlog
+  5-10-configwriter-self-wikilink-key: backlog
   epic-5-retrospective: optional
 
   epic-6: backlog

@@ -55,7 +55,7 @@ The architecture-shaping NFRs:
 **Scale & Complexity:**
 
 - Primary domain: **native macOS desktop application with on-device ML inference, local persistence, and thin remote API enrichment**. The "scale" axis (concurrent users, throughput) does not apply — this is single-user, single-machine, sequential per-meeting processing.
-- Complexity level: **medium-high technical, low domain**. Drivers: local ML pipeline (WhisperKit + ANE), system-audio loopback (ScreenCaptureKit), diarization-to-attribution UX, atomic vault contracts, two-stage retention coupled to a notification-click event, pipeline crash isolation across subprocess boundaries. Domain has no compliance regime, no multi-tenancy, no team semantics.
+- Complexity level: **medium-high technical, low domain**. Drivers: local ML pipeline (WhisperKit + ANE), system-audio loopback (Core Audio process tap), diarization-to-attribution UX, atomic vault contracts, two-stage retention coupled to a notification-click event, pipeline crash isolation across subprocess boundaries. Domain has no compliance regime, no multi-tenancy, no team semantics.
 - Estimated architectural components (rough — to be refined in step-06):
   - **6 pipeline-stage modules:** `Capture`, `Transcribe`, `Diarize`, `Attribute`, `Summarize`, `Persist`.
   - **3 cross-cutting modules:** `Orchestrator` (state machine + subprocess dispatch), `State` (SQLite layer), `Telemetry` (per-stage timing/counters).
@@ -69,7 +69,7 @@ The architecture-shaping NFRs:
 
 - **Platform:** macOS 14+ (Sonoma), Apple Silicon only. M5 Max is reference hardware for performance budgets; M1 is the floor.
 - **Language stack:** Swift / SwiftUI / AppKit only in MVP. Swift Package Manager for source dependencies. Xcode project for the bundle. No Python/Node/Electron in MVP.
-- **No App Sandbox.** Hardened Runtime is on; sandboxing is off. App Store distribution is excluded for the lifetime of the product (sandbox conflict with ScreenCaptureKit + vault writes).
+- **No App Sandbox.** Hardened Runtime is on; sandboxing is off. App Store distribution is excluded for the lifetime of the product (sandbox conflict with vault writes outside the container).
 - **Distribution:** Developer ID code signing + notarization required (Gatekeeper). `.dmg` or `.app` zip via GitHub Releases at MVP; Sparkle EdDSA-signed appcast in v1.1.
 - **Single-user, single-machine.** No accounts, no multi-tenancy, no sharing, no compliance regime.
 - **English-only.** Locked.
@@ -79,7 +79,7 @@ The architecture-shaping NFRs:
 **External dependencies (in order of architectural coupling):**
 
 - **WhisperKit** (Swift Package) — transcribe + built-in diarize. Highest coupling — the model load is the dominant memory cost and the latency floor. Whisper-large-v3-turbo on ANE is the locked default. Decoding runs with the temperature fallback off for byte-identical re-runs and, because of that, with WhisperKit's first-token log-probability gate off as well: the gate ends a window empty and relies on the fallback to retry it, so the two options are not independent (Story 4.14).
-- **ScreenCaptureKit** (Apple framework) — system-audio loopback. Apple-controlled API surface, has changed shape across recent macOS versions; capture stage is the most likely site of OS-update breakage.
+- **Core Audio process taps** (`AudioHardwareCreateProcessTap`, macOS 14.4+) — system-audio loopback through a global tap that excludes auricle's own process. Apple-controlled, thinly documented, with an open report of all-zero buffers on a macOS 26 beta; capture stage is the most likely site of OS-update breakage. ScreenCaptureKit is the recorded fallback behind the `SystemAudioSource` seam (Decision 1.4).
 - **AVFoundation / CoreAudio** — microphone capture, audio mixing, snippet playback (`AVPlayerView` or `QLPreviewPanel` for in-UI snippets).
 - **Anthropic SDK / HTTPS client** — single Claude Messages API call per meeting. Configurable model identifier (default `claude-sonnet-5` — this line's Sonnet naming predates this proposal and disagrees with NFR-I6's Opus default elsewhere; only the generation number is corrected here, see the 2026-09-16 Claude-model-defaults sprint change proposal). Stage is swappable per FR33.
 - **Google Calendar API v3** (REST) — read-only OAuth 2.0 with PKCE; refresh token in Keychain. Off the hot path; degrades to `#auricle/needs-calendar-enrichment` on failure.
@@ -131,7 +131,7 @@ These four questions are not answered by the PRD but materially shape downstream
 
 Constraints the PRD locks deliberately, where the architecture should *acknowledge* the cost of reversal rather than design around it. Naming them explicitly so future-self knows the cost rather than discovering it under deadline pressure.
 
-- **Post-hoc-only pipeline forecloses streaming features.** ScreenCaptureKit and WhisperKit both support streaming inference; the brainstorm chose post-hoc. Re-introducing streaming (live transcript display, "alert when my name is mentioned", real-time captioning) is a re-architecture of the pipeline shape — capture becomes a producer, transcribe consumes a stream not a file, the cache-dir filesystem-handoff between stages goes away. Not a refactor risk *given current scope*; a known one-way door if streaming features are ever requested.
+- **Post-hoc-only pipeline forecloses streaming features.** Core Audio taps and WhisperKit both support streaming inference; the brainstorm chose post-hoc. Re-introducing streaming (live transcript display, "alert when my name is mentioned", real-time captioning) is a re-architecture of the pipeline shape — capture becomes a producer, transcribe consumes a stream not a file, the cache-dir filesystem-handoff between stages goes away. Not a refactor risk *given current scope*; a known one-way door if streaming features are ever requested.
 - **Notification-click as the sole verification trigger needs an explicit fallback.** NFR-R8 implies a manual verification path in the GUI when Notifications permission is revoked, but no FR formalizes it. If the user opens the note directly from Obsidian (skipping the notification click), the meeting sits in `awaiting verification` and audio is held silently. Architecture should formalize a manual `Verify` affordance (GUI + `auricle keep <id>` CLI verb) so that NFR-Pr6 (conservative retention defaults) does not drift into "audio kept indefinitely by accident."
 - **Single Claude call per meeting (FR32) is fine; the JSON schema design must not accidentally foreclose multi-pass.** Chain-of-summarize is explicitly v2+ (FR71). The discipline is to shape the constrained-JSON output schema as *renderer-input* (the persist stage reads it) rather than *call-shape* (one schema = one Claude call), so a future multi-pass implementation populates the same schema across multiple calls without redesigning the renderer. Costs nothing to do right the first time; expensive to retrofit.
 
@@ -236,7 +236,7 @@ xcodebuild -project App/Auricle.xcodeproj -scheme AuricleApp build
 
 **Development Experience:** `swift test` from the command line for fast library iteration; Xcode for app-shell development, debugging, and shipping.
 
-**Build Order Implication:** This structure aligns with the brainstorm's risk-front-loaded build sequence. The pipeline-plumbing libraries (`Transcribe`, `Summarize`, `Persist`, `QuoteValidator`) and the CLI executable can be built and dogfooded against pre-existing audio recordings *before* the SwiftUI app shell or any ScreenCaptureKit code exists. SwiftUI work begins only when the underlying pipeline is validated.
+**Build Order Implication:** This structure aligns with the brainstorm's risk-front-loaded build sequence. The pipeline-plumbing libraries (`Transcribe`, `Summarize`, `Persist`, `QuoteValidator`) and the CLI executable can be built and dogfooded against pre-existing audio recordings *before* the SwiftUI app shell or any capture code exists. SwiftUI work begins only when the underlying pipeline is validated.
 
 **Note:** Project initialization using this approach should be the first implementation story. Subsequent stories build out one library target at a time, in the brainstorm's risk-front-loaded order: pipeline plumbing first, then capture, then attribution UI, then app shell + notifications + calendar + vault-glossary.
 
@@ -252,7 +252,7 @@ auricle is signed with a self-managed code-signing certificate (personal CA + pe
 
 - The PRD's locked constraints — single-user, "multiple personally-owned Macs," no public distribution — make Apple's notarization unnecessary. Notarization solves "convince other people's Macs that this software is safe"; auricle's only audience is the user themselves.
 - Apple-supported mechanism: `sudo spctl --add --type execute --requirement 'anchor H"<ca-hash>"'` registers a custom Gatekeeper assessment policy that accepts any binary signed by certificates chained to the named CA. This is the documented path for organizational / internal code-signing use cases and is not a workaround.
-- TCC permission stability (NFR-S3 spirit, FR60) requires a stable signing identity. A self-managed CA + leaf cert combined with stable bundle identifier (`com.auricle.app`) provides exactly this — TCC permissions for Screen Recording, Microphone, and Notifications persist across rebuilds and Sparkle updates without re-grant.
+- TCC permission stability (NFR-S3 spirit, FR60) requires a stable signing identity. A self-managed CA + leaf cert combined with stable bundle identifier (`com.auricle.app`) provides exactly this — TCC permissions for System Audio Recording, Microphone, and Notifications persist across rebuilds and Sparkle updates without re-grant.
 - Sparkle update mechanism (FR65) is unaffected. Sparkle's appcast EdDSA signature validation (NFR-S9) is independent of Apple code signing. Downloaded `.app` updates are accepted by Gatekeeper via the per-Mac `spctl` trust rule established once at first install on each Mac.
 - Build pipeline simplification: no notarization step (`xcrun notarytool submit`), no notarization wait time (typically 5–15 minutes), no notarization-API-throttle risk on rapid iteration. Release script is `xcodebuild` + `codesign` + (v1.1) Sparkle appcast generation.
 
@@ -306,7 +306,7 @@ The `auricle doctor` CLI verb includes a "Gatekeeper trust check" that runs `spc
 ### Trade-offs Accepted
 
 - **Not shareable with other people without per-recipient trust setup.** The personal CA cert is not in any public trust chain. Sharing auricle with someone else would require either (a) that person trusting the CA on their Mac (security regression for them — they'd implicitly trust any other binary signed with this CA), or (b) re-signing with Apple Developer ID + notarization for that distribution. Acceptable per PRD's single-user constraint.
-- **No App Store distribution.** Already excluded by PRD §Project Type (sandbox conflict with ScreenCaptureKit + vault writes outside `~/Library/Containers/`).
+- **No App Store distribution.** Already excluded by PRD §Project Type (sandbox conflict with vault writes outside `~/Library/Containers/`).
 - **No automatic notarization malware-scanning.** The user is the developer and the user — the trust relationship is self-attested. Not a meaningful loss for a personally-built tool the user maintains.
 - **Per-Mac one-time trust setup.** ~5 minutes friction when adding auricle to a new Mac; eliminated for all subsequent updates (Sparkle handles them seamlessly) and for any future personal tools also signed by leaf certs chained to the same CA.
 - **Private key custody.** The CA and leaf private keys live in one Mac's Keychain. If that Mac dies, new builds become impossible until a new CA is generated and re-trusted on every Mac. Mitigation: export the CA private key encrypted to a password manager (e.g., 1Password Secrets, Keychain export with a strong passphrase) as a one-time backup.
@@ -369,7 +369,7 @@ These decisions are organized into four thematic groups. Each group resolves a c
 Per-stage execution model:
 
 - **Subprocess (spawned by GUI; also independently invocable by CLI):** `transcribe`+`diarize` (combined; share WhisperKit model state in one subprocess), `summarize`. Rationale: WhisperKit ~4GB peak (NFR-P10) must die when work completes; Claude network call may hang and must not freeze the GUI; both satisfy NFR-R4 crash isolation cleanly.
-- **In-GUI process:** `capture` (long-running ScreenCaptureKit handle, SwiftUI-controlled), `attribute` (SwiftUI window with audio playback), `persist` (small, latency-sensitive), `notify` (UNUserNotificationCenter delegate must live in app process), `verify`, `discard`. In Epic 4, `auricle run` runs `attribute`, `persist` and the notify stage in-process (AR-PIPE-1), with the CLI composition root's `Notifier`; only the GUI composition root posts `UNUserNotificationCenter` notifications.
+- **In-GUI process:** `capture` (long-running process-tap and AVAudioEngine handles, SwiftUI-controlled; the TCC grants belong to `com.auricle.app`, so the CLI never captures itself — Story 9.5 decides how `auricle record` / `stop` reach the running app without XPC), `attribute` (SwiftUI window with audio playback), `persist` (small, latency-sensitive), `notify` (UNUserNotificationCenter delegate must live in app process), `verify`, `discard`. In Epic 4, `auricle run` runs `attribute`, `persist` and the notify stage in-process (AR-PIPE-1), with the CLI composition root's `Notifier`; only the GUI composition root posts `UNUserNotificationCenter` notifications.
 - **CLI exposes every stage as an independently-runnable subprocess** regardless of how the GUI dispatches it (FR12 binding contract). The CLI binary is the same Swift code path; any stage can be re-run from the terminal for failure recovery, debugging, or scripted use.
 
 This boundary keeps memory budgets enforceable (heavy stages die when done), keeps interactive surfaces responsive (UI state stays in one process), and keeps the CLI surface fully general (no stage is GUI-only at the binary level).
@@ -394,7 +394,7 @@ recording → captured → transcribing → reviewing_diarization → awaiting_a
 **Terminal / error branches:**
 - `silent` — VAD halted, v1.1 only (FR9 / FR10). **Benign-terminal** category per Decision 4.1.
 - `discarded` — user-initiated via main window or `auricle discard`
-- `capture_failed` — ScreenCaptureKit error (including `permission_revoked_midstream` reason). **Permanent.**
+- `capture_failed` — capture source error (reasons include `permission_revoked_midstream` and `interrupted`). **Permanent.**
 - `transcription_failed` — WhisperKit error after subprocess-restart retry. **Permanent** (unless audio file is suspect — `--force` available for retry).
 - `summarization_failed` — Claude unreachable beyond NFR-R9 timeout. **Transient** — queues for resume; `auricle run <id>` is the resume verb.
 - `persist_failed` — vault write error after 1 retry. **Transient** — `auricle run <id>` resumes.
@@ -413,6 +413,8 @@ Each stage execution writes SQLite in two small transactions:
 2. **Txn B (end):** `INSERT INTO stage_events(stage=X, event='completed' | 'failed', occurred_at=now, duration_ms, error_message)` AND `UPDATE meetings SET state='<target state>'`. Single transaction.
 
 If a subprocess crashes between Txn A and Txn B, the database state is unambiguous: `meetings.state` is stuck in an active "_ing" form, and the most recent `stage_events` row for that meeting has `event='started'` with no matching `completed` or `failed`. The active state itself IS the reconciliation signal — no separate sweep table is needed.
+
+**Capture recovery:** capture does not use the per-stage runner; `StateStore.beginCapture` INSERTs the row in `recording` with `stage_events.started`, and `StateStore.finishCapture` is its Txn B. On GUI launch, a `recording` row with no live session is recovered: if its `audio.wav` has audio bytes, the WAV header is repaired from the file size and the row moves to `captured` (`stage_events` reason `recovered_after_interruption`); otherwise it moves to `capture_failed` with reason `interrupted`.
 
 **Crash recovery (NFR-R6, FR62):** on launch (GUI or CLI), the Orchestrator runs `SELECT id FROM meetings WHERE state IN ('transcribing','reviewing_diarization','attributing','summarizing','persisting','published')` (the active states) and re-dispatches the corresponding stage. States whose stage has no subprocess (`attributing` is user-paced; `persisting` and `published` run in-process per AR-PIPE-1) are logged and not re-dispatched. The stale-detection sweep moves an orphaned `persisting` meeting to `persist_failed`, which `auricle run <id>` resumes. NFR-R5 idempotency means the second run overwrites the cache artifact and Txn B commits cleanly. Orphan `started` rows in `stage_events` from the crashed run are intentionally retained as forensic audit trail (consistent with the append-only nature of the events log).
 
@@ -457,7 +459,11 @@ Alternatives rejected:
 - AAC / m4a — codec dependency adds complexity to snippet playback; non-byte-sliceable for snippets
 - CAF — codec dependency; less universal than WAV; no meaningful advantage
 
-Mic + system audio are mixed during capture (single ScreenCaptureKit + AVAudioEngine pipeline) into one mono stream. No multi-channel separation in MVP — the brainstorm chose mixing for simplicity, and diarization quality is handled by the `DiarizerStrategy` slot, not by per-channel separation.
+**Capture backend.** System audio comes from a Core Audio global process tap (`CATapDescription(monoGlobalTapButExcludeProcesses:)` excluding auricle's own process) read through a private aggregate device and an IOProc; the microphone comes from `AVAudioEngine`. Both sit behind `AudioMixer`, which resamples to 16kHz with `AVAudioConverter`. System audio is behind a `SystemAudioSource` protocol so a ScreenCaptureKit source can replace the tap without touching `AudioMixer`, `WAVWriter` or `CaptureStage`. A watchdog rebuilds the tap, aggregate device and IOProc after 30s of exact-zero buffers, at most once per 30s, and never fails the capture, because exact zeros also mean silence or a missing grant. The selection evidence is `research/technical-scstream-vs-core-audio-process-taps-2026-09-22/research.md`.
+
+**`WAVWriter` is the one exemption from `AtomicWriter`.** A 115 MB stream that must survive a crash partially cannot be written by temp-and-rename. `WAVWriter` creates `audio.wav` 0600 in a 0700 directory, appends through a `FileHandle`, and patches the RIFF and data sizes on finalize and during capture recovery.
+
+Mic + system audio are mixed during capture into one mono stream. No multi-channel separation in MVP — the brainstorm chose mixing for simplicity, and diarization quality is handled by the `DiarizerStrategy` slot, not by per-channel separation.
 
 #### Decision 1.5: CLI argument surface (binding contract per NFR-I7)
 
@@ -631,7 +637,7 @@ The structured form is also written to `os_log` for every error (regardless of C
 auricle doctor — system check
 ==============================
 [OK]   Microphone permission granted
-[OK]   Screen Recording permission granted
+[?]    System Audio Recording (macOS offers no check)
 [FAIL] Notifications permission denied
        fix: System Settings > Notifications > Auricle > Allow Notifications
 [OK]   Gatekeeper trust configured for the auricle code-signing CA
@@ -705,6 +711,7 @@ CREATE TABLE meetings (
     created_at TEXT NOT NULL,                  -- ISO8601 UTC
     updated_at TEXT NOT NULL,                  -- ISO8601 UTC; maintained by AFTER UPDATE trigger (see below)
     capture_started_at TEXT,                   -- ISO8601 UTC; set by capture stage on record start
+    capture_time_zone TEXT,                    -- IANA zone identifier at capture start; NULL for imported meetings; local dates fall back to the current zone
     capture_ended_at TEXT,                     -- ISO8601 UTC; set by capture stage on stop
     duration_seconds INTEGER,                  -- NULL until capture_ended_at is set; CHECK (duration_seconds >= 0) when set
     title TEXT,                                -- initial from calendar enrichment or generic 'Meeting at <ts>'; refined by summarize sub-step
@@ -809,7 +816,7 @@ END;
 | Table.Column(s) | Writer | Notes |
 |---|---|---|
 | `schema_version.*` | `GRDB.DatabaseMigrator` (GUI on app launch) | Subprocesses never migrate; fail-fast if version mismatch on open |
-| `meetings.id`, `created_at`, initial `state='recording'`, `capture_started_at`, `audio_cache_path`, initial `title` (from calendar if available), `calendar_event_id` (initial), `retention_policy` (NULL or override per config) | GUI `capture` stage on row INSERT | `id` = ULID generated client-side; `audio_cache_path` immutable post-INSERT |
+| `meetings.id`, `created_at`, initial `state='recording'`, `capture_started_at`, `capture_time_zone`, `audio_cache_path`, initial `title` (from calendar if available), `calendar_event_id` (initial), `retention_policy` (NULL or override per config) | GUI `capture` stage on row INSERT | `id` = ULID generated client-side; `audio_cache_path` immutable post-INSERT |
 | `meetings.capture_ended_at`, `duration_seconds`, `state='captured'` | GUI `capture` stage on stop | Single transaction |
 | `meetings.state` (every transition after capture) | The process executing the stage that just completed | Same transaction as the matching `stage_events` insert (Txn B per Decision 1.2) |
 | `meetings.title` (refined), `calendar_event_id` (refined) | `summarize` subprocess | Calendar enrichment is a sub-step of summarize, not a separate stage; may overwrite initial values with calendar-confirmed ones |
@@ -942,7 +949,7 @@ Filename pattern:
 
 Where:
 
-1. **`<YYYY-MM-DD>`** — date based on `capture_started_at` in the user's local timezone at capture time (not UTC; user-recognizable). The only local-time concession in the system; everywhere else is UTC.
+1. **`<YYYY-MM-DD>`** — date based on `capture_started_at` in the zone stored in `meetings.capture_time_zone` (the user's zone at capture time; the current zone when NULL). Not UTC; user-recognizable. A re-publish's `--rerun-<date>` suffix uses the current zone. The only local-time concession in the system; everywhere else is UTC.
 2. **`<slug>`** — derived from meeting context (rules below).
 3. **`.md`** extension.
 
@@ -1056,7 +1063,7 @@ State machine additions (folded back into Decision 1.2):
 
 | Stage | Retry trigger | Policy | Cap | Terminal failure → state |
 |---|---|---|---|---|
-| `capture` | ScreenCaptureKit transient stream interruption | Best-effort stream restart inline | 3 failures within 30s | `capture_failed` (permanent) |
+| `capture` | Capture source transient stream interruption | Best-effort stream restart inline | 3 failures within 30s | `capture_failed` (permanent) |
 | `capture` | Permission revoked mid-stream | None — fire notification immediately, save partial audio | n/a | `capture_failed` with reason `permission_revoked_midstream` (permanent) |
 | `transcribe` | WhisperKit OOM, model load failure | 1 retry after fresh subprocess restart | 1 retry | `transcription_failed` (permanent unless audio file is suspect) |
 | `attribute` | N/A — never auto-retries | Pipeline halts at `awaiting_attribution`; user resumes via GUI or CLI | n/a | n/a (user-actionable, never terminal) |
@@ -1182,23 +1189,23 @@ Required permissions, in dependency order:
 
 | Permission | TCC category | When required | Remediation deep link |
 |---|---|---|---|
-| Screen Recording | `kTCCServiceScreenCapture` | Before any capture attempt | `x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture` |
-| Microphone | `kTCCServiceMicrophone` | Before any capture attempt | `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone` |
+| System Audio Recording | `kTCCServiceAudioCapture` | Prompted on the first capture; macOS has no public API to read or request it, so it always reads as unknown | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` (Story 5.1 verifies and records the working URL) |
+| Microphone | `kTCCServiceMicrophone` | Before any capture attempt; denied records system audio only | Candidate: `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone` (Story 5.1 verifies) |
 | Notifications | TCC via `UNUserNotificationCenter` | Before notify stage; not strictly blocking (Decision 4.2) | `x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications` |
 | Calendar (Google OAuth) | Not TCC; OAuth refresh-token in Keychain | Before calendar enrichment in summarize stage | Re-auth flow via system browser; on persistent failure, meeting publishes with `auricle/needs-calendar-enrichment` tag (graceful degradation per FR54) |
 
 **Detection points:**
 
-- **App launch:** check all four; populate `auricle doctor` results; if Screen Recording or Microphone is denied, surface a non-modal banner in main window with one-click jump to System Settings.
-- **Before capture (`record` invocation):** re-check Screen Recording + Microphone (user may have revoked between launches). If missing, error with deep link.
+- **App launch:** check all four; populate `auricle doctor` results (System Audio Recording shows as unknown); if Microphone is denied, surface a non-modal banner in main window with one-click jump to System Settings.
+- **Before capture (`record` invocation):** re-check Microphone (user may have revoked between launches). If denied, the recording proceeds with system audio only and says so, with the deep link. Nothing blocks a start.
 - **Before notify:** check Notifications; if revoked, log `warn` and complete pipeline without firing notification (per Decision 4.2 retry+fallback policy).
-- **Mid-capture (revocation event):** ScreenCaptureKit will throw on revocation. Catch the throw, save the partial audio, mark `capture_failed` with reason `permission_revoked_midstream`, fire a notification immediately: *"Recording stopped — Screen Recording permission was revoked. The partial audio is saved."*
+- **Mid-capture (revocation event):** when AVAudioEngine or Core Audio reports a revocation, save the partial audio, mark `capture_failed` with reason `permission_revoked_midstream`, and fire a notification immediately: *"Recording stopped — a permission was revoked. The partial audio is saved."* A System Audio Recording revocation the OS does not report appears only as exact-zero buffers, which the capture metadata counts.
 
 **Info.plist usage descriptions** (these are user-visible in Apple's TCC dialog — purpose-first, plain voice):
 
 | Key | String |
 |---|---|
-| `NSScreenCaptureUsageDescription` | *"auricle records your meeting audio so it can transcribe what's said."* |
+| `NSAudioCaptureUsageDescription` | *"auricle records your meeting audio so it can transcribe what's said."* Must be a literal Info.plist key; if it is missing, capture is denied silently with all-zero buffers. `scripts/check.sh app` asserts it. |
 | `NSMicrophoneUsageDescription` | *"auricle captures your voice alongside the meeting so your contributions are in the notes."* |
 | `NSUserNotificationsUsageDescription` (where applicable) | *"auricle pings you when a meeting is ready to review — usually just a click to confirm."* |
 | Calendar OAuth consent screen | *"auricle reads your calendar to title meetings and identify who's in the room."* |
@@ -1209,9 +1216,9 @@ Required permissions, in dependency order:
 auricle doctor — system check
 ==============================
 [1 of 4]  Microphone permission                        ✓ granted
-[2 of 4]  Screen Recording permission                  ✗ not granted
-            auricle needs this to capture your meeting audio.
-            → System Settings > Privacy & Security > Screen Recording
+[2 of 4]  System Audio Recording                       ? can't be checked
+            macOS doesn't let apps read this permission. If recordings are silent, turn it on:
+            → System Settings > Privacy & Security > Screen & System Audio Recording
             → After granting, run: auricle doctor
 [3 of 4]  Notifications permission                     ✓ granted
 [4 of 4]  Vault path /Users/you/checkouts/SecondBrain  ✓ exists, writable
@@ -2171,7 +2178,7 @@ public enum CaptureError: Error {
     case streamInterrupted(reason: String)
     case permissionRevokedMidstream
 }
-throw CaptureError.permissionDenied(category: .screenCapture)
+throw CaptureError.permissionDenied(category: .microphone)
 ```
 
 **Typed error — anti-pattern:**
@@ -2335,9 +2342,12 @@ auricle/
 │   │   └── GatekeeperTrust.swift          # spctl assessment-policy probe (Distribution Model)
 │   │
 │   ├── Capture/                           # FR1–FR10
-│   │   ├── CaptureSession.swift           # ScreenCaptureKit + AVAudioEngine pipeline
+│   │   ├── CaptureSession.swift           # process tap + AVAudioEngine pipeline
+│   │   ├── SystemAudioSource.swift        # seam: ProcessTapSource now, ScreenCaptureKit fallback (Dec 1.4)
+│   │   ├── ProcessTapSource.swift         # global exclude-self tap, private aggregate device, IOProc, zero watchdog
+│   │   ├── CaptureStage.swift             # beginCapture / finishCapture / recovery (Dec 1.2)
 │   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM via AVAudioConverter (Dec 1.4)
-│   │   ├── WAVWriter.swift                # PCM16 WAV file writer via AVAudioFile
+│   │   ├── WAVWriter.swift                # streaming PCM16 WAV via FileHandle; the AtomicWriter exemption (Dec 1.4)
 │   │   ├── CaptureError.swift
 │   │   └── CaptureMetadata.swift          # StageMetadata.capture payload
 │   │
@@ -2445,10 +2455,14 @@ auricle/
 │   │   ├── ManualVerifyHandler.swift      # invoked by `auricle keep <id>` and GUI confirm
 │   │   └── NotificationClickHandler.swift # invoked by UNUserNotificationCenterDelegate
 │   │
-│   └── Notifications/                     # FR42–FR44
-│       ├── Notifier.swift                 # the public API
-│       ├── NotificationPayload.swift      # Codable, snake_case dialect (Dec 4.3)
-│       └── NotificationCategoryRegistrar.swift # registers UNNotificationCategory on launch
+│   ├── Notifications/                     # FR42–FR44
+│   │   ├── Notifier.swift                 # the public API; fireCaptureFailed(meetingID:reason:) for capture revocation
+│   │   ├── NotificationPayload.swift      # Codable, snake_case dialect (Dec 4.3)
+│   │   └── NotificationCategoryRegistrar.swift # registers UNNotificationCategory on launch
+│   │
+│   └── AppUI/                             # GUI view models + SwiftUI components with logic, so `swift test` reaches them
+│       ├── RecordingIndicator.swift       # UX-DR9 view + pure RecordingIndicatorAppearance mapping
+│       └── Onboarding/                    # OnboardingCoordinator state machine, permission steps, self.wikilink step (Epic 5)
 │
 ├── Tests/                                 # one test target per source target
 │   ├── CoreTests/
@@ -2541,13 +2555,13 @@ auricle/
 │   │   │   │                               # color is never the sole conveyor — chip carries 🤖 glyph + label (NFR-A3)
 │   │   │   ├── TrustCalibrationFooter.swift # accept-rate display in Attribution sheet (Dec 5.7)
 │   │   │   └── CoverageStrip.swift         # calendar-attendee gap-awareness diagnostic
+│   │   ├── Onboarding/                     # J0 step views only; logic lives in Sources/AppUI/Onboarding
 │   │   ├── DoctorWindow/                   # rare user-initiated separate window — Principle 8 carve-out
 │   │   │   └── DoctorView.swift
 │   │   ├── Settings/                       # macOS Settings scene (Cmd-,) — Principle 8 carve-out
 │   │   │   └── SettingsView.swift          # vault path, model, retention window, diarization_review.enabled
 │   │   ├── DesignSystem/                   # auricle-specific atomic components (UX spec Step 11)
 │   │   │   ├── DesignTokens.swift          # colors, motion, spacing — no hardcoded values elsewhere
-│   │   │   ├── RecordingIndicator.swift    # privacy-contract surface; pulse + Reduce Motion behavior
 │   │   │   ├── StateChip.swift             # per-meeting state visibility; 8 variants per FailureCategory
 │   │   │   ├── CountdownAnnotation.swift   # retention countdown ("Audio deletes in 5 days")
 │   │   │   ├── VarianceWarningGlyph.swift  # acoustic diarization uncertainty hint
@@ -2809,7 +2823,7 @@ Tests use a third composition root, `Tests/TestSupport/TestComposition.swift`'s 
 | WhisperKit | `WhisperKitTranscriber`, `WhisperKitDiarizer` | None (local) | Subprocess restart + 1 retry → `transcription_failed` (Dec 4.2) |
 | Anthropic Claude API | `ClaudeSummarizer/AnthropicHTTPClient` | API key from Keychain | Exponential backoff to 5min cap → `summarization_failed` (Dec 4.2); fallback strategy first (Dec 3.3) |
 | Google Calendar API v3 | `GoogleCalendarSource` | OAuth 2.0 PKCE; refresh token in Keychain | Graceful degradation: meeting publishes with `auricle/needs-calendar-enrichment` tag (FR54) |
-| ScreenCaptureKit + AVFoundation | `Capture` | TCC permissions (Screen Recording, Microphone) | `capture_failed` (permanent); permission revocation mid-stream saves partial audio (Dec 4.4) |
+| Core Audio process tap + AVFoundation | `Capture` | TCC permissions (System Audio Recording, Microphone) | `capture_failed` (permanent); permission revocation mid-stream saves partial audio (Dec 4.4) |
 | UNUserNotificationCenter | `Notifications`, `App/Auricle/NotificationDelegate` | TCC permission (Notifications) | Compensating surfaces in main window + `auricle list` (Dec 4.2) |
 | Obsidian (vault consumer) | `Persist/VaultWriter` (writer); `obsidian://open` URL scheme (notify click) | None (filesystem) | If Obsidian not installed, click handler still marks verified — open is a courtesy (Dec 4.3) |
 | macOS Keychain | `ClaudeSummarizer/KeychainAPIKey`, `GoogleCalendarSource/GoogleOAuthFlow` | TCC (implicit) | Missing key → `auricle doctor` flag; surfaced as user-actionable |
@@ -3053,4 +3067,4 @@ swift package init --type library --name AuricleKit
 7. **Story 7**: `auricle-cli` skeleton (binding-contract verbs + hidden `__internal-stage` worker subcommand, including the `review-diarization` worker per Decision 5.3).
 8. **Story 8+**: `Capture` + `Permissions` + `App/Auricle` GUI shell (single-window architecture per UX Step 9 Principle 8; with amber-chip stale-state UX + VM-factory pattern + malformed-URL toast + first-meeting onboarding handed off to UX-design phase) + `MainWindow/AttributionSheet` (replaces former AttributionWindow per Decision 4.6 + UX Step 9) including AI-hint UI (`AIHintChip`, `TrustCalibrationFooter`) flagged-off in MVP per Path C + `Notifications` + `Verify` + `Calendar` + `VaultGlossary`.
 
-This sequence preserves the brainstorm's risk-front-loaded ordering: the pipeline-plumbing libraries (Stories 2–6) and the CLI executable (Story 7) can be built and dogfooded against pre-existing audio recordings before Story 8's SwiftUI app shell or any ScreenCaptureKit code exists. The AI-reviewer slots (Decision Group 5) are wired in Story 6 alongside the WhisperKit subprocess so the full `transcribing → reviewing_diarization → awaiting_attribution` chain is testable end-to-end before UI work begins.
+This sequence preserves the brainstorm's risk-front-loaded ordering: the pipeline-plumbing libraries (Stories 2–6) and the CLI executable (Story 7) can be built and dogfooded against pre-existing audio recordings before Story 8's SwiftUI app shell or any capture code exists. The AI-reviewer slots (Decision Group 5) are wired in Story 6 alongside the WhisperKit subprocess so the full `transcribing → reviewing_diarization → awaiting_attribution` chain is testable end-to-end before UI work begins.

@@ -25,7 +25,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **FR3 [MVP]:** The user can see a visible recording-state indicator while capture is active (in the main window title bar, at minimum).
 - **FR4 [MVP]:** auricle can capture system audio (loopback from any application playing audio) without requiring integration with the meeting platform.
 - **FR5 [MVP]:** auricle can simultaneously capture the user's microphone audio and mix it with system audio for a complete two-sided recording.
-- **FR6 [MVP]:** auricle can request and handle macOS Screen Recording and Microphone permissions, with clear in-app explanation if permission is denied.
+- **FR6 [MVP]:** auricle can request and handle macOS System Audio Recording and Microphone permissions, with clear in-app explanation if permission is denied.
 - **FR7 [MVP]:** The user can manually discard a captured-but-unprocessed meeting from the main window, removing the cached audio.
 - **FR8 [v1.1]:** The user can start and stop capture from a menubar item without opening the main window.
 - **FR9 [v1.1]:** auricle can pre-flight a captured audio file with VAD and halt the pipeline if speech-content is below a configurable threshold (default: <2 minutes of speech).
@@ -117,7 +117,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 - **FR58 [MVP]:** The user can configure: vault path, vault subdirectory for meeting notes, default audio retention grace window, summarization engine choice (Claude / local), Anthropic API key, Google OAuth account, log verbosity, and `summarization.prompt_dir` (override directory under `~/.auricle/prompts/`; default is the prompt set bundled with the build). Includes `diarization_review.enabled` and `diarization_review.model` per FR74.
 - **FR59 [MVP]:** auricle can persist user-editable configuration in `~/.auricle/` as a structured file (TOML or JSON), separate from secrets (Keychain, NFR-S1) and from machine-managed operational state (the SQLite database, FR66). Any file the user is expected to edit, extend, or place config into lives under `~/.auricle/`.
-- **FR60 [MVP]:** auricle can detect missing required permissions (Screen Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
+- **FR60 [MVP]:** auricle can detect missing required permissions (System Audio Recording, Microphone, Notifications) on launch and surface a clear remediation path to the user.
 
 #### Operations & Failure Recovery (FR61–FR66)
 
@@ -286,7 +286,7 @@ This document provides the complete epic and story breakdown for auricle, decomp
 - **AR-FAIL-3:** User agency on retries: GUI inline "Retry N of M — next attempt in Xs [Stop trying]"; CLI `Ctrl-C` (SIGINT) cancels retries (exit code 130). Subprocess token billing risk on crash logged in telemetry.
 - **AR-FAIL-4:** `Verifier` Swift `actor` is the single converge point for all verification callers (notification-click, GUI confirm, `auricle keep`). Idempotent SQL via `COALESCE`; `UNIQUE(meeting_id)` constraint on `retention_timers`. Both writes (open Obsidian + arm timer) happen regardless of whether Obsidian launches successfully.
 - **AR-FAIL-5:** Notification payload format (binding contract surviving Sparkle upgrades): `{meeting_id, schema_version, payload_version}`. Click handler tolerates unknown `payload_version` from future binary by falling back to "lookup meeting by ID, present in main window."
-- **AR-FAIL-6:** Permission detection points: app launch (all four categories — Screen Recording, Microphone, Notifications, Calendar OAuth); before capture (Screen Recording + Microphone); before notify; mid-capture (revocation event saves partial audio + `capture_failed` with reason `permission_revoked_midstream`). Info.plist usage descriptions in user voice (not boilerplate).
+- **AR-FAIL-6:** Permission detection points: app launch (all four categories — System Audio Recording, Microphone, Notifications, Calendar OAuth; System Audio Recording always reads as unknown because macOS has no public check); before capture (Microphone); before notify; mid-capture (revocation event saves partial audio + `capture_failed` with reason `permission_revoked_midstream`). Info.plist usage descriptions in user voice (not boilerplate).
 - **AR-FAIL-7:** Failure-visibility surfaces (Decision 4.6) — single window architecture: per-meeting state chip in main-window meeting list, row-expand inline operations console, Attribution sheet with sheet queue, on-launch banner, multi-meeting attribution banner, inline "Retry now" button per failed-state row, `auricle doctor` summary, `auricle list` default sort, trust-calibration footer, rolling 30-day cost widget, stale-active-state synthesized failure. v1.1 adds Dock badge, menu bar status, `auricle stats`. The principle: user can never discover a meeting was lost only by accidentally noticing it.
 
 #### AI-Assisted Correction (Decision Group 5)
@@ -374,11 +374,11 @@ This document provides the complete epic and story breakdown for auricle, decomp
 
 #### Onboarding (J0)
 
-- **UX-DR41 [MVP]:** First-launch / permission gauntlet flow (J0 — 4 quick steps): Step 1 Microphone access → Step 2 Screen Recording access → Step 3 Notifications access → Step 4 Configure (vault path + API key + calendar). Each step shows a "why" line above the request so the system TCC dialog isn't a surprise. Denied permissions don't terminally block — auricle works with Notifications denied (banner-and-list alternative), Calendar denied (`#auricle/needs-calendar-enrichment` tags), Anthropic key missing. Only Microphone + Screen Recording are hard-blocking for capture itself.
-- **UX-DR42 [MVP]:** Self wikilink config — set during onboarding, default = best-guess from first calendar enrichment + system account name; user-editable in Settings as `self.wikilink`. Required for "This is me" affordance to be active (otherwise button reads "Set me first…" linking to Settings).
+- **UX-DR41 [MVP]:** First-launch / permission gauntlet flow (J0 — 4 quick steps): Step 1 Microphone access → Step 2 System Audio Recording (a 1-second capture triggers the prompt; the grant cannot be read back) → Step 3 Notifications access → Step 4 Configure (vault path + Obsidian check + API key; calendar connection lives in Settings). Each step shows a "why" line above the request so the system TCC dialog isn't a surprise. Denied permissions don't terminally block — auricle works with Notifications denied (banner-and-list alternative), Calendar denied (`#auricle/needs-calendar-enrichment` tags), Anthropic key missing. Nothing hard-blocks capture: a denied microphone records system audio only.
+- **UX-DR42 [MVP]:** Self wikilink config — set during onboarding, default = system account name (`NSFullUserName()`); a configured value wins over the calendar-derived identity; user-editable in Settings as `self.wikilink`. Required for "This is me" affordance to be active (otherwise button reads "Set me first…" linking to Settings).
 - **UX-DR43 [MVP]:** Empty meeting list (J0 fresh install) — centered text: *"Click ⏺ Record to capture your first meeting"*. After onboarding completion, `auricle doctor` runs once silently; result feeds in-window banner only if anything failed.
-- **UX-DR44 [MVP]:** Info.plist usage descriptions in user voice (purpose-first, plain voice — Decision 4.4): `NSScreenCaptureUsageDescription` "auricle records your meeting audio so it can transcribe what's said"; `NSMicrophoneUsageDescription` "auricle captures your voice alongside the meeting so your contributions are in the notes"; `NSUserNotificationsUsageDescription` (where applicable) "auricle pings you when a meeting is ready to review — usually just a click to confirm"; Calendar OAuth consent screen "auricle reads your calendar to title meetings and identify who's in the room."
-- **UX-DR45 [MVP]:** TCC remediation deep links: Screen Recording → `x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture`; Microphone → `…?Privacy_Microphone`; Notifications → `…?Privacy_Notifications`. Calendar OAuth re-auth flow opens system browser; on persistent failure, meeting publishes with `auricle/needs-calendar-enrichment` tag (graceful degradation per FR54).
+- **UX-DR44 [MVP]:** Info.plist usage descriptions in user voice (purpose-first, plain voice — Decision 4.4): `NSAudioCaptureUsageDescription` "auricle records your meeting audio so it can transcribe what's said." (a literal Info.plist key; missing, it fails silently); `NSMicrophoneUsageDescription` "auricle captures your voice alongside the meeting so your contributions are in the notes"; `NSUserNotificationsUsageDescription` (where applicable) "auricle pings you when a meeting is ready to review — usually just a click to confirm"; Calendar OAuth consent screen "auricle reads your calendar to title meetings and identify who's in the room."
+- **UX-DR45 [MVP]:** TCC remediation deep links, verified on the target macOS by Story 5.1 and recorded in architecture Decision 4.4. Candidates: System Audio Recording → `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture`; Microphone → `…?Privacy_Microphone`. Calendar OAuth re-auth flow opens system browser; on persistent failure, meeting publishes with `auricle/needs-calendar-enrichment` tag (graceful degradation per FR54).
 
 #### Doctor / Settings Surfaces
 
@@ -434,9 +434,9 @@ This document provides the complete epic and story breakdown for auricle, decomp
 | FR1 | Epic 5 | Start Record control in main window |
 | FR2 | Epic 5 | Stop Record control |
 | FR3 | Epic 5 | Recording-state indicator visible during capture |
-| FR4 | Epic 5 | ScreenCaptureKit system audio loopback |
+| FR4 | Epic 5 | Core Audio process-tap system audio loopback |
 | FR5 | Epic 5 | Microphone capture mixed with system audio |
-| FR6 | Epic 5 | Screen Recording + Microphone permission handling |
+| FR6 | Epic 5 | System Audio Recording + Microphone permission handling |
 | FR7 | Epic 6 | Manually discard captured-but-unprocessed meeting from main window |
 | FR8 | Epic 10 | Menubar item start/stop (v1.1) |
 | FR9 | Epic 10 | VAD pre-flight halt (v1.1) |
@@ -683,21 +683,21 @@ User (in builder mode) has a meeting audio file on disk → registers it with th
 
 ### Epic 5: System-Audio Capture & First-Run Onboarding (J0)
 
-Fresh Mac → user grants permissions through 4-step onboarding gauntlet → clicks Record → captures meeting audio loopback (mic + system mixed via ScreenCaptureKit + AVAudioEngine to PCM 16-bit 16kHz mono WAV in cache-dir) → can stop. `RecordingIndicator` atomic component provides the visible privacy contract surface. `PermissionChecker` + `TCCCategory` deep-link remediation **scaffold lives here** (Winston's call — moved from Epic 1 because PermissionChecker is first exercised by capture stage). Info.plist usage descriptions in user voice. Mid-capture permission revocation handling (capture stage TCC error path) lives here too.
+Fresh Mac → user grants permissions through 4-step onboarding gauntlet → clicks Record → captures meeting audio loopback (system audio from a Core Audio global process tap, mic from AVAudioEngine, mixed to PCM 16-bit 16kHz mono WAV in cache-dir) → can stop → the pipeline runs to `awaiting_attribution`. Capture runs in the GUI process; the `record` / `stop` CLI verbs are Story 9.5's. `RecordingIndicator` atomic component provides the visible privacy contract surface. `PermissionChecker` + `TCCCategory` deep-link remediation **scaffold lives here** (Winston's call — moved from Epic 1 because PermissionChecker is first exercised by capture stage). Info.plist usage descriptions in user voice. Mid-capture permission revocation handling (capture stage TCC error path) lives here too.
 
 **Throwaway debug Record trigger:** Epic 5 ships a debug-only Record trigger (menu item or hotkey) so capture mechanics can be exercised before Epic 6's main window UI exists. Epic 6 deletes this trigger when the proper Record button + main window header land. This avoids "Record button has nowhere to live" pressure collapsing the Epic 5/6 boundary (Winston's recommendation).
 
-**On Sally's Epic 5a/5b split concern:** the J0 onboarding *narrative* (welcome → vault picker → Obsidian handshake → first-meeting expectation-setting → quiet success states) is its own coherent arc, but for a solo developer with no QA org, story-level partition inside this epic is sufficient (Amelia's call). Stories within Epic 5 sequence the capture-plumbing track and the onboarding-narrative track in parallel; they share the same SwiftPM target (`Permissions` + `Capture` + `App/Auricle/Onboarding/`) but live in different files (`OnboardingCoordinator.swift`, `SystemAudioCapture.swift`) with different test suites. The relationship-milestone vs. capability-milestone framing is documented so the onboarding stories explicitly own the Day-1-trust contract — they don't get implemented as the appendix to capture mechanics.
+**On Sally's Epic 5a/5b split concern:** the J0 onboarding *narrative* (welcome → vault picker → Obsidian handshake → first-meeting expectation-setting → quiet success states) is its own coherent arc, but for a solo developer with no QA org, story-level partition inside this epic is sufficient (Amelia's call). Stories within Epic 5 sequence the capture-plumbing track and the onboarding-narrative track in parallel; capture logic lives in `Permissions` and `Capture`, onboarding logic in a new `AppUI` SwiftPM target (so `swift test` covers it), and `App/Auricle/Onboarding/` holds only SwiftUI views. The relationship-milestone vs. capability-milestone framing is documented so the onboarding stories explicitly own the Day-1-trust contract — they don't get implemented as the appendix to capture mechanics.
 
 **Standalone value:** Fresh-Mac user is fully onboarded and can capture audio loopback from any meeting platform without bot integration. Pipeline now has auricle-captured audio (not just pre-existing recordings) flowing into Epic 4's transcribe stage.
 
-**FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR58 (initial config scaffold for vault path / API key during onboarding — full SettingsView in Epic 9)
+**FRs covered:** FR1, FR2, FR3, FR4, FR5, FR6, FR58 (initial config scaffold for vault path / API key / `self.wikilink` during onboarding, with `ConfigWriter` — full SettingsView in Epic 9), FR60 (mid-capture revocation)
 
-**NFRs primarily addressed:** NFR-P11, NFR-P13, NFR-S3 (cache audio 0600), NFR-Pr3, NFR-Pr6, NFR-Pr7, NFR-A1 through NFR-A6 (accessibility for the first interactive surfaces).
+**NFRs primarily addressed:** NFR-P11, NFR-P13, NFR-S3 (cache audio 0600), NFR-Pr3, NFR-Pr7, NFR-A1 through NFR-A6 (accessibility for the first interactive surfaces).
 
 **Architectural commitments primarily addressed:** AR-FAIL-6 (permission detection points + remediation flow + Info.plist user voice; mid-capture revocation handling).
 
-**UX-DRs primarily addressed:** UX-DR9 (RecordingIndicator), UX-DR41 (J0 onboarding gauntlet), UX-DR42 (self.wikilink config), UX-DR43 (empty meeting list "Click ⏺ Record"), UX-DR44 (Info.plist usage descriptions in user voice), UX-DR45 (TCC remediation deep links).
+**UX-DRs primarily addressed:** UX-DR9 (RecordingIndicator), UX-DR41 (J0 onboarding gauntlet), UX-DR42 (self.wikilink config), UX-DR44 (Info.plist usage descriptions in user voice), UX-DR45 (TCC remediation deep links).
 
 ---
 
@@ -2471,344 +2471,380 @@ So that the next prompt change targets a reproduced defect rather than the whole
 
 ## Epic 5: System-Audio Capture & First-Run Onboarding (J0)
 
-Fresh Mac → user grants permissions through 4-step onboarding gauntlet → clicks Record → captures meeting audio loopback (mic + system mixed via ScreenCaptureKit + AVAudioEngine to PCM 16-bit 16kHz mono WAV in cache-dir) → can stop. RecordingIndicator atomic component provides the visible privacy contract surface. Mid-capture revocation handling lives here. Pipeline now has auricle-captured audio (not just pre-existing recordings) flowing into Epic 4's transcribe stage.
+Fresh Mac → user grants permissions through a 4-step onboarding gauntlet → starts a recording → auricle captures meeting audio (system audio from a Core Audio global process tap, mixed with the microphone from AVAudioEngine, into PCM 16-bit 16kHz mono WAV in the cache-dir) → user stops it → the pipeline runs to `awaiting_attribution`. The RecordingIndicator atomic component is the visible privacy contract surface. Mid-capture revocation handling lives here. Pipeline now has auricle-captured audio, not only pre-existing recordings, flowing into Epic 4's transcribe stage.
 
-### Story 5.1: PermissionChecker Scaffold + TCC Categories + Deep-Link URLs
+**Capture runs in the GUI process only in this epic.** The `auricle record` and `auricle stop` verbs stay stubs until Story 9.5, which must choose how `stop` reaches the recording process (Decision 1.1). The TCC grants belong to the app bundle (`com.auricle.app`), not to `auricle-cli`.
+
+### Story 5.1: PermissionChecker + TCC Categories + Deep-Link URLs
 
 As the single user,
-I want `Permissions/PermissionChecker.swift` to be the single helper that all callers go through for permission state queries (Screen Recording, Microphone, Notifications, Calendar OAuth) per AR-PAT-4 + AR-FAIL-6,
-So that capture stage, onboarding flow, Doctor (Epic 9), and any future surface that needs permission checks consume one consistent API.
+I want `Permissions/PermissionChecker.swift` to be the single helper that all callers go through to query or request permission state (System Audio Recording, Microphone, Notifications, Calendar OAuth) per AR-PAT-4 + AR-FAIL-6,
+So that the capture stage, onboarding, Doctor (Epic 9), and the notification path consume one consistent API.
 
 **Acceptance Criteria:**
 
 **Given** the `Permissions` target
 **When** I declare `PermissionChecker`
-**Then** the public API exposes: `func check(_ category: TCCCategory) -> PermissionStatus`, `func refresh()`, `func remediationDeepLink(for: TCCCategory) -> URL`
-**And** `TCCCategory` enum has cases: `.screenCapture`, `.microphone`, `.notifications`, `.calendarOAuth` per AR-FAIL-6
-**And** `PermissionStatus` enum has cases: `.granted`, `.denied`, `.notDetermined`
-**And** checks are memoized for the lifetime of the process; `refresh()` invalidates the memoized cache (called on AppKit-broadcast settings-change notifications via `NSWorkspace.shared.notificationCenter` per AR-PAT-PermissionDetection)
+**Then** the public API exposes: `func check(_ category: TCCCategory) async -> PermissionStatus`, `func request(_ category: TCCCategory) async -> PermissionStatus`, `func refresh()`, `func remediationDeepLink(for: TCCCategory) -> URL?`
+**And** `TCCCategory` has cases `.systemAudioCapture`, `.microphone`, `.notifications`, `.calendarOAuth` per AR-FAIL-6 (Decision 4.4)
+**And** `PermissionStatus` has cases `.granted`, `.denied`, `.notDetermined`, `.unknown`
+**And** `.systemAudioCapture` always reports `.unknown` from `check`, because macOS has no public API to read the process-tap grant; `request(.systemAudioCapture)` reports `.unknown` without prompting, because `Permissions` cannot call the tap code in `Capture` (`Capture` depends on `Permissions`); Story 5.8 triggers that prompt through `Capture`
+**And** checks are memoized for the lifetime of the process; `refresh()` invalidates the memo (called on `NSWorkspace.shared.notificationCenter` settings-change notifications per AR-PAT-PermissionDetection)
 
 **Given** any caller in the codebase
-**When** they need to query permission state
-**Then** they MUST go through `PermissionChecker` per AR-PAT-4; direct calls to `AVCaptureDevice.authorizationStatus(for:)`, `CGRequestScreenCaptureAccess()`, etc. anywhere outside `PermissionChecker.swift` are detected by a custom swiftlint rule and the build is rejected
+**When** it queries or requests permission state
+**Then** it goes through `PermissionChecker` per AR-PAT-4; a custom swiftlint rule rejects `AVCaptureDevice.authorizationStatus(for:)`, `AVCaptureDevice.requestAccess(for:)`, `UNUserNotificationCenter` `notificationSettings()` / `requestAuthorization(options:)`, `CGPreflightScreenCaptureAccess()` and `CGRequestScreenCaptureAccess()` outside `PermissionChecker.swift`, with a passing and a failing fixture under `scripts/lint-fixtures`
+**And** the existing direct calls in `App/Auricle/NotificationDelegate.swift` move behind `PermissionChecker`, and `Sources/Notifications` gains a dependency on `Permissions` if it needs a status
 
 **Given** a denied permission needs remediation
-**When** I call `remediationDeepLink(for: .screenCapture)`
-**Then** the URL is `x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture` per AR-FAIL-6 + UX-DR45
-**And** for `.microphone` → `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`
-**And** for `.notifications` → `x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications`
-**And** for `.calendarOAuth` → not a TCC category (returns nil — the remediation is the Google OAuth re-auth flow opened via `NSWorkspace.shared.open(url:)`, handled in Epic 3 Story 3.10)
+**When** I call `remediationDeepLink(for:)`
+**Then** each TCC category returns a System Settings URL that the story verifies opens the right pane on the maintainer's macOS, and the verified URLs are written into Decision 4.4 in `architecture.md`
+**And** the candidates to verify first are `x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture` and `…?Privacy_Microphone`; the notifications pane is found by the same check
+**And** `.calendarOAuth` returns nil (the remediation is the Google OAuth re-auth flow from Story 3.10)
+
+**Given** `App/Auricle/Info.plist`
+**When** the story lands
+**Then** it contains `NSAudioCaptureUsageDescription` with *"auricle records your meeting audio so it can transcribe what's said."* as a literal key in the file, not an `INFOPLIST_KEY_` build setting (a missing key denies capture silently, with all-zero buffers and no error)
+**And** `NSScreenCaptureUsageDescription` is removed, because auricle no longer uses screen capture
+**And** the usage strings match Decision 4.4 exactly, including the trailing period
+**And** the story records whether macOS ever shows `NSUserNotificationsUsageDescription`, and removes the key if it does not
+**And** `scripts/check.sh app` fails when the built `AuricleApp.app` has no `NSAudioCaptureUsageDescription` (checked with `plutil`)
 
 **Given** the test suite
 **When** I run `Tests/PermissionsTests/`
-**Then** tests cover: each `TCCCategory` returns the correct memoized status; `refresh()` invalidates the cache; deep-link URLs match the AR-FAIL-6 specification
-**And** the test suite uses test-double `PermissionChecker` for stages that consume it (per AR-PAT-7 — narrow protocol surface in test context)
+**Then** tests cover: memoized status per category; `refresh()` invalidates the memo; `.systemAudioCapture` reports `.unknown`; deep links match Decision 4.4
+**And** stages that consume `PermissionChecker` use a test double per AR-PAT-7
 
 ---
 
-### Story 5.2: ScreenCaptureKit + AVAudioEngine Pipeline + AudioMixer
+### Story 5.2: Process-Tap + AVAudioEngine Capture Session + AudioMixer
 
 As the single user,
-I want `Capture/CaptureSession.swift` to set up a ScreenCaptureKit + AVAudioEngine pipeline that captures system audio loopback (FR4) and microphone audio (FR5) simultaneously, mixed into a single mono 16kHz PCM stream by `Capture/AudioMixer.swift`,
-So that the captured audio is in Whisper-native format (no resampling at transcribe time) and supports any meeting platform (Zoom, Meet, Teams, Discord, FaceTime, browser audio) without bot integration per FR4.
+I want `Capture/CaptureSession.swift` to capture all system audio through a Core Audio global process tap (FR4) and the microphone through AVAudioEngine (FR5), mixed into one mono 16kHz PCM stream by `Capture/AudioMixer.swift`,
+So that the captured audio is Whisper-native and covers any meeting platform (Zoom, Meet, Teams, Discord, browser audio) without bot integration.
 
 **Acceptance Criteria:**
 
 **Given** the `Capture` target
 **When** I instantiate `CaptureSession(meetingID:)`
-**Then** the session sets up a `SCStream` from ScreenCaptureKit configured for system-audio-loopback (no display content captured per NFR-Pr3 — audio only)
-**And** simultaneously sets up an `AVAudioEngine` with a microphone input node
-**And** mixes both sources via `AudioMixer` into a single mono 16kHz PCM stream
+**Then** system audio comes from a `SystemAudioSource` protocol whose one implementation builds `CATapDescription(monoGlobalTapButExcludeProcesses:)` excluding auricle's own process, wraps it in a private aggregate device, and reads it with an IOProc (Decision 1.4)
+**And** the microphone comes from an `AVAudioEngine` input node
+**And** `AudioMixer` resamples both to 16kHz with `AVAudioConverter`, mixes to mono and emits 16-bit signed PCM
+**And** the tap is passive: it does not mute (`muteBehavior` unmuted) and adds no perceivable latency to the meeting app per NFR-P13
+**And** the deployment target in `App/Project.swift` and `Package.swift` rises to macOS 14.4, the process-tap floor
+**And** `Capture` exposes `SystemAudioPermissionProbe.prompt()`, which runs the tap for 1 second and discards the audio, so the system shows the System Audio Recording prompt; Story 5.8 calls it
 
-**Given** the `AudioMixer`
-**When** the two streams arrive
-**Then** the mixer downsamples both to 16kHz (Whisper-native sample rate per Decision 1.4), mixes to mono (no multi-channel separation in MVP per Decision 1.4 — diarization quality handled by `DiarizerStrategy` slot, not per-channel separation), and outputs 16-bit signed PCM samples
-**And** the mixer adds **no perceivable system audio latency** to whatever meeting application the user is in per NFR-P13 (passive loopback only — does NOT insert in the audio chain)
+**Given** the system-audio tap delivers exact-zero buffers for 30 consecutive seconds
+**When** the watchdog notices
+**Then** it tears down and rebuilds the tap, the aggregate device and the IOProc, at most once per 30 seconds
+**And** it counts rebuilds and exact-zero seconds for the capture metadata (Story 5.4)
+**And** it never fails the capture: exact zeros also mean "nothing is playing" or "permission missing", and the three cannot be told apart
 
-**Given** Screen Recording or Microphone permission is denied at session start
+**Given** Microphone permission is denied at session start
 **When** I call `CaptureSession.start()`
-**Then** the session throws `CaptureError.permissionDenied(category: TCCCategory)` per AR-PAT-7 typed errors
-**And** the error is surfaced to the user with a clear in-app explanation pointing to System Settings via `PermissionChecker.remediationDeepLink(...)` from Story 5.1 per FR6
+**Then** the session records system audio only and reports `micIncluded == false`
 
 **Given** capture is running
-**When** the user clicks Stop
-**Then** `CaptureSession.stop()` flushes both streams, finalizes the WAV file (Story 5.3), and returns the cache-dir path of the completed `audio.wav`
-**And** the session is single-use (one `CaptureSession` instance per meeting; new instance for next recording)
+**When** `CaptureSession.stop()` is called
+**Then** the session flushes both sources, finalizes the WAV (Story 5.3), and returns the path of the completed `audio.wav`
+**And** the session is single-use; a new recording gets a new instance
 
 **Given** the test suite
 **When** I run `Tests/CaptureTests/`
-**Then** tests cover: `AudioMixer` downsamples + mixes correctly against synthetic input (44.1kHz mic + 48kHz system → 16kHz mono); permission-denied path throws typed error; mixer adds no insertion-loop latency (verified by signal-comparison test); start/stop lifecycle is idempotent
-**And** integration test (manual or CI-skipped) captures 30s of real system audio + mic and verifies the WAV file plays back recognizably
+**Then** tests cover: `AudioMixer` resamples and mixes synthetic input (44.1kHz mic + 48kHz system → 16kHz mono); the watchdog rebuild rule against a fake `SystemAudioSource`; mic-denied records system audio only; start/stop lifecycle is idempotent
+**And** a manual check, recorded in the story spec, captures 5 minutes each from Microsoft Teams, Google Meet in Chrome and Zoom on the maintainer's Mac and confirms the far side is audible in `audio.wav`
+**And** a manual 60-minute soak, recorded in the story spec, reports exact-zero seconds and watchdog rebuilds, and whether an ad-hoc rebuild of the app re-prompts for System Audio Recording
+**And** if the Teams / Meet / Zoom check fails, the story stops and the ScreenCaptureKit fallback in the research report becomes a correct-course decision
 
 ---
 
-### Story 5.3: WAVWriter — PCM 16-bit 16kHz Mono WAV
+### Story 5.3: WAVWriter — Streaming PCM 16-bit 16kHz Mono WAV
 
 As the single user,
-I want `Capture/WAVWriter.swift` to write the mixed PCM stream to `~/Library/Caches/com.auricle.app/<meeting-id>/audio.wav` as PCM 16-bit 16kHz mono WAV (per Decision 1.4),
-So that the file is Whisper-native (no resampling at transcribe time), universally readable (no codec dependency), trivially byte-sliceable for snippet extraction (Epic 4 Story 4.2's `SnippetExtractor`), and 0600-permissioned (NFR-S3).
+I want `Capture/WAVWriter.swift` to stream the mixed PCM to `audio.wav` in the meeting's cache directory as PCM 16-bit 16kHz mono WAV (Decision 1.4),
+So that the file is Whisper-native, byte-sliceable for `SnippetExtractor`, 0600, and recoverable after a crash.
 
 **Acceptance Criteria:**
 
 **Given** the `Capture` target
-**When** `CaptureSession` invokes `WAVWriter(path: cacheURL)` and streams PCM samples
-**Then** the writer produces a valid WAV file with: PCM 16-bit signed format; 16kHz sample rate; mono (1 channel); little-endian byte order per Decision 1.4
-**And** the WAV header is correct (RIFF header, fmt chunk, data chunk with correct byte counts)
-**And** any tool can play back the file (verified by reading it with `AVAudioFile` + asserting frame count, sample rate, and channel count)
+**When** `CaptureSession` creates a `WAVWriter`
+**Then** the path is `CacheArtifactWriter.cacheDirectory(for:)` joined with `AudioImporter.audioFileName`, and the directory is 0700
+**And** the file is created 0600 at open time per NFR-S3, before any sample is written
+**And** the writer uses a `FileHandle` and the WAV header code that `AudioImporter` already has, not `AVAudioFile`; this is the one recorded exemption from `AtomicWriter` (Decision 1.4), because a 115 MB stream that must survive partially cannot be written atomically
 
-**Given** the file is being written
-**When** the writer creates the file
-**Then** the file is created with **0600 permissions** (user-only read/write) per NFR-S3 + AR-PAT-CacheDirPermissions
-**And** `Tests/CaptureTests/WAVWriterTests.swift` asserts permissions via `FileManager.attributesOfItem(atPath:)`
+**Given** the writer finalizes
+**When** `finalize()` runs
+**Then** it patches the RIFF and data chunk sizes from the bytes written
+**And** `AVAudioFile` reads the result with the expected frame count, 16kHz, 1 channel
 
-**Given** a 60-min meeting capture
-**When** the WAV file is finalized
-**Then** the file size is approximately 115 MB (16kHz × 16-bit × 1 channel × 3600s ≈ 115 MB) per Decision 1.4
-**And** the size is "acceptable for cache; deletes after retention per NFR-Pr6"
+**Given** a file whose header was never patched (crash or power loss)
+**When** `WAVWriter.repairHeader(at:)` runs
+**Then** it rewrites the RIFF and data chunk sizes from the file size, and reports the recovered duration
+**And** Story 5.4's recovery path calls it
 
-**Given** the writer
-**When** the underlying disk fills up mid-write or the process is killed
-**Then** the writer fails fast with a typed error (`CaptureError.diskFull` or `.streamInterrupted(reason:)`)
-**And** the partial WAV file is preserved on disk (NOT deleted — per AR-FAIL-6 mid-capture revocation handling: "saves partial audio")
+**Given** the disk fills or a write fails
+**When** the writer fails
+**Then** it throws `CaptureError.diskFull` or `.streamInterrupted(reason:)` and leaves the partial file on disk
+
+**Given** the test suite
+**When** I run `Tests/CaptureTests/WAVWriterTests.swift`
+**Then** tests cover: header correctness; 0600 file and 0700 directory; `repairHeader` on a truncated file; the partial file survives a thrown write
 
 ---
 
-### Story 5.4: Capture Stage Entry Point + State-Machine Integration + Mid-Capture Revocation Handling
+### Story 5.4: Capture Stage + State-Machine Integration + Crash Recovery + Mid-Capture Revocation
 
 As the single user,
-I want `Capture/CaptureStage.swift` to be the orchestrator-facing entry point for the `recording → captured` state transition, integrating with `StageRunner` from Story 1.5 and handling mid-capture permission revocation per FR60 + AR-FAIL-6,
-So that capture state is canonically managed in SQLite and the partial-audio-on-revocation safety contract is held mechanically.
+I want `Capture/CaptureStage.swift` to own the `recording → captured` transition, recover an interrupted recording, and hand the meeting to the pipeline,
+So that capture state is canonical in SQLite and partial audio is never lost.
 
 **Acceptance Criteria:**
 
-**Given** the `Capture` target
-**When** the GUI Record button (Story 5.6 / Epic 6) or `auricle record` CLI verb dispatches a capture
-**Then** `CaptureStage.start(meetingID:)` is called via `StageRunner.run(stage: .capture, ...)` from Story 1.5; Txn A writes `meetings.state = 'recording'` + `stage_events.started`
-**And** `meetings.capture_started_at` and `meetings.audio_cache_path` are set in the same transaction per AR-DATA-4 write-authority matrix
-**And** the `CaptureSession` from Story 5.2 + `WAVWriter` from Story 5.3 begin streaming
+**Given** a start request from the GUI (Story 5.6 now, Story 6.2 later)
+**When** `CaptureStage.start()` runs
+**Then** it calls a new `StateStore.beginCapture`, which in one transaction INSERTs the `meetings` row in `recording` with `capture_started_at`, `audio_cache_path` and `capture_time_zone`, and writes `stage_events.started`
+**And** capture does not go through `StageRunner.run`, which wraps one closure over an existing row; capture is two user-driven calls that can be hours apart
+**And** `PipelineTransitions` gains `(.capture, .recording) → [.captured, .captureFailed]`
+**And** no permission blocks a start: a denied microphone records system audio only, and System Audio status cannot be read, so every start creates a row
 
 **Given** `meetings.capture_started_at` is stored as a UTC instant
 **When** capture starts
-**Then** the same transaction also stores the IANA time zone identifier (`TimeZone.current.identifier`, for example `America/Los_Angeles`) in a new nullable `meetings` column, `capture_time_zone`, added by a new migration in this story per AR-DATA-5
-**And** the column stays NULL for every row no capture wrote, including Story 4.8's imported meetings and rows that predate the migration
-**And** persist and summarize format local dates and times in that zone (the note `date`, the filename date and `meeting-at-<HHMM>` slug, and the generic `Meeting at ... <zone>` title) and fall back to the current zone when the column is NULL or names an identifier the OS does not know
-**And** `PersistStage.TimeSource` already takes an injectable `timeZone`, and `SummarizeStage.run` takes `timeZone` too, so persist needs no signature change: the caller that builds them reads the column and passes the resolved zone
+**Then** the same transaction stores the IANA zone identifier (`TimeZone.current.identifier`) in a new nullable `meetings.capture_time_zone` column, added by a migration in this story (AR-DATA-5)
+**And** the column stays NULL for rows no capture wrote, including Story 4.8's imported meetings
+**And** persist and summarize format the note date, the filename date, the `meeting-at-<HHMM>` slug and the generic title in that zone, falling back to the current zone when the column is NULL or names an unknown identifier
+**And** a re-publish dates its `--rerun-<date>` suffix in the current zone, not the capture zone, so `PersistStage.TimeSource` carries two zones or the re-run date is formatted separately
 
-**Given** the user clicks Stop
-**When** `CaptureStage.stop(meetingID:)` is called
-**Then** Txn B writes `meetings.capture_ended_at`, `meetings.duration_seconds`, `meetings.state = 'captured'`, `stage_events.completed` per AR-PIPE-3 two-transaction pattern
-**And** `audio.wav` is finalized in cache-dir
-**And** the next stage (transcribe) is dispatched by the orchestrator
+**Given** the user stops the recording
+**When** `CaptureStage.stop()` runs
+**Then** a new `StateStore.finishCapture` writes `capture_ended_at`, `duration_seconds`, `state = 'captured'` and `stage_events.completed` in one transaction (Txn B per AR-PIPE-3)
+**And** the `stage_events.completed` metadata carries `mic_included`, `exact_zero_seconds` and `tap_rebuilds`
+**And** the GUI then runs `PipelineRunner` in-process with `RunOptions(to: .reviewDiarization)`, so the meeting stops at `awaiting_attribution`; the GUI composition root owns this wiring
 
-**Given** mid-capture permission revocation (Screen Recording or Microphone revoked while session is running)
-**When** ScreenCaptureKit or AVAudioEngine throws on the next sample read
-**Then** `CaptureStage` catches the throw, calls `WAVWriter.finalize()` to save whatever partial audio was captured, transitions to `capture_failed` with reason `permission_revoked_midstream` per AR-FAIL-6 + Decision 4.2
-**And** fires a notification immediately: *"Recording stopped — Screen Recording permission was revoked. The partial audio is saved."* per AR-FAIL-6
-**And** `meetings.audio_cache_path` still points at the partial WAV (recovery substrate per DP3 — Audio Is the Only Recovery Layer)
+**Given** the app launches and a `recording` row has no live session
+**When** crash recovery runs
+**Then** if the WAV has audio bytes, `WAVWriter.repairHeader` fixes it and the row moves to `captured` with `stage_events` reason `recovered_after_interruption`
+**And** if it has none, the row moves to `capture_failed` with reason `interrupted`
+**And** Decision 1.2's crash-recovery list includes `recording`
 
-**Given** capture stage transient stream interruptions (ScreenCaptureKit transient errors)
-**When** the failure rate is below the threshold (3 failures within 30s per Decision 4.2)
-**Then** `CaptureStage` performs best-effort stream restart inline; stream continues; one `stage_events.retried` row per attempt
-**And** if 3 failures hit within 30s, the stage transitions to `capture_failed` (permanent per AR-FAIL-1)
+**Given** a permission revocation the OS reports while capturing (an AVAudioEngine or Core Audio error)
+**When** the capture stage catches it
+**Then** it finalizes the partial WAV, moves to `capture_failed` with reason `permission_revoked_midstream`, and fires a notification through a new `Notifier.fireCaptureFailed(meetingID:reason:)`: *"Recording stopped — a permission was revoked. The partial audio is saved."*
+**And** if notifications are denied, it logs at `warn` instead (NFR-R8)
+**And** `meetings.audio_cache_path` still points at the partial WAV (DP3)
+**And** a System Audio Recording revocation the OS does not report shows up only as exact zeros, which the Story 5.2 metadata records
+
+**Given** transient stream errors
+**When** fewer than 3 happen within 30s (Decision 4.2)
+**Then** the stage restarts the source inline with one `stage_events.retried` row per attempt
+**And** the third within 30s moves the meeting to `capture_failed`
 
 **Given** the test suite
 **When** I run `Tests/CaptureTests/CaptureStageTests.swift`
-**Then** tests cover: happy-path start/stop produces correct state transitions; permission-denied at start throws typed error and writes `capture_failed`; mid-capture revocation saves partial audio + fires notification + transitions to `capture_failed`; transient stream restart inline (3 fails in 30s threshold); idempotent stop (calling stop on already-stopped session is safe per NFR-R5)
-**And** the tests cover the zone: capture writes the identifier beside `capture_started_at`, the migration leaves existing rows NULL, and a NULL or unknown identifier resolves to the current zone
+**Then** tests cover: start/stop transitions and transactions; crash recovery for both branches; reported revocation saves audio, notifies, and fails; transient restart threshold; idempotent stop (NFR-R5); the zone column, its NULL migration, and fallback; the re-run date uses the current zone
+**And** the story records idle CPU with auricle open and not recording, sampled over 60 seconds, against NFR-P11 (≤1%)
 
 ---
 
 ### Story 5.5: RecordingIndicator Atomic Component (Privacy Contract Surface)
 
 As the single user,
-I want `App/Auricle/DesignSystem/RecordingIndicator.swift` (or `Sources/Core/UI/RecordingIndicator.swift`) per UX-DR9 — the visible privacy contract surface that signals "auricle is recording" to me without ambiguity,
-So that the user's promise to themselves about consent is *visible* (color + shape/motion) and persistent across window-close (Dock + window title bar both show it; v1.1 menubar adds a third surface).
+I want a `RecordingIndicator` per UX-DR9 that signals "auricle is recording" without ambiguity,
+So that my promise to myself about consent is visible.
 
 **Acceptance Criteria:**
 
-**Given** the `RecordingIndicator` SwiftUI view
-**When** I render it in the active state (capture running)
-**Then** the visual is filled red (`tokens.recording = Color(.systemRed)` per UX-DR6) with a gentle pulse animation (1.0 → 0.7 → 1.0 alpha over 1.4s ease-in-out per UX-DR9)
-**And** under Reduce Motion (`@Environment(\.accessibilityReduceMotion) == true`), the pulse is disabled — the visual is still filled red, just static (per NFR-A5 + UX-DR9)
-**And** the SF Symbol is `record.circle.fill` per UX-DR8
+**Given** the new `AppUI` SwiftPM target (GUI view models and SwiftUI components, so `swift test` covers them)
+**When** I declare `RecordingIndicator`
+**Then** its appearance comes from a pure mapping `RecordingIndicatorAppearance(isRecording:reduceMotion:)` → symbol, tint, label, pulse
+**And** active: `record.circle.fill`, `Color(.systemRed)`, label "Recording", pulse 1.0 → 0.7 → 1.0 alpha over 1.4s ease-in-out; with Reduce Motion, no pulse (NFR-A5)
+**And** idle: `record.circle`, secondary tint, label "Not recording"
+**And** the text label always renders next to the symbol, and `accessibilityLabel` is set (NFR-A1, NFR-A3)
 
-**Given** the indicator is rendered in the idle state (capture not running)
-**When** I view it
-**Then** the visual is the outlined `record.circle` SF Symbol with secondary color tint per UX-DR9
-
-**Given** color is never the sole conveyor (NFR-A3)
-**When** the indicator is rendered in any state
-**Then** it is always paired with a text label "Recording" (active) or "Not recording" (idle) — accessibility label is the truth, not the color
-**And** `accessibilityLabel` is set explicitly per NFR-A1 + UX-DR65
-
-**Given** the indicator location
-**When** capture is active
-**Then** the indicator is visible in the auricle main window title bar at minimum per FR3
-**And** v1.1 Story 10.x adds the menubar status indicator surface (the same atomic component is reused per UX-DR9)
+**Given** capture is active
+**When** the app window is open
+**Then** the indicator shows in the existing window's toolbar; Story 6.2 moves it into the main-window header
+**And** the Dock and menubar surfaces are out of scope (v1.1)
 
 **Given** the test suite
-**When** I run `Tests/CoreTests/RecordingIndicatorTests.swift` (or `Tests/AppTests/`)
-**Then** snapshot tests verify the indicator renders correctly in: active (Reduce Motion off), active (Reduce Motion on), idle, Dark mode, Light mode, Increased Contrast on/off per UX-DR66
-**And** an accessibility-label test asserts the label is non-empty and meaningful in every state
+**When** I run `Tests/AppUITests/RecordingIndicatorTests.swift`
+**Then** tests cover the appearance mapping in every state and a non-empty accessibility label in every state
+**And** the story records a manual screenshot check in Light, Dark, and Increased Contrast; no snapshot-testing dependency is added
 
 ---
 
 ### Story 5.6: Throwaway Debug Record Trigger (Epic 6 Deletes It)
 
 As the maintainer (in builder mode),
-I want a **debug-only** Record trigger (menu item or hotkey or dev-only window button) so that capture mechanics from Stories 5.2/5.3/5.4 can be exercised before Epic 6's main window UI exists,
-So that Epic 5 is testable end-to-end without "Record button has nowhere to live" pressure collapsing the Epic 5/6 boundary (per Winston's party-mode review). **This story is scaffold infrastructure — the canonical satisfaction of FR1 (start capture control) and FR2 (stop capture control) lives in Epic 6 Story 6.2's main-window Record button; this story exercises the same `CaptureStage.start/.stop` code paths from Story 5.4 via a debug-only entry point so Epic 5 can be dogfooded standalone.**
+I want a debug-only Record / Stop trigger,
+So that capture can be exercised end-to-end before Epic 6's main window exists. **FR1 and FR2 are satisfied by Story 6.2's Record button; this story exercises the same `CaptureStage.start` / `.stop` paths.**
 
 **Acceptance Criteria:**
 
-**Given** Epic 6 has not yet shipped
-**When** the auricle app launches
-**Then** a debug-only menu item exists in the application menu (e.g., `Debug > Start Recording / Stop Recording`) OR a dev-only hotkey (e.g., `Cmd-Shift-R`) that toggles capture
-**And** the menu item / hotkey is wrapped in `#if DEBUG` or guarded by a debug build configuration so it does NOT appear in release builds (the user can still produce a debug-built `.app` for end-to-end Epic 5 testing on real Macs)
+**Given** a Debug build of the app
+**When** it launches
+**Then** a `Debug > Start Recording / Stop Recording` menu item and `Cmd-Shift-R` toggle capture, wrapped in `#if DEBUG` so neither exists in Release
 
-**Given** the debug trigger is invoked
-**When** capture is not running
-**Then** the trigger calls `CaptureStage.start(meetingID:)` from Story 5.4 with a freshly-generated `MeetingID` (Story 1.2's `MeetingID.generate()`)
-**And** the `RecordingIndicator` from Story 5.5 enters the active state (visible somewhere — even if just in a debug overlay window or menu bar dot)
+**Given** capture is not running
+**When** the trigger fires
+**Then** it calls `CaptureStage.start()` and the Story 5.5 indicator enters the active state
+**And** if the microphone is denied, it says the recording will contain system audio only, with the Story 5.1 deep link
 
-**Given** the debug trigger is invoked
-**When** capture is running
-**Then** the trigger calls `CaptureStage.stop(meetingID:)`; the recording finalizes; the meeting transitions to `captured`; subsequent stages (transcribe → diarize → review-diarization → ...) auto-dispatch via the orchestrator from Story 1.5
+**Given** capture is running
+**When** the trigger fires
+**Then** it calls `CaptureStage.stop()`, the meeting reaches `captured`, and the pipeline runs to `awaiting_attribution` (Story 5.4)
 
-**Given** Epic 6 ships
-**When** Epic 6 Story 6.2 lands the main-window header with the proper Record button
-**Then** Story 5.6's debug trigger is **deleted** as part of Epic 6 Story 6.2's implementation per Winston's review
-**And** the deletion is explicitly noted in Epic 6 Story 6.2's acceptance criteria
+**Given** Epic 6 Story 6.2 lands
+**Then** it deletes this trigger, as its own acceptance criteria say
 
-**Given** Epic 5 is shipping in isolation (before Epic 6 is started)
-**When** I want to dogfood Epic 5 end-to-end
-**Then** I can: run debug-built auricle → onboarding (Stories 5.7-5.9) → permission gauntlet (Story 5.8) → Cmd-Shift-R (or Debug menu) to start recording → Cmd-Shift-R again to stop → cache directory contains a complete `audio.wav` at the expected path
+**Given** Epic 5 in isolation
+**When** I dogfood it
+**Then** I can: launch a Debug build → onboard (Stories 5.7–5.10) → `Cmd-Shift-R` → talk over a meeting → `Cmd-Shift-R` → find `audio.wav` in the cache directory → `auricle attribute <id> --speakers …` and `auricle run <id>` finish the note from the terminal
 
 ---
 
-### Story 5.7: OnboardingCoordinator + Welcome / Vault-Picker / Obsidian-Handshake / Expectation-Setting Flow
+### Story 5.7: OnboardingCoordinator + Welcome / Vault / Obsidian / API Key / Expectation Flow
 
 As the single user,
-I want `App/Auricle/Onboarding/OnboardingCoordinator.swift` to drive the J0 onboarding *narrative* (welcome → vault picker → Obsidian handshake → first-meeting expectation-setting → quiet success) per UX-DR41,
-So that **Day-1 trust is the gate to Day-30** (Sally's emotional contract framing — preserved as a narrative arc within Epic 5 even though the epic isn't split 5a/5b per Amelia).
+I want an `OnboardingCoordinator` to drive the J0 onboarding narrative (welcome → permission steps → configure → quiet success) per UX-DR41,
+So that Day-1 trust is the gate to Day-30.
 
 **Acceptance Criteria:**
 
-**Given** the user launches auricle for the first time on a fresh Mac
-**When** the app detects no prior config (`~/.auricle/config.toml` doesn't exist or is empty)
-**Then** `OnboardingCoordinator` presents the Welcome view in the main window: *"Let's get auricle set up — 4 quick steps"* per UX-DR41
-**And** the view explains what the 4 steps are (Mic, Screen Recording, Notifications, Configure) without launching any TCC dialogs yet — the user clicks Next when ready
+**Given** the `AppUI` target
+**When** I declare `OnboardingCoordinator`
+**Then** it is a state machine over the steps Welcome → Microphone → System Audio → Notifications → Configure → Done, with the three permission steps supplied by Story 5.8 through a step protocol
+**And** SwiftUI views for each step live in `App/Auricle/Onboarding/`; all logic lives in `AppUI`
+
+**Given** the app launches
+**When** no onboarding-completed marker exists in the app's Application Support directory
+**Then** onboarding runs in the existing window, whether or not `~/.auricle/config.toml` exists (the maintainer already has one)
+**And** once onboarding completes, the marker is written and later launches skip it; Settings (Story 9.1) and Doctor (Story 9.2) can re-run any step
 
 **Given** the Welcome step
-**When** the user clicks Next
-**Then** the coordinator advances to Step 1 (Mic permission, handled by Story 5.8)
-**And** each step shows a "why" line above the request, explaining the purpose in user voice per UX-DR44 — so the system TCC dialog isn't a surprise
+**When** it renders
+**Then** it reads *"Let's get auricle set up — 4 quick steps"* and names them (Mic, System Audio, Notifications, Configure) without firing any TCC prompt
 
-**Given** the Configure step (Step 4)
-**When** the user reaches it
-**Then** the coordinator presents three sub-steps: vault path picker (default `~/checkouts/SecondBrain` per AR-DATA-9; user can change; auricle does NOT auto-create the vault — only validates per Story 2.3's contract); Obsidian handshake (write a test note via `obsidian://open?vault=...&file=...` URL scheme; verify Obsidian launches and the test note opens); first-meeting expectation-setting (a brief explainer: "Click ⏺ Record before your meeting starts; click Stop after; you'll get a notification when the summary is ready")
-**And** the Anthropic API key is set up here (Keychain-stored via `KeychainAPIKey.write(...)` from Story 3.3) — but is NOT a hard-block: if the user skips it, summarization is unavailable until they configure it later (graceful degradation per UX-DR41)
+**Given** the Configure step
+**When** it renders
+**Then** it has four sub-steps:
+- vault path picker: defaults to the configured `vault_path` or `~/checkouts/SecondBrain` (AR-DATA-9); validates per Story 2.3; never creates the vault
+- Obsidian check: opens `obsidian://open?vault=<vault name>`; success means the URL opened; no test note is written; if Obsidian is not installed, it says *"Install Obsidian to use auricle's vault output"* and does not block
+- Anthropic API key: stored with `KeychainAPIKey.write(...)` (Story 3.3); skippable, and summarization is unavailable until it is set (UX-DR41)
+- first-meeting expectations: *"Start a recording before your meeting and stop it after; you'll get a notification when the summary is ready"*
+**And** Story 5.9's `self.wikilink` sub-step sits after the vault picker
+**And** calendar connection is not an onboarding step in this epic; it stays with Story 3.10's flow and Settings (Story 9.1)
 
 **Given** onboarding completes
-**When** all 4 steps finish (or the user explicitly skips optional steps)
-**Then** `OnboardingCoordinator` writes the final config to `~/.auricle/config.toml` per FR59
-**And** runs `auricle doctor` once silently; the result feeds the in-window banner (Epic 6) only if anything failed
-**And** the main window shows the empty meeting list with the centered text *"Click ⏺ Record to capture your first meeting"* per UX-DR43
-
-**Given** the user has previously completed onboarding
-**When** the app launches on subsequent runs
-**Then** `OnboardingCoordinator` detects the existing config and skips the onboarding flow
-**And** the user can re-trigger any onboarding sub-step manually via Settings (Epic 9 Story 9.1) or Doctor (Epic 9 Story 9.2)
+**When** Done renders
+**Then** values are written through `ConfigWriter` (Story 5.10) to `~/.auricle/config.toml` per FR59
+**And** the window shows a quiet "You're set up" state; the empty meeting list (UX-DR43) belongs to Story 6.3 and the post-onboarding doctor run belongs to Story 9.2
 
 **Given** the test suite
-**When** I run `Tests/AppTests/OnboardingCoordinatorTests.swift` (or equivalent)
-**Then** tests cover: fresh-install detection (no config file → onboarding triggers); existing-install detection (config present → onboarding skipped); each step transitions correctly; the vault-picker validates per Story 2.3's contract; the Obsidian handshake handles the case where Obsidian isn't installed (graceful — coordinator notes "Install Obsidian to use auricle's vault output" but doesn't hard-block)
+**When** I run `Tests/AppUITests/OnboardingCoordinatorTests.swift`
+**Then** tests cover: marker absent → onboarding runs; marker present → skipped; every step transition; the vault picker validation; Obsidian missing does not block; the API key skip path
 
 ---
 
-### Story 5.8: J0 4-Step Permission Gauntlet
+### Story 5.8: J0 Permission Steps (Microphone, System Audio, Notifications)
 
 As the single user,
-I want the J0 4-step permission gauntlet (Mic → Screen Recording → Notifications → Configure) per UX-DR41 — each step shows a *why* line above the request and handles denied-permission states gracefully,
-So that the TCC permission flow on Day 1 builds trust rather than feels sketchy (auricle's most security-sensitive moment).
+I want the three permission steps of the J0 gauntlet, each with a *why* line and graceful denied states, per UX-DR41,
+So that the TCC flow on Day 1 builds trust.
 
 **Acceptance Criteria:**
 
-**Given** Step 1 (Microphone)
+**Given** the Microphone step
 **When** the user clicks "Grant Microphone access"
-**Then** the system TCC dialog fires with the `NSMicrophoneUsageDescription` string from Info.plist: *"auricle captures your voice alongside the meeting so your contributions are in the notes."* per UX-DR44
-**And** if granted → advance to Step 2
-**And** if denied → show inline help: *"auricle needs microphone access to capture your voice. You can grant it in System Settings."* with three buttons: `[Open Settings]` (deep-link via `PermissionChecker.remediationDeepLink(.microphone)` from Story 5.1), `[Skip]` (advance — capture will not include user's voice; system audio only), `[Try Again]` (re-fires the TCC dialog, only effective if the user hasn't already explicitly denied) per UX-DR41
+**Then** `PermissionChecker.request(.microphone)` shows the system prompt with the `NSMicrophoneUsageDescription` string
+**And** granted → next step
+**And** denied → *"auricle needs microphone access to capture your voice. You can grant it in System Settings."* with `[Open Settings]` (Story 5.1 deep link), `[Skip]` (recordings will have system audio only, Story 5.2), `[Try Again]` (shown only while status is `.notDetermined`)
 
-**Given** Step 2 (Screen Recording)
-**When** the user clicks "Grant Screen Recording access"
-**Then** the system TCC dialog fires with `NSScreenCaptureUsageDescription`: *"auricle records your meeting audio so it can transcribe what's said."* per UX-DR44
-**And** if denied → inline help with `[Open Settings]` / `[Skip]` / `[Try Again]` — but Skip is **strongly discouraged** (without Screen Recording, system audio capture is impossible; the inline help notes this)
-**And** if granted → advance to Step 3
+**Given** the System Audio step
+**When** the user clicks "Allow System Audio Recording"
+**Then** `SystemAudioPermissionProbe.prompt()` (Story 5.2) runs a 1-second capture so the system prompt appears with the `NSAudioCaptureUsageDescription` string, and `AppUI` depends on `Capture` for it
+**And** because the grant cannot be read back, the step then shows *"If you chose Allow, you're done. If not, you can turn on System Audio Recording for auricle in System Settings."* with `[Open Settings]` and `[Continue]`
+**And** the step notes that without it, recordings contain only your microphone
 
-**Given** Step 3 (Notifications)
-**When** the user clicks "Grant Notifications access"
-**Then** `UNUserNotificationCenter.requestAuthorization(options: [.alert, .sound])` is called
-**And** if granted → advance to Step 4
-**And** if denied → graceful skip: *"You can still use auricle — summary-ready notifications will be silent. You'll see ready meetings in the main window."* per UX-DR41 + NFR-R8
+**Given** the Notifications step
+**When** the user clicks "Allow notifications"
+**Then** `PermissionChecker.request(.notifications)` runs
+**And** denied → *"You can still use auricle — summary-ready notifications will be silent. You'll see ready meetings in the main window."* and the step advances (NFR-R8)
 
-**Given** Step 4 (Configure)
-**When** the user reaches it
-**Then** Story 5.7's vault picker + Obsidian handshake + API key + first-meeting expectation-setting flow runs
-**And** completing Step 4 ends the onboarding gauntlet
-
-**Given** Mic + Screen Recording are both denied at end of gauntlet
-**When** the user attempts to record from the (debug or main-window) Record button
-**Then** the action is blocked with a clear error explaining which permissions are missing and a deep-link to System Settings per Story 5.1
-**And** `auricle doctor` (Epic 9) reports the same per AR-FAIL-6
+**Given** Microphone is denied and System Audio was not allowed
+**When** the user tries to record
+**Then** the recording still starts (System Audio status is unknowable), and Story 5.2's metadata records whether any audio arrived
 
 **Given** the test suite
-**When** I run `Tests/AppTests/PermissionGauntletTests.swift`
-**Then** tests cover: each step's TCC dialog firing path (mocked); each step's denied-path UI (`[Open Settings]` invokes the correct deep-link; `[Skip]` advances; `[Try Again]` re-fires only when permission is `.notDetermined`); Mic+Screen-Recording both denied → record button blocked
+**When** I run `Tests/AppUITests/PermissionStepsTests.swift`
+**Then** tests cover each step's request path against a `PermissionChecker` double; `[Open Settings]` uses the right deep link; `[Skip]` advances; `[Try Again]` shows only for `.notDetermined`; the System Audio step never claims the grant succeeded
 
 ---
 
-### Story 5.9: self.wikilink Config Setup During Onboarding
+### Story 5.9: self.wikilink Setup During Onboarding
 
 As the single user,
-I want the `self.wikilink` config value to be set during onboarding per UX-DR42 — defaulting to a best-guess from system account name + first calendar enrichment, user-editable in the Configure step (Story 5.7),
-So that the "This is me" affordance in the Attribution sheet (Epic 7) has a target wikilink to apply, and the heuristic pre-select on the longest-cumulative-speaking row works from the very first meeting.
+I want `self.wikilink` set during onboarding per UX-DR42,
+So that Epic 7's "This is me" affordance has a target from the first meeting.
 
 **Acceptance Criteria:**
 
-**Given** Story 5.7's Configure step (Step 4 of the gauntlet)
-**When** the user reaches the `self.wikilink` sub-step
-**Then** the form pre-fills with a best-guess: the macOS system account full name (e.g., from `NSFullUserName()`) wrapped in `[[...]]` (e.g., `[[Jordan Whitfield]]`)
-**And** the user can edit the value freely; an autocomplete suggests existing wikilink targets in the configured vault if one matches their name
-**And** the user can confirm the default or type a new value; the value is written to `config.toml`'s `self.wikilink` key per FR58
+**Given** Story 5.7's Configure step
+**When** the `self.wikilink` sub-step renders
+**Then** it pre-fills `[[<NSFullUserName()>]]`, lets the user edit it, and suggests matching wikilink targets from the chosen vault
+**And** the confirmed value is written to `self.wikilink` through `ConfigWriter` (Story 5.10)
 
-**Given** the user skips the `self.wikilink` config (e.g., onboarding aborted before Step 4 completes)
-**When** the user later opens the Attribution sheet (Epic 7)
-**Then** the "This is me" button reads *"Set me first…"* and links to Settings (Epic 9 Story 9.1) per UX-DR21 + UX-DR42
-**And** the heuristic pre-select on the longest-cumulative-speaking row is **skipped** (no target to pre-fill) per UX-DR21
-
-**Given** `self.wikilink` is set
-**When** the user later wants to change it
-**Then** the value is editable in Settings (Epic 9 Story 9.1) per FR58
-**And** changes take effect on next pipeline invocation per NFR-M6
+**Given** a configured `self.wikilink` and a calendar-derived self identity (`CalendarEnrichment`)
+**When** a later stage needs the user's wikilink
+**Then** the configured value wins and the calendar value is the fallback
 
 **Given** the test suite
-**When** I run `Tests/AppTests/SelfWikilinkConfigTests.swift`
-**Then** tests cover: default best-guess from system account name; user override write/read; missing value triggers Attribution sheet's "Set me first…" state in Epic 7's view-model contract test
-**And** the pre-fill autocomplete against vault wikilinks is tested with a synthetic vault fixture
+**When** I run `Tests/AppUITests/SelfWikilinkStepTests.swift`
+**Then** tests cover: the default from the account name; a user override round-trips through `Config.selfWikilink`; vault suggestions against a synthetic vault fixture
+**And** the "Set me first…" state for a missing value is Epic 7's to test
+
+---
+
+### Story 5.10: ConfigWriter + `self.wikilink` Key
+
+As the single user,
+I want a `ConfigWriter` in `Core` that edits single keys in `~/.auricle/config.toml`,
+So that onboarding and Settings can write config without discarding the keys and comments I edit by hand (FR59).
+
+**Acceptance Criteria:**
+
+**Given** the `Core` target
+**When** I call `ConfigWriter.set(_ key: String, to value: …)`
+**Then** it changes only that key, keeps every other key and comment, and writes through `AtomicWriter`
+**And** it creates the file when absent, and never writes a secret (the API key stays in Keychain, NFR-S1)
+
+**Given** `Config`
+**When** the story lands
+**Then** `Config` reads a `self.wikilink` key as `selfWikilink: String?`
+
+**Given** the CLI
+**When** I run `auricle config set <key> <value>`
+**Then** it calls `ConfigWriter`, replacing its stub
+
+**Given** the test suite
+**When** I run `Tests/CoreTests/ConfigWriterTests.swift`
+**Then** tests cover: one key changed with comments and unknown keys preserved; file created when absent; `self.wikilink` round-trips
 
 ---
 
 **Epic 5 summary:**
-- **9 stories** sized for single dev-agent completion
-- **Story sequencing matters:** 5.1 (PermissionChecker) → 5.2 (CaptureSession) → 5.3 (WAVWriter) → 5.4 (CaptureStage integration) → 5.5 (RecordingIndicator atom) → 5.6 (debug trigger — Epic 6 deletes); 5.7-5.9 (onboarding track) can run in parallel with 5.1-5.6 since they share the `Permissions` + `Capture` + `Onboarding` modules but live in different files
-- **All FRs covered:** FR1 (Stories 5.4 + 5.6 — Record control via debug trigger here, full main-window button in Epic 6), FR2 (Stories 5.4 + 5.6 — Stop control), FR3 (Story 5.5 — RecordingIndicator), FR4 (Story 5.2 — ScreenCaptureKit loopback), FR5 (Story 5.2 — mic capture mixed), FR6 (Story 5.4 — permission denial handling + deep links from Story 5.1), FR58 initial config scaffold (Stories 5.7 + 5.9 — vault path + API key + self.wikilink), FR60 mid-capture revocation (Story 5.4)
-- **NFRs primarily verified:** NFR-P11 idle CPU ≤1% (Story 5.4 — capture lifecycle baseline; verified post-epic), NFR-P13 no perceivable system audio latency (Story 5.2 — passive loopback), NFR-S3 cache audio 0600 (Story 5.3), NFR-Pr3 user-owned dirs only (Story 5.3), NFR-Pr6 conservative retention defaults (Stories 5.7 default config), NFR-Pr7 no indication to other meeting participants (Story 5.2 — OS-level capture invisible by design), NFR-A1-A6 (Story 5.5 RecordingIndicator + Stories 5.7-5.9 onboarding accessibility — VoiceOver labels, Reduce Motion respect, Dark/Light mode, color-not-sole-conveyor)
-- **All architectural commitments addressed:** AR-FAIL-6 (Stories 5.1, 5.4, 5.8 — permission detection points + remediation flow + Info.plist user voice)
-- **All UX-DRs primarily addressed:** UX-DR9 RecordingIndicator (Story 5.5), UX-DR41 J0 4-step permission gauntlet (Stories 5.7 + 5.8), UX-DR42 self.wikilink config (Story 5.9), UX-DR43 empty meeting list "Click ⏺ Record" (Story 5.7), UX-DR44 Info.plist usage descriptions in user voice (Story 5.1 wires the strings per AR-FAIL-6; Story 5.8 invokes them), UX-DR45 TCC remediation deep links (Story 5.1)
-- **Sally's narrative concern flagged in Story 5.7:** the J0 onboarding *narrative* is owned by `OnboardingCoordinator` as a discrete arc — the "Day-1 trust = Day-30 retention" framing is preserved at story-level granularity even though the epic isn't split 5a/5b
-- **Winston's debug-trigger concern resolved in Story 5.6:** capture mechanics testable end-to-end without "Record button has nowhere to live" pressure; Epic 6 Story 6.2 explicitly deletes the debug trigger
-- **No future-story dependencies within the epic:** every story is independently completable in sequence
+- **10 stories.** Build order, in waves; stories within a wave can run in parallel:
+  - Wave 1: 5.1, 5.3, 5.10, 5.5 (no dependencies). Land 5.5 early: it adds the `AppUI` target to `Package.swift`, which 5.7 needs.
+  - Wave 2: 5.2 (needs 5.1, 5.3) and 5.7 (needs 5.10 and the `AppUI` target)
+  - Wave 3: 5.4 (needs 5.2), 5.8 (needs 5.1, 5.2's `SystemAudioPermissionProbe`, 5.7) and 5.9 (needs 5.7, 5.10)
+  - Wave 4: 5.6 (needs 5.4, 5.5), the end-to-end dogfood run
+  - Critical path: 5.1 or 5.3 → 5.2 → 5.4 → 5.6. 5.2's manual live-app gate waits on the maintainer's real calls; 5.4 can start against a fake `SystemAudioSource` before the gate passes, at the risk of rework if the gate fails.
+  - Shared files: `Package.swift` (5.1, 5.2, 5.4, 5.5), `Info.plist` and `scripts/check.sh` (5.1 only), `StateStore` and `PipelineTransitions` (5.4 only).
+- **FRs covered:** FR1 and FR2 (5.4 + 5.6; the main-window button is Story 6.2), FR3 (5.5), FR4 (5.2), FR5 (5.2), FR6 (5.1 + 5.8), FR58 initial scaffold (5.7 + 5.9 + 5.10), FR60 mid-capture revocation (5.4)
+- **NFRs verified:** NFR-P11 (5.4, measured), NFR-P13 (5.2), NFR-S3 (5.3), NFR-Pr3 (5.3), NFR-Pr7 (5.2; OS-level capture sends nothing to the meeting), NFR-A1 to A6 (5.5, 5.7, 5.8)
+- **Architecture:** AR-FAIL-6 (5.1, 5.4, 5.8), Decision 1.4 capture backend and the `WAVWriter` exemption (5.2, 5.3), Decision 1.2 recovery of `recording` (5.4)
+- **UX-DRs:** UX-DR9 (5.5), UX-DR41 (5.7 + 5.8), UX-DR42 (5.9), UX-DR44 (5.1), UX-DR45 (5.1). UX-DR43 is Story 6.3's.
+- **Forward references, all to later epics:** Story 6.2 deletes 5.6 and moves the indicator; Story 6.3 owns the empty list; Story 9.2 runs doctor after onboarding; Story 9.5 implements `auricle record` / `stop`; Epic 7 owns "Set me first…"
+- **Research behind the capture decisions:** `_bmad-output/planning-artifacts/research/technical-scstream-vs-core-audio-process-taps-2026-09-22/research.md`
 
 ---
 
@@ -2877,6 +2913,7 @@ So that the app has a real Record button (not the throwaway debug trigger from S
 **When** Story 6.2 lands
 **Then** the `#if DEBUG` menu item / `Cmd-Shift-R` hotkey from Story 5.6 is **deleted** as part of Story 6.2's implementation per Winston's review
 **And** the deletion is verified by a CI grep check (no `#if DEBUG` block referencing `Debug Record` or equivalent appears in the codebase after Story 6.2)
+**And** the `RecordingIndicator` moves from the window toolbar (Story 5.5) into this header
 
 **Given** auricle launches cold
 **When** the user clicks the Dock icon
@@ -3941,7 +3978,7 @@ So that system-readiness is one command (or one menu click) away with clear reme
 **When** invoked
 **Then** the checks run per AR-FAIL-6 + AR-DIST-2:
 1. Microphone permission (`PermissionChecker.check(.microphone)` from Story 5.1) → ✓ granted / ✗ not granted with deep link
-2. Screen Recording permission (`.screenCapture`) → ✓/✗ + deep link
+2. System Audio Recording (`.systemAudioCapture`) → always `?` (macOS has no public check) + an explanation and deep link
 3. Notifications permission (`.notifications`) → ✓/✗ + deep link
 4. Gatekeeper trust for the auricle code-signing CA (`GatekeeperTrust.swift` from `Permissions` target — runs `spctl --assess --verbose <bundle-path>` per AR-DIST-2) → ✓/✗ + remediation `scripts/setup-trust.sh` invocation
 5. Vault path exists + writable (`VaultWriter` validation from Story 2.3) → ✓/✗ + remediation
@@ -3956,7 +3993,8 @@ So that system-readiness is one command (or one menu click) away with clear reme
 **Given** the CLI DoctorVerb per Decision 1.5
 **When** invoked
 **Then** the output format matches the architecture's Doctor UX example: per-check `[1 of N] <Check name> ✓ granted` or `✗ not granted` with indented remediation lines pointing to System Settings deep link or `auricle config set` invocation
-**And** exit code is 0 if all pass; 2 if any fail per Decision 1.5
+**And** exit code is 0 if all pass; 2 if any fail per Decision 1.5; System Audio Recording reads `?` and never fails the run
+**And** the app runs the checks once, silently, right after Story 5.7's onboarding completes, and the Story 6.6 banner shows only failures
 
 **Given** the test suite
 **When** I run `Tests/AppTests/DoctorViewTests.swift` and `Tests/CLITests/DoctorVerbTests.swift`
@@ -4026,7 +4064,7 @@ So that releases are reproducible (same git SHA + same toolchain → identical s
 
 **Given** the bundle identifier and signing identity remain stable across rebuilds and Sparkle updates
 **When** Sparkle ships in v1.1
-**Then** existing TCC permission grants persist (Microphone, Screen Recording, Notifications) per NFR-S2
+**Then** existing TCC permission grants persist (Microphone, System Audio Recording, Notifications) per NFR-S2
 
 **Given** the test suite
 **When** I run a release script test (manual or CI-skipped due to signing requirements)
@@ -4050,8 +4088,8 @@ So that the CLI parallel surface is genuinely complete at the MVP gate — every
 **Given** each verb's full implementation
 **When** invoked
 **Then** the verb behaviors match Decision 1.5 specifications exactly:
-- `record [<id>]`: starts capture; ID optional (generates ULID if absent); `--replace` overrides existing audio
-- `stop`: idempotent stop
+- `record [<id>]`: starts capture in the running app (capture runs in the GUI process and holds the TCC grants; Epic 5); ID optional (generates ULID if absent); `--replace` overrides existing audio. This story records how the CLI reaches the app without XPC (Decision 1.1), for example a request row the app polls, and reconciles `--replace` with `audio_cache_path` being immutable after INSERT
+- `stop`: reaches the recording app the same way; idempotent
 - `discard <id>`: deletes cached audio + meeting state (Story 6.10's `DiscardAction` shared with GUI)
 - `run <id> [--force] [--from <stage>] [--to <stage>] [--only <stage>] [--reattribute] [--publish-anyway]`: full run verb per Story 4.7
 - `attribute <id> [--batch]`: interactive default per Decision 1.5; with `--batch`: applies last-known mapping or exits 1 per Story 4.6

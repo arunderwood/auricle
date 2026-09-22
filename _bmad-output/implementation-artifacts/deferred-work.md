@@ -473,3 +473,13 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-diarize-stage-snippet-extraction.md`
   summary: A resumed transcribe still runs `TranscribeWorker`'s `ensureModel` before the stage, so a retry can trigger a Whisper model-download check.
   evidence: Noted in PR #92 under item 1. Whether a diarize failure should block the meeting at all is the open design question. Severity low.
+
+- closes: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`, "`PersistStage.TimeSource.timeZone` dates both the note and the `--rerun-<date>` suffix, so passing the capture-time zone would date a re-run in the capture zone."
+  resolution: Decided: Story 5.4 (`epics.md`) dates a re-publish's `--rerun-<date>` suffix in the current zone, not the capture zone, and its tests cover it. `TimeSource` carries two zones or the re-run date is formatted separately; the story picks. Not built yet.
+
+- closes: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`, "`architecture.md` does not list `meetings.capture_time_zone`."
+  resolution: `architecture.md` now lists the column in the `meetings` schema block and the write-authority matrix, and Decision 2.4's filename-date rule names it as the zone source (sprint change proposal 2026-09-22, Epic 5 readiness gaps).
+
+- source_spec: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-22-epic-5-readiness-gaps.md`
+  summary: Debug builds are ad-hoc signed, so TCC likely treats each rebuild as a new app and re-prompts for Microphone and System Audio Recording, and a GUI-written Keychain item may not be readable by the `com.auricle.cli` worker.
+  evidence: TCC keys grants to the designated requirement, and an ad-hoc requirement is the cdhash (research report [5], an inference, not observed on this project). `architecture.md` already says TCC stability needs the Story 9.3 signing identity. `KeychainAPIKey` sets no access-control list (`Sources/ClaudeSummarizer/KeychainAPIKey.swift`). Story 5.2's soak records whether an ad-hoc rebuild re-prompts. Maintainer decision: keep Debug ad-hoc until Story 9.3, or pull the Story 9.3 identity forward for Debug builds. Severity medium for the Epic 5 dev loop.
