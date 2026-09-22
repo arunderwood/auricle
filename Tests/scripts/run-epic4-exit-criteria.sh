@@ -11,15 +11,25 @@
 #                               "attendees": 4,
 #                               "speakers": "1=Ben,2=Sara",
 #                               "items": [
-#                                 {"section": "action_items", "quote": "<verbatim transcript text>"},
-#                                 {"section": "decisions",    "quote": "<verbatim transcript text>"}
+#                                 {"section": "action_items",
+#                                  "quote": "<verbatim transcript text>",
+#                                  "text":  "<the item in your own words>"},
+#                                 {"section": "decisions",
+#                                  "quote": "<verbatim transcript text>",
+#                                  "text":  "<the item in your own words>"}
 #                               ]
 #                             }
 #                           "speakers" is optional; without it the run uses
-#                           --publish-anyway. An expected item survives when its
-#                           quote appears in a note block quote under that
-#                           section's heading. The AMI meeting audio (CC BY 4.0)
-#                           behind the Epic 3 fixtures is an allowed public source.
+#                           --publish-anyway. "text" is optional too, and an
+#                           item without one is scored on its quote alone.
+#                           Whether an expected item survived is decided by
+#                           Tests/regression/ami/score.py, which this script
+#                           imports so that it and the regression suite apply
+#                           one rule: the quote overlaps a note block quote
+#                           under that section's heading, or the two item
+#                           descriptions overlap. The AMI meeting audio
+#                           (CC BY 4.0) behind the Epic 3 fixtures is an
+#                           allowed public source.
 #
 # Needs: the app launched once (it creates the database), `vault_path` set in
 # ~/.auricle/config.toml, and an Anthropic API key in the Keychain. The cost
@@ -127,11 +137,20 @@ for audio in "${recordings[@]}"; do
         "SELECT COALESCE(grounding_method, ''), COALESCE(quote_validation_drop_count, 0), COALESCE(cost_usd, 0) + COALESCE(diarization_review_cost_usd, 0) FROM telemetry WHERE meeting_id = '$meeting_id';")
     [ -n "$telemetry" ] || fail "$label: no telemetry row."
 
-    # Prints "<kept> <expected> <survived>" or exits non-zero with a label-only message.
-    counts=$(python3 - "$label" "$note_path" "$cache_root/$meeting_id/transcript.json" "$expected" <<'PY'
+    # Prints "<kept> <expected> <survived> <false keeps>" or exits non-zero with
+    # a label-only message.
+    counts=$(python3 - "$label" "$note_path" "$cache_root/$meeting_id/transcript.json" "$expected" "$repo_root" <<'PY'
 import json, re, sys
 
-label, note_path, transcript_path, expected_path = sys.argv[1:5]
+label, note_path, transcript_path, expected_path, repo_root = sys.argv[1:6]
+
+# The matching rule is score.py's, imported rather than copied: a second copy
+# of it here is how this script and the regression suite came to report
+# different numbers for the same notes.
+sys.path.insert(0, f"{repo_root}/Tests/regression/ami")
+import score
+
+item_text_overlap = json.load(open(f"{repo_root}/Tests/regression/ami/thresholds.json", encoding="utf-8"))["item_text_overlap"]
 note = open(note_path, encoding="utf-8").read()
 transcript = json.load(open(transcript_path, encoding="utf-8"))["text"]
 
@@ -141,45 +160,37 @@ if not fence or "auricle:" not in fence.group(1) or "schema_version:" not in fen
 if not re.search(r"(^|/)\d{4}-\d{2}-\d{2}-[^/]+\.md$", note_path):
     sys.exit(f"run-epic4-exit-criteria: {label}: note is not at a FilenameResolver-shaped path.")
 
-sections = {"Action Items": [], "Decisions": []}
-current = None
-bullet = None
-for line in note.split("\n"):
-    if line.startswith("## "):
-        current = line[3:] if line[3:] in sections else None
-        bullet = None
-    elif current and line.startswith("- "):
-        bullet = []
-        sections[current].append(bullet)
-    elif current and bullet is not None and line.startswith("  >"):
-        bullet.append(line[3:].strip())
-
-def squash(text):
-    return " ".join(text.split())
-
-kept = 0
-quotes = {"action_items": [], "decisions": []}
-for heading, key in (("Action Items", "action_items"), ("Decisions", "decisions")):
-    for bullet in sections[heading]:
-        if not bullet:
+kept = score.note_items(note)
+for items in kept.values():
+    for item in items:
+        if not item["quote"]:
             sys.exit(f"run-epic4-exit-criteria: {label}: an item has no source quote.")
-        quote = "\n".join(bullet)
-        if quote not in transcript:
+        if item["quote"] not in transcript:
             sys.exit(f"run-epic4-exit-criteria: {label}: a quote does not match the transcript.")
-        quotes[key].append(squash(quote))
-        kept += 1
 
+headings = {"action_items": "Action Items", "decisions": "Decisions"}
 expected = json.load(open(expected_path, encoding="utf-8"))["items"]
-survived = sum(1 for item in expected if any(squash(item["quote"]) in q for q in quotes[item["section"]]))
-print(kept, len(expected), survived)
+wanted = {heading: [] for heading in headings.values()}
+for item in expected:
+    if item["section"] not in headings:
+        sys.exit(f"run-epic4-exit-criteria: {label}: an expected item has an unknown section.")
+    wanted[headings[item["section"]]].append(item)
+
+survived = sum(
+    1 for heading, items in wanted.items() for e in items if any(score.matches(e, k, item_text_overlap) for k in kept[heading])
+)
+false_keeps = sum(
+    1 for heading, items in kept.items() for k in items if not any(score.matches(e, k, item_text_overlap) for e in wanted[heading])
+)
+print(sum(len(v) for v in kept.values()), len(expected), survived, false_keeps)
 PY
     ) || exit 1
 
     read -r grounding drops cost <<<"$telemetry"
-    read -r kept expected_count survived <<<"$counts"
-    echo "$label $grounding $kept $expected_count $survived $drops $cost" >>"$results"
-    printf 'fixture-%s: vault note written · grounding_method=%s · kept %s items (%s expected) · drop count %s · cost $%.4f\n' \
-        "$index" "$grounding" "$kept" "$expected_count" "$drops" "$cost"
+    read -r kept expected_count survived false_keeps <<<"$counts"
+    echo "$label $grounding $kept $expected_count $survived $drops $cost $false_keeps" >>"$results"
+    printf 'fixture-%s: vault note written \xc2\xb7 grounding_method=%s \xc2\xb7 kept %s items (%s expected) \xc2\xb7 %s false keeps \xc2\xb7 drop count %s \xc2\xb7 cost $%.4f\n' \
+        "$index" "$grounding" "$kept" "$expected_count" "$false_keeps" "$drops" "$cost"
 done
 
 python3 - "$results" "$ceiling" "$review" <<'PY' || exit 1
@@ -190,7 +201,14 @@ ceiling, review = float(sys.argv[2]), sys.argv[3]
 expected = sum(int(r[3]) for r in rows)
 survived = sum(int(r[4]) for r in rows)
 total_cost = sum(float(r[6]) for r in rows)
+false_keeps = sum(int(r[7]) for r in rows)
+kept = sum(int(r[2]) for r in rows)
 rate = 100.0 * survived / expected if expected else 0.0
+
+# False keeps are reported here, not gated: epics.md Story 4.10 defines this
+# gate as the pass rate and the cost ceiling, and score.py report is where the
+# false-keep limit is enforced.
+print(f"false keeps {false_keeps}/{kept} kept items")
 
 worst = max(float(r[6]) for r in rows)
 if worst > ceiling:

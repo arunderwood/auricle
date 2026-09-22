@@ -8,7 +8,8 @@
 # before pushing.
 #
 #   scripts/check.sh            every phase, in order
-#   scripts/check.sh lint       formatting, linting, workflow linting
+#   scripts/check.sh lint       formatting, linting, workflow linting, and the
+#                               two fixture self-checks
 #   scripts/check.sh swift      SwiftPM debug build + tests
 #   scripts/check.sh release    SwiftPM release build + Log.debug strip check
 #   scripts/check.sh app        tuist generate + both Xcode schemes + the
@@ -35,6 +36,19 @@ phase_lint() {
 
     echo "==> verify-custom-lint-rules (fixture self-check)"
     scripts/verify-custom-lint-rules.sh
+
+    # The AMI scorer decides the Epic 4 number and carries a calibrated
+    # threshold, but it is Python, so `swift test` never reaches it.
+    echo "==> ami scorer self-check"
+    python3 Tests/regression/ami/test_score.py
+
+    # history.jsonl is the only committed corpus of real result rows, and a
+    # scorer change breaks it more easily than anything synthetic: its rows
+    # were written by older scorers and need not carry today's fields. This
+    # asserts that the formatter and the thresholds survive real data. It is
+    # not a quality assertion — the rows mix revisions.
+    echo "==> ami report over the recorded history"
+    python3 Tests/regression/ami/score.py report Tests/regression/ami/thresholds.json Tests/regression/ami/history.jsonl
 
     echo "==> actionlint"
     mise exec -- actionlint -color
