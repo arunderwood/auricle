@@ -73,7 +73,11 @@ for ami in "${meetings[@]}"; do
 done
 
 if [ "${AURICLE_AMI_RECORD:-}" = 1 ]; then
-    python3 - "$results" "$here/history.jsonl" "$(git rev-parse HEAD)" <<'PY'
+    # The revision a row is grouped under, for the median-of-three gate in
+    # score.py's report(): the last commit that touched Sources/App, not
+    # plain HEAD. A doc or test-script commit between two runs of the same
+    # pipeline binary must not fragment them into different revisions.
+    python3 - "$results" "$here/history.jsonl" "$(git log -1 --format=%H -- Sources App)" <<'PY'
 import datetime, json, sys
 results, history, revision = sys.argv[1:4]
 stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

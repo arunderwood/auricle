@@ -326,23 +326,73 @@ ROW = {
 # measurement nobody took.
 text, ok = run_report([dict(ROW)])
 check("a row without false_keeps does not crash report", ok)
-check("an unmeasured row is not counted as zero false keeps", "false keeps 0/" not in text)
-check("an all-unmeasured set says so", "not measured" in text)
+check("an unmeasured row prints a dash, not a zero, in its false-keeps column", f"{'-':>6}" in text.split("\n")[1])
 
-# A mix reports the partial total and says how much of the set it covers.
-text, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=1)])
-check("a mixed set still exits 0 inside the limit", ok)
-check("a mixed set reports its partial total", "false keeps 1/4" in text)
-check("a mixed set labels its coverage", "1 of 2 newest-run rows" in text)
 
-# A fully scored set reports the plain total with no coverage caveat.
-text, ok = run_report([dict(ROW, false_keeps=1), dict(ROW, ami_id="ES0000b", false_keeps=1)])
-check("a fully scored set reports a plain total", "false keeps 2/8\n" in text)
+def run_of(run_at, revision, **overrides):
+    return dict(ROW, run_at=run_at, revision=revision, **overrides)
 
-# The partial total is still a floor on the set, so it is checked.
-over = THRESHOLDS["max_false_keeps"] + 1
-_, ok = run_report([dict(ROW), dict(ROW, ami_id="ES0000b", false_keeps=over)])
-check("a partial total over the limit still breaches", not ok)
+
+# Item recall, false keeps and dropped reference fraction gate on the median of
+# the three newest complete runs sharing the newest revision -- never on one
+# run -- because the summarizer's recall is not reproducible between runs of
+# identical input. A single run, however clean, is not yet gated.
+single = run_of("2026-01-01T00:00:00Z", "rev1", recalled_items=0, expected_items=3, false_keeps=99)
+text, ok = run_report([single])
+check("one run is not yet gated", "not yet gated" in text)
+check("one run's bad numbers do not breach before three runs exist", ok)
+
+# Three complete runs at the same revision, two of them a perfect score: the
+# median (100%) is what gates, comfortably inside every limit regardless of
+# where min_item_recall itself is currently calibrated.
+clean_a = run_of("2026-01-01T00:00:00Z", "rev1", recalled_items=20, expected_items=20, false_keeps=0, dropped_reference_fraction=0.0)
+clean_b = run_of("2026-01-02T00:00:00Z", "rev1", recalled_items=19, expected_items=20, false_keeps=1, dropped_reference_fraction=0.0)
+clean_c = run_of("2026-01-03T00:00:00Z", "rev1", recalled_items=20, expected_items=20, false_keeps=2, dropped_reference_fraction=0.0)
+text, ok = run_report([clean_a, clean_b, clean_c])
+check("three complete runs report the median recall", "median 100%" in text)
+check("three clean runs exit 0", ok)
+
+# The recall median, not any one run, decides the breach.
+low_a = run_of("2026-01-01T00:00:00Z", "rev1", recalled_items=0, expected_items=3)
+low_b = run_of("2026-01-02T00:00:00Z", "rev1", recalled_items=0, expected_items=3)
+low_c = run_of("2026-01-03T00:00:00Z", "rev1", recalled_items=1, expected_items=5)
+_, ok = run_report([low_a, low_b, low_c])
+check("a low median recall breaches", not ok)
+
+# Same for false keeps: the median of the three runs' totals, not the worst one.
+fk_a = run_of("2026-01-01T00:00:00Z", "rev1", false_keeps=THRESHOLDS["max_false_keeps"] + 1)
+fk_b = run_of("2026-01-02T00:00:00Z", "rev1", false_keeps=THRESHOLDS["max_false_keeps"] + 2)
+fk_c = run_of("2026-01-03T00:00:00Z", "rev1", false_keeps=THRESHOLDS["max_false_keeps"] + 3)
+_, ok = run_report([fk_a, fk_b, fk_c])
+check("a high median false-keeps count breaches", not ok)
+
+# Same for dropped reference fraction.
+drop_a = run_of("2026-01-01T00:00:00Z", "rev1", dropped_reference_fraction=THRESHOLDS["max_dropped_reference_fraction"] + 0.01)
+drop_b = run_of("2026-01-02T00:00:00Z", "rev1", dropped_reference_fraction=THRESHOLDS["max_dropped_reference_fraction"] + 0.02)
+drop_c = run_of("2026-01-03T00:00:00Z", "rev1", dropped_reference_fraction=THRESHOLDS["max_dropped_reference_fraction"] + 0.03)
+_, ok = run_report([drop_a, drop_b, drop_c])
+check("a high median dropped-reference fraction breaches", not ok)
+
+# A run missing one of the meetings this file has ever scored is incomplete
+# and does not count toward the three, even though its own AMI id matches.
+complete_1 = [run_of("2026-01-01T00:00:00Z", "rev1", ami_id="A"), run_of("2026-01-01T00:00:00Z", "rev1", ami_id="B")]
+complete_2 = [run_of("2026-01-02T00:00:00Z", "rev1", ami_id="A"), run_of("2026-01-02T00:00:00Z", "rev1", ami_id="B")]
+incomplete = [run_of("2026-01-03T00:00:00Z", "rev1", ami_id="A")]
+text, ok = run_report(complete_1 + complete_2 + incomplete)
+check("an incomplete run does not count toward the three", "has 2" in text)
+check("an incomplete run's absence is not itself a breach", ok)
+
+# Three complete runs at an old revision do not satisfy the gate for a newer
+# revision that has fewer than three of its own -- the newest revision's own
+# run count is what is reported, not padded out by history.
+old_1 = run_of("2026-01-01T00:00:00Z", "rev-old", recalled_items=3, expected_items=3)
+old_2 = run_of("2026-01-02T00:00:00Z", "rev-old", recalled_items=3, expected_items=3)
+old_3 = run_of("2026-01-03T00:00:00Z", "rev-old", recalled_items=3, expected_items=3)
+new_1 = run_of("2026-01-04T00:00:00Z", "rev-new", recalled_items=3, expected_items=3)
+text, ok = run_report([old_1, old_2, old_3, new_1])
+check("an older revision's runs do not count toward the newest revision's three", "revision rev-new" in text and "has 1" in text)
+check("the older revision's runs are noted as context only", "context only" in text)
+check("the newest revision alone being under three does not breach", ok)
 
 # report(): dropped_reference_fraction follows the same "-" convention as
 # false_keeps for a row that predates the metric, and is enforced once present.

@@ -2,16 +2,13 @@
 title: 'Story 4.14: Retention — Unset the First-Token Gate, Measure Dropped Text'
 type: 'feature'
 created: '2026-09-21'
-status: 'in-progress'
+status: 'done'
 status_detail: >-
-  AC3's threshold is not raised yet. An external review found min_item_recall
-  0.52 was calibrated from report()'s all-rows sum (masking any future
-  regression in the newest run) and from a single non-deterministic run (the
-  summarizer sets no temperature; three runs of identical input scored 10, 10,
-  14 of 19). report() now gates only the newest run_at; min_item_recall is
-  reverted to 0.35 pending the maintainer's median-of-three-runs gate design,
-  which needs two more recorded full-pipeline runs (~$0.77) awaiting the
-  user's go-ahead.
+  Resolved: the median-of-three gate is implemented, the two additional
+  recorded runs are in history.jsonl, and min_item_recall is raised to 0.68
+  from the real three-run median. See the two 2026-09-22 entries in
+  `## Spec Change Log` for the full account of what an external review found
+  and how it was fixed.
 baseline_revision: 'e88e2e542ac2c73b9f8265d512c81561e0585bc4'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -184,7 +181,16 @@ AC3 was completed by reusing an already-cached, unrecorded local `run.sh` pass (
 
 **Maintainer's gate design (relayed, not yet implemented):** gate on the median of three recorded full-pipeline runs sharing a revision (all five meetings present per run), keep the existing 16/19 bar, raise `min_item_recall` from that median with one item of slack once three such runs exist. The 2026-09-22 run (now correctly timestamped) counts as the first. Two more recorded runs are needed (~$0.77, ~25 minutes) — this requires the user's go-ahead per this spec's own boundary on spending real Anthropic credit, not yet obtained as of this entry.
 
-**KEEP:** the newest-run-only gating in `report()`, the real `run_at` timestamps, and `min_item_recall: 0.35` all survive into the eventual median-of-three implementation regardless of how that design is finalized — do not re-derive them.
+**KEEP:** the real `run_at` timestamps and the per-row table/checks all survive into the median-of-three implementation below unchanged — do not re-derive them. The newest-run-only gating above was itself superseded (see next entry) rather than kept, once the maintainer's actual design landed.
+
+**2026-09-22 — median-of-three gate implemented and the maintainer's go-ahead obtained.** With the user's explicit authorization in chat ("go", then "you run it" after a permission-layer classifier initially refused the spend), implemented the relayed design and ran the two additional recorded full-pipeline runs.
+
+- `report()` now groups `history.jsonl` rows into runs keyed by `(run_at, revision)`; a run is complete when it covers every AMI id the file has ever scored. Item recall, false keeps, and dropped reference fraction each gate on the median of the newest three complete runs sharing the newest revision; older runs and other revisions print for context only. Fewer than three complete runs at the newest revision prints as "not yet gated," never as a silent pass. This replaces the newest-run-only gating from the prior entry, which solved the aggregation bug but not the single-draw calibration problem.
+- **Found and fixed a second bug while wiring this up:** `run.sh` recorded `revision` as plain `git rev-parse HEAD`, so the score.py/test/README commit between the first and second recorded runs gave the second run a different revision than the first, even though no `Sources`/`App` code had changed — the three runs would never have grouped together. Fixed `run.sh` to record `git log -1 --format=%H -- Sources App` instead (the last commit that touched pipeline code), and retroactively corrected the `revision` field on both already-recorded batches (previously `e88e2e...`/`5caf83...`) to the true shared pipeline revision `21a5771be6f33b3186ab7613de15c27a32c352e5`. Verified `git diff` shows zero changes to `Sources`/`App` across all three runs' checkouts before making this correction.
+- Ran two more recorded full-pipeline runs (`AURICLE_AMI_RECORD=1 Tests/regression/ami/run.sh`, real Anthropic spend, ~$0.77 total for both). Three complete runs now exist at revision `21a5771...`: item recall 58% (11/19), 74% (14/19), 84% (16/19) — median 74% (14/19). False keeps 4, 4, 3 — median 4. Dropped reference fraction 0.0% on all three.
+- `min_item_recall` raised from 0.35 to 0.68: one item below the 74% (14/19) median is 13/19 = 0.6842, rounded down to 0.68 — the same one-item margin `max_false_keeps` already carries above its own baseline.
+- README's threshold-calibration section rewritten to describe the median-of-three design and cite the three real per-run numbers in place of the single-draw figure the prior entry used.
+- Incidentally resolved the deferred branch-naming finding below: `/ship` moved the work off the harness-generated `claude/story-4-14-completion-7d40b1` branch onto `feat/ami-dropped-reference-retention-metric` before this entry.
 
 ## Review Triage Log
 

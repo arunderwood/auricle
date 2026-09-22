@@ -19,6 +19,7 @@ survives neither test against any expected item is a false keep.
 import json
 import re
 import sqlite3
+import statistics
 import sys
 from pathlib import Path
 
@@ -328,20 +329,6 @@ def report(thresholds_path, results_path):
     limits = json.load(open(thresholds_path, encoding="utf-8"))
     require_the_rules_own_threshold(limits)
     rows = [json.loads(line) for line in open(results_path) if line.strip()]
-    # A regression gate has to grade the newest run against its own baseline, not
-    # against a sum that includes it: summing every historical row means an old,
-    # already-scored run permanently props up the average, so a real regression
-    # in the newest run can hide behind rows that will never be re-scored. The
-    # per-row table and per-row checks below still cover every row; only the
-    # three set-level aggregates (item recall, the per-section split, false
-    # keeps) are scoped to the newest run_at.
-    # A raw results file has no `run_at` on any row (`run.sh` adds it only when
-    # writing to `history.jsonl`); `None` has no ordering, so `max` over an
-    # all-`None` sequence raises rather than picking one, and that file is the
-    # only run it could describe anyway.
-    run_ats = [r["run_at"] for r in rows if "run_at" in r]
-    newest_run_at = max(run_ats) if run_ats else None
-    latest = [r for r in rows if r.get("run_at") == newest_run_at] if run_ats else rows
     print(f"{'meeting':9} {'WER':>6} {'RTF':>6} {'spk':>5} {'kept':>5} {'drop':>5} {'refDrop':>7} {'recall':>7} {'false':>6} {'cost':>8}")
     breaches = []
     for r in rows:
@@ -376,48 +363,77 @@ def report(thresholds_path, results_path):
                 f"dropped reference fraction {r['dropped_reference_fraction']:.1%} > {limits['max_dropped_reference_fraction']:.0%}",
             ))
         breaches += [f"{name}: {why}" for ok, why in checks if not ok]
-    expected = sum(r["expected_items"] for r in latest)
-    recalled = sum(r["recalled_items"] for r in latest)
-    recall = recalled / expected if expected else 1.0
-    scope = f" (run_at {newest_run_at}, {len(latest)} of {len(rows)} rows)" if run_ats else ""
-    print(f"item recall {recalled}/{expected} = {recall:.0%}{scope}")
-    if recall < limits["min_item_recall"]:
-        breaches.append(f"item recall {recall:.0%} < {limits['min_item_recall']:.0%}")
-    if len(latest) < len(rows):
-        all_expected = sum(r["expected_items"] for r in rows)
-        all_recalled = sum(r["recalled_items"] for r in rows)
-        print(f"  all rows for context (not gated): {all_recalled}/{all_expected} = {all_recalled / all_expected:.0%} across {len(rows)} rows")
+    # The summarization call sets no `temperature` (`claude-opus-5` accepts
+    # none), so item recall is not reproducible between full-pipeline runs of
+    # the same code: three runs of one fixed prompt and transcript set have
+    # scored 10, 10 and 14 of 19. A gate calibrated on one such draw is a gate
+    # calibrated on noise, so the three set-level aggregates (item recall,
+    # false keeps, dropped reference fraction) gate on the median of the three
+    # newest complete runs sharing the newest revision, never on a single run.
+    # A run is complete when it covers every AMI id this file has ever scored;
+    # a raw results file (`run.sh`'s own per-invocation check, with no
+    # `run_at`/`revision` on any row) is always exactly one run of everything
+    # it holds.
+    all_ami_ids = {r["ami_id"] for r in rows}
+    by_run = {}
+    for r in rows:
+        by_run.setdefault((r.get("run_at"), r.get("revision")), []).append(r)
+    complete_runs = [(key, group) for key, group in by_run.items() if {r["ami_id"] for r in group} == all_ami_ids]
 
-    # Per section on the total line only. The two sections fail in opposite
-    # directions, so a set total that moves by nothing can still hide items
-    # migrating from one to the other; per-row columns would make the table
-    # unreadable for a number that is only legible in aggregate anyway.
-    split = [r for r in latest if "recalled_action_items" in r]
-    if not split:
-        print(f"per-section recall not measured: none of the {len(latest)} newest-run rows carry it")
-    else:
-        coverage = "" if len(split) == len(latest) else f" over {len(split)} of {len(latest)} newest-run rows; the rest predate the split"
-        parts = []
-        for suffix, label in (("action_items", "action items"), ("decisions", "decisions")):
-            got = sum(r[f"recalled_{suffix}"] for r in split)
-            want = sum(r[f"expected_{suffix}"] for r in split)
-            bad = sum(r[f"false_keep_{suffix}"] for r in split)
-            parts.append(f"{label} {got}/{want} (false {bad})")
-        print("  " + ", ".join(parts) + coverage)
+    def run_recall(group):
+        expected = sum(r["expected_items"] for r in group)
+        recalled = sum(r["recalled_items"] for r in group)
+        return recalled / expected if expected else 1.0
 
-    # The total covers only the newest-run rows that carry a count. A partial
-    # total is still a floor on that set, so it is checked; it is labelled so
-    # nobody reads it as the whole set's.
-    scored = [r for r in latest if "false_keeps" in r]
-    if not scored:
-        print(f"false keeps not measured: none of the {len(latest)} newest-run rows carry it")
+    def run_false_keeps(group):
+        return sum(r["false_keeps"] for r in group) if all("false_keeps" in r for r in group) else None
+
+    def run_dropped_fraction(group):
+        fractions = [r["dropped_reference_fraction"] for r in group if "dropped_reference_fraction" in r]
+        return sum(fractions) / len(fractions) if fractions else None
+
+    if not complete_runs:
+        print("item recall: no run in this file covers every AMI id it has ever scored")
     else:
-        false_keeps = sum(r["false_keeps"] for r in scored)
-        kept = sum(r["kept_items"] for r in scored)
-        coverage = "" if len(scored) == len(latest) else f" over {len(scored)} of {len(latest)} newest-run rows; the rest predate the count"
-        print(f"false keeps {false_keeps}/{kept}{coverage}")
-        if false_keeps > limits["max_false_keeps"]:
-            breaches.append(f"false keeps {false_keeps} > {limits['max_false_keeps']}")
+        newest_revision = max(complete_runs, key=lambda item: item[0][0] or "")[0][1]
+        runs_at_revision = sorted(
+            (group for key, group in complete_runs if key[1] == newest_revision),
+            key=lambda group: group[0].get("run_at") or "",
+            reverse=True,
+        )
+        selected = runs_at_revision[:3]
+        recalls = [run_recall(g) for g in selected]
+        median_recall = statistics.median(recalls)
+        per_run = ", ".join(f"{r:.0%}" for r in recalls)
+        print(f"item recall, revision {newest_revision}: median {median_recall:.0%} of {len(selected)} run(s) ({per_run})")
+        if len(selected) < 3:
+            print(f"  not yet gated: needs 3 complete runs at this revision, has {len(selected)}")
+        else:
+            if median_recall < limits["min_item_recall"]:
+                breaches.append(f"item recall median {median_recall:.0%} < {limits['min_item_recall']:.0%}")
+
+            false_keep_values = [v for v in (run_false_keeps(g) for g in selected) if v is not None]
+            if len(false_keep_values) < len(selected):
+                print("false keeps not measured on every one of the 3 selected runs")
+            else:
+                median_false_keeps = statistics.median(false_keep_values)
+                print(f"false keeps: median {median_false_keeps:g} of 3 runs ({false_keep_values})")
+                if median_false_keeps > limits["max_false_keeps"]:
+                    breaches.append(f"false keeps median {median_false_keeps:g} > {limits['max_false_keeps']}")
+
+            dropped_values = [v for v in (run_dropped_fraction(g) for g in selected) if v is not None]
+            if len(dropped_values) < len(selected):
+                print("dropped reference fraction not measured on every one of the 3 selected runs")
+            else:
+                median_dropped = statistics.median(dropped_values)
+                print(f"dropped reference fraction: median {median_dropped:.1%} of 3 runs")
+                if median_dropped > limits["max_dropped_reference_fraction"]:
+                    breaches.append(f"dropped reference fraction median {median_dropped:.1%} > {limits['max_dropped_reference_fraction']:.0%}")
+
+        older = len(complete_runs) - len(selected)
+        if older:
+            print(f"  {older} older complete run(s) printed above for context only, not gated")
+
     for breach in breaches:
         print(f"REGRESSION: {breach}", file=sys.stderr)
     sys.exit(1 if breaches else 0)

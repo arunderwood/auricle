@@ -2,7 +2,7 @@
   "max_wer": 0.4,
   "max_realtime_factor": 0.2,
   "max_cost_usd": 0.2,
-  "min_item_recall": 0.35,
+  "min_item_recall": 0.68,
   "item_text_overlap": 0.55,
   "max_false_keeps": 6,
   "max_dropped_reference_fraction": 0.03
