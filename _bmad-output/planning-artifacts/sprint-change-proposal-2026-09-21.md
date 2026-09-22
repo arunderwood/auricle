@@ -243,8 +243,12 @@ limit.
 - `Tests/regression/ami/README.md` documents the metric and why WER cannot stand
   in for it.
 - Story 4.10 Part B is rerun under the fix and the promoted prompt and recorded
-  with `AURICLE_AMI_RECORD=1`, which supplies the first full-pipeline row for the
-  promoted prompt and lets `min_item_recall` rise from 0.35.
+  with `AURICLE_AMI_RECORD=1` three times. `report` gates on the median of the
+  newest three complete runs, and `min_item_recall` rises from that median.
+  Decided 2026-09-21 after Story 4.15 showed the summarizer samples at the API
+  default temperature, which `claude-opus-5` does not let a request change, and
+  three runs of byte-identical input scored 10, 10 and 14 of 19. The bar stays
+  16 of 19; the median keeps one draw from deciding it.
 
 Effort: three hours of work plus a 20 minute run at about $1. Risk: low. The
 change is one option with a byte-for-byte reproduction on both sides.
@@ -263,7 +267,9 @@ change is one option with a byte-for-byte reproduction on both sides.
   them, so that arm measures a possible pipeline change, not the pipeline as
   shipped. The first single-variable check is the pipeline-versus-bench gap on
   identical text (F3).
-- Stop condition as stated under Decision 2.
+- Stop condition as stated under Decision 2, with recall read as the median of
+  three recorded runs; a claimed arm improvement likewise rests on the median
+  of three bench runs.
 
 Effort: one to two days, about $3 in bench runs. Risk: medium. The first two
 bullets may end in a fixture ruling rather than a prompt change, and that is an
