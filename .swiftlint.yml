@@ -134,6 +134,11 @@ custom_rules:
     excluded:
       # The primitive's own implementation.
       - ".*/Sources/Core/AtomicWriter\\.swift$"
+      # Decision 1.4's recorded exemption: a multi-hour capture cannot
+      # buffer its whole recording in memory to write atomically at the
+      # end, so WAVWriter streams through its own FileHandle and patches
+      # the header in place instead of going through AtomicWriter.
+      - ".*/Sources/Capture/WAVWriter\\.swift$"
       # Write a throwaway executable shell-script fixture for subprocess
       # dispatch tests — a test tool, not a vault/cache artifact, so it
       # sits outside AtomicWriter's domain entirely.
@@ -163,6 +168,11 @@ custom_rules:
       # VaultWriterTests.swift above: the fixture writes the blocking state
       # directly, CacheArtifactWriter under test never does.
       - ".*/Tests/CoreTests/CacheArtifactWriterTests\\.swift$"
+      # Plants a too-short file at the audio path to exercise
+      # WAVWriter.repairHeader's own too-small-to-be-a-header rejection —
+      # same rationale as VaultWriterTests.swift above: the fixture writes
+      # the raw state directly, WAVWriter under test never does.
+      - ".*/Tests/CaptureTests/WAVWriterTests\\.swift$"
       # Builds a throwaway Obsidian vault on disk (thousands of notes for the
       # 10K-file bound, where an fsync per file would dominate the test) for
       # VaultGlossaryBuilder to scan. The builder only ever reads a vault; the
