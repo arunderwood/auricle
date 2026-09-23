@@ -2,7 +2,7 @@
 title: 'ConfigWriter + `self.wikilink` Key'
 type: 'feature'
 created: '2026-09-22'
-status: 'in-review'
+status: 'done'
 baseline_revision: '07d3c28cc0ff71d1551cdc30becb2540d9c189b0'
 review_loop_iteration: 1
 followup_review_recommended: true
