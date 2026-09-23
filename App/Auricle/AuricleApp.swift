@@ -30,6 +30,13 @@ struct AuricleApp: App {
     /// and hands each captured meeting to the pipeline. `nil` when the state
     /// store could not be opened.
     static let captureStage = makeCaptureStage()
+    #if DEBUG
+        /// Drives `Debug > Start Recording / Stop Recording` (`Cmd-Shift-R`) so
+        /// the process-tap backend can be exercised before Epic 6's Record
+        /// button (Story 6.2) replaces this trigger entirely. `nil` when the
+        /// state store could not be opened.
+        @MainActor static let debugCaptureTrigger = makeDebugCaptureTrigger()
+    #endif
 
     init() {
         UNUserNotificationCenter.current().delegate = Self.notificationDelegate
@@ -41,11 +48,28 @@ struct AuricleApp: App {
     var body: some Scene {
         WindowGroup {
             if OnboardingMarker.exists(applicationSupportDirectory: .applicationSupportDirectory) {
-                AuricleRootView()
+                #if DEBUG
+                    AuricleRootView(debugCaptureTrigger: Self.debugCaptureTrigger)
+                #else
+                    AuricleRootView()
+                #endif
             } else {
                 OnboardingRootView(coordinator: Self.makeOnboardingCoordinator())
             }
         }
+        #if DEBUG
+        .commands {
+            CommandMenu("Debug") {
+                let title = Self.debugCaptureTrigger?.isRecording == true ? "Stop Recording" : "Start Recording"
+                Button(title) {
+                    Task { await Self.debugCaptureTrigger?.toggle() }
+                }
+                .accessibilityLabel(title)
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(Self.debugCaptureTrigger == nil)
+            }
+        }
+        #endif
     }
 
     /// The one `URLOpener` (shared by `configure` and the permission steps'
@@ -169,6 +193,20 @@ struct AuricleApp: App {
         }
     }
 
+    #if DEBUG
+        /// The opener mirrors `makeOnboardingCoordinator()`'s: one place decides
+        /// what "opened successfully" means, reused rather than a second
+        /// `NSWorkspace.open` call site.
+        @MainActor
+        private static func makeDebugCaptureTrigger() -> DebugCaptureTrigger? {
+            guard let stage = captureStage else { return nil }
+            let opener: URLOpener = { url in
+                await (try? NotificationDelegate.openInDefaultApp(url)) != nil
+            }
+            return DebugCaptureTrigger(stage: stage, checker: permissionChecker, opener: opener)
+        }
+    #endif
+
     private static func recoverInterruptedCaptures(_ stage: CaptureStage) async {
         do {
             _ = try await stage.recoverInterruptedCaptures()
@@ -195,16 +233,59 @@ struct AuricleApp: App {
     }
 }
 
-/// `isRecording` is local view state; no capture source drives it.
+/// `isRecording` is local view state; no capture source drives it in a
+/// Release build. In Debug, `debugCaptureTrigger` (Story 5.6) is the one
+/// live source until Epic 6's Record button (Story 6.2) replaces both.
 private struct AuricleRootView: View {
     @State private var isRecording = false
+    #if DEBUG
+        /// `@State`, mirroring `OnboardingRootView`'s own `coordinator`: an
+        /// `@Observable` reference type a view holds must be wrapped for SwiftUI
+        /// to track it, not stored as a plain `let`.
+        @State private var debugCaptureTrigger: DebugCaptureTrigger?
+
+        init(debugCaptureTrigger: DebugCaptureTrigger?) {
+            _debugCaptureTrigger = State(initialValue: debugCaptureTrigger)
+        }
+    #endif
 
     var body: some View {
         Text("auricle")
             .toolbar {
                 ToolbarItem {
-                    RecordingIndicator(isRecording: isRecording)
+                    #if DEBUG
+                        RecordingIndicator(isRecording: debugCaptureTrigger?.isRecording ?? isRecording)
+                    #else
+                        RecordingIndicator(isRecording: isRecording)
+                    #endif
                 }
             }
+        #if DEBUG
+            .alert(
+                "Microphone Not Included",
+                isPresented: Binding(
+                    get: { debugCaptureTrigger?.microphoneDeniedAlert != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            debugCaptureTrigger?.dismissMicrophoneDeniedAlert()
+                        }
+                    },
+                ),
+                presenting: debugCaptureTrigger?.microphoneDeniedAlert,
+            ) { alert in
+                if alert.settingsURL != nil {
+                    Button("Open Settings") {
+                        Task { await debugCaptureTrigger?.openMicrophoneSettings() }
+                    }
+                    .accessibilityLabel("Open Settings")
+                }
+                Button("OK", role: .cancel) {
+                    debugCaptureTrigger?.dismissMicrophoneDeniedAlert()
+                }
+                .accessibilityLabel("OK")
+            } message: { alert in
+                Text(alert.message)
+            }
+        #endif
     }
 }

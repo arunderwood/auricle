@@ -11,6 +11,10 @@ import Permissions
 /// as a denial (AC's mic-denied scenario is specifically about `.denied`).
 public struct CaptureSessionStartResult: Sendable, Equatable {
     public let micIncluded: Bool
+
+    public init(micIncluded: Bool) {
+        self.micIncluded = micIncluded
+    }
 }
 
 /// The subset of `WAVWriter`'s API `CaptureSession`'s consumer task drives
