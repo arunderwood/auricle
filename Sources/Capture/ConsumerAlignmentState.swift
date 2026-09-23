@@ -29,6 +29,15 @@ final class ConsumerAlignmentState {
     /// chunk's buffer is built at instead of its own declared
     /// `sampleRate`, until the next rebuild starts a fresh epoch.
     var correctedSystemSampleRate: Double?
+    /// The `RawAudioChunk.sourceEpoch` this state's rate probe and
+    /// correction were established against. `nil` before any system chunk
+    /// has arrived. Compared against every new chunk's own `sourceEpoch`
+    /// so a rebuild — from any trigger, not only the ones that happen to
+    /// call `resetRateProbe()` directly — is detected and the stale probe
+    /// state reset before it mixes two epochs' `sampleTime`/`hostTime`
+    /// counters or applies a correction measured on hardware the current
+    /// epoch no longer uses.
+    var currentSystemEpoch: Int?
 
     init(micIncluded: Bool) {
         self.micIncluded = micIncluded

@@ -46,7 +46,12 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     /// drops system audio even before `AudioMixer`'s own starvation
     /// padding kicks in.
     private static let ringSlotCount = 512
-    private static let ringSlotCapacityFrames = 8192
+    /// 512 slots × 2048 frames × 4 bytes is 4MB — enough headroom above
+    /// the aggregate device's typical ~512-frame I/O buffer that a chunk
+    /// larger than one slot's capacity (`AudioRingBuffer.publish`'s
+    /// truncation path) should be rare without preallocating 4x that for
+    /// bursts this ring has never observed.
+    private static let ringSlotCapacityFrames = 2048
 
     private struct ActiveHandles {
         let tapID: AudioObjectID
@@ -57,13 +62,21 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
 
     private let ring = AudioRingBuffer(slotCount: ringSlotCount, slotCapacityFrames: ringSlotCapacityFrames, maxChannels: 1)
     private let coordinator = RebuildCoordinator<ActiveHandles>(label: "com.auricle.capture.process-tap.rebuild")
+    /// Mutated only inside `buildHandles()`, which `coordinator` guarantees
+    /// never runs concurrently with itself — safe without its own lock.
+    /// Incremented on every build (including the first, via `start()`) and
+    /// stamped into every chunk that build's IOProc publishes
+    /// (`RawAudioChunk.sourceEpoch`), so `CaptureSession`'s effective-rate
+    /// probe can tell a chunk from a fresh tap apart from one still
+    /// arriving from the tap a rebuild just replaced.
+    private var buildEpoch = 0
 
     public init() {}
 
     deinit {
         // An instance dropped without an explicit `stop()` must not leak
         // the tap/aggregate device until the process exits.
-        if let handles = coordinator.markStopped() {
+        if let handles = coordinator.markStoppedAndDrainInFlight() {
             Self.tearDown(handles)
         }
     }
@@ -81,7 +94,7 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     }
 
     public func stop() {
-        if let handles = coordinator.markStopped() {
+        if let handles = coordinator.markStoppedAndDrainInFlight() {
             Self.tearDown(handles)
         }
     }
@@ -101,6 +114,9 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     /// (and tears down whatever they replace), for both the first
     /// `start()` and every later `rebuild()`.
     private func buildHandles() throws -> ActiveHandles {
+        buildEpoch += 1
+        let epoch = buildEpoch
+
         let ownProcessObjectID = try Self.processObjectID(forPID: ProcessInfo.processInfo.processIdentifier)
         let tapDescription = CATapDescription(monoGlobalTapButExcludeProcesses: [ownProcessObjectID])
         tapDescription.isPrivate = true
@@ -114,7 +130,7 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
             let outputDeviceUID = try Self.defaultOutputDeviceUID()
             let aggregateDeviceID = try Self.createAggregateDevice(tapUID: tapDescription.uuid.uuidString, outputDeviceUID: outputDeviceUID)
             do {
-                let ioProcID = try startIOProc(aggregateDeviceID: aggregateDeviceID, sampleRate: sampleRate)
+                let ioProcID = try startIOProc(aggregateDeviceID: aggregateDeviceID, sampleRate: sampleRate, epoch: epoch)
                 do {
                     let listeners = try installPropertyListeners(tapID: tapID)
                     return ActiveHandles(tapID: tapID, aggregateDeviceID: aggregateDeviceID, ioProcID: ioProcID, listeners: listeners)
@@ -165,10 +181,10 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     /// directly on Core Audio's own I/O thread (`inDispatchQueue: nil`):
     /// `handleInput` does only a bounds check and a raw-pointer copy, work
     /// light enough to run directly on it.
-    private func startIOProc(aggregateDeviceID: AudioObjectID, sampleRate: Double) throws -> AudioDeviceIOProcID {
+    private func startIOProc(aggregateDeviceID: AudioObjectID, sampleRate: Double, epoch: Int) throws -> AudioDeviceIOProcID {
         var ioProcID: AudioDeviceIOProcID?
         let createStatus = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, nil) { [weak self] _, inInputData, inInputTime, _, _ in
-            self?.handleInput(inInputData, inputTime: inInputTime, sampleRate: sampleRate)
+            self?.handleInput(inInputData, inputTime: inInputTime, sampleRate: sampleRate, epoch: epoch)
         }
         guard createStatus == noErr, let ioProcID else {
             throw CaptureError.streamInterrupted(reason: "AudioDeviceCreateIOProcIDWithBlock failed (OSStatus \(createStatus))")
@@ -220,7 +236,9 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     /// fired on (avoiding tearing down the very object that just called
     /// us) and never racing a concurrently triggered rebuild.
     private func rebuildAsync() {
-        coordinator.runAsync(build: buildHandles, teardown: Self.tearDown)
+        coordinator.runAsync(build: buildHandles, teardown: Self.tearDown) { error in
+            Self.log.error("system audio rebuild failed", ["reason": .sensitive(String(describing: error))])
+        }
     }
 
     /// Tears down one full tap/aggregate/IOProc/listener set. A free
@@ -242,7 +260,7 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
 
     // MARK: - IOProc callback (real-time thread — see the type doc)
 
-    private func handleInput(_ inputData: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>, sampleRate: Double) {
+    private func handleInput(_ inputData: UnsafePointer<AudioBufferList>, inputTime: UnsafePointer<AudioTimeStamp>, sampleRate: Double, epoch: Int) {
         guard inputData.pointee.mNumberBuffers > 0, let data = inputData.pointee.mBuffers.mData else { return }
         let frameCount = Int(inputData.pointee.mBuffers.mDataByteSize) / MemoryLayout<Float>.size
         guard frameCount > 0 else { return }
@@ -256,7 +274,10 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
         let sampleTime = flags.contains(.sampleTimeValid) ? inputTime.pointee.mSampleTime : 0
         let channelPointer = data.assumingMemoryBound(to: Float.self)
         withUnsafePointer(to: channelPointer) { channelData in
-            ring.publish(channelData: channelData, channelCount: 1, frameCount: frameCount, sampleRate: sampleRate, hostTime: inputTime.pointee.mHostTime, sampleTime: sampleTime)
+            ring.publish(
+                channelData: channelData, channelCount: 1, frameCount: frameCount, sampleRate: sampleRate,
+                hostTime: inputTime.pointee.mHostTime, sampleTime: sampleTime, sourceEpoch: epoch,
+            )
         }
     }
 

@@ -102,6 +102,48 @@ struct RebuildCoordinatorTests {
         _ = coordinator.markStopped()
     }
 
+    @Test func aBurstOfRequestsDuringAnInFlightRebuildYieldsExactlyOneMoreRebuild() async throws {
+        let tracker = InstallTracker()
+        let coordinator = RebuildCoordinator<Int>(label: "test.rebuild-coordinator.mid-rebuild-burst")
+
+        // A gate the first build blocks on, so the burst below is
+        // guaranteed to land while that build is provably still in
+        // flight — no sleep-based timing race against how fast the first
+        // build happens to run under whatever load the test machine is
+        // under.
+        let gate = DispatchSemaphore(value: 0)
+        coordinator.runAsync(build: {
+            let id = tracker.build(delaySeconds: 0)
+            gate.wait()
+            return id
+        }, teardown: { _ in tracker.teardown() })
+        try await waitUntil(timeout: 1) { tracker.snapshot().buildCount >= 1 }
+
+        // Five more requests, all landing while the first build is
+        // blocked on `gate`, must coalesce into exactly one follow-up
+        // pass — not zero (a request during a rebuild must not be
+        // dropped) and not five (a request during a rebuild must not
+        // each get their own pass).
+        for _ in 0 ..< 5 {
+            coordinator.runAsync(build: { tracker.build(delaySeconds: 0) }, teardown: { _ in tracker.teardown() })
+        }
+        gate.signal()
+
+        // Waiting on `activeCount == 1` alone is satisfied just as
+        // trivially by "only the first build ever ran" as by "the
+        // coalesced second build finished" — wait for `buildCount` to
+        // actually reach the second build first, then let it settle.
+        try await waitUntil(timeout: 2) { tracker.snapshot().buildCount >= 2 }
+        try await waitUntil(timeout: 2) {
+            let snapshot = tracker.snapshot()
+            return snapshot.activeCount == 1 && snapshot.teardownCount == snapshot.buildCount - 1
+        }
+
+        #expect(tracker.snapshot().buildCount == 2)
+
+        _ = coordinator.markStopped()
+    }
+
     @Test func syncRebuildSerializesAgainstAnAlreadyRunningAsyncRebuild() async throws {
         let tracker = InstallTracker()
         let coordinator = RebuildCoordinator<Int>(label: "test.rebuild-coordinator.sync-vs-async")

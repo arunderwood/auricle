@@ -20,21 +20,35 @@ public struct RawAudioChunk: Sendable {
     public let hostTime: UInt64
     /// The producer's running sample counter (`AudioTimeStamp.mSampleTime`
     /// for the system tap, `AVAudioTime.sampleTime` for the mic) at this
-    /// chunk's first frame — advances by exactly `frameCount` every
-    /// callback, unlike `hostTime`'s wall-clock ticks. `CaptureSession`'s
-    /// effective-rate check divides a `sampleTime` delta by the matching
-    /// `hostTime` delta to measure the producer's actual sample rate
-    /// without any per-chunk rounding error. Defaults to 0 for a caller
-    /// that has no sample-time source to report.
+    /// chunk's first frame. Per Core Audio's `AudioTimeStamp` contract,
+    /// this is the device's own running frame counter — it advances by
+    /// exactly `frameCount` every callback from one continuously running
+    /// device, unlike `hostTime`'s wall-clock ticks, which is what lets
+    /// `CaptureSession`'s effective-rate check divide a `sampleTime` delta
+    /// by the matching `hostTime` delta to measure the producer's actual
+    /// sample rate without any per-chunk rounding error. Unverified
+    /// against a live tap (no Mac in this environment) — Story 5.6's
+    /// live-app check is the first point this assumption meets real
+    /// hardware. Defaults to 0 for a caller that has no sample-time
+    /// source to report.
     public let sampleTime: Double
+    /// Which build of the producer this chunk came from — `0` for a
+    /// caller with no concept of rebuilding (the mic tap never rebuilds).
+    /// `ProcessTapSource` increments this on every successful rebuild, so
+    /// `CaptureSession`'s effective-rate probe and any correction it
+    /// derived can tell a chunk from a fresh tap apart from one still
+    /// arriving from the tap that existed before a rebuild — two epochs'
+    /// `sampleTime`/`hostTime` counters aren't comparable to each other.
+    public let sourceEpoch: Int
 
-    public init(samples: [Float], sampleRate: Double, channelCount: Int, frameCount: Int, hostTime: UInt64, sampleTime: Double = 0) {
+    public init(samples: [Float], sampleRate: Double, channelCount: Int, frameCount: Int, hostTime: UInt64, sampleTime: Double = 0, sourceEpoch: Int = 0) {
         self.samples = samples
         self.sampleRate = sampleRate
         self.channelCount = channelCount
         self.frameCount = frameCount
         self.hostTime = hostTime
         self.sampleTime = sampleTime
+        self.sourceEpoch = sourceEpoch
     }
 }
 
@@ -59,6 +73,7 @@ final class AudioRingBuffer: @unchecked Sendable {
         var frameCount: Int = 0
         var hostTime: UInt64 = 0
         var sampleTime: Double = 0
+        var sourceEpoch: Int = 0
     }
 
     /// How many chunks `publish` has dropped (the ring was full) or
@@ -119,6 +134,7 @@ final class AudioRingBuffer: @unchecked Sendable {
         sampleRate: Double,
         hostTime: UInt64,
         sampleTime: Double = 0,
+        sourceEpoch: Int = 0,
     ) {
         guard channelCount > 0, channelCount <= maxChannels, frameCount > 0 else { return }
         let framesToCopy = min(frameCount, slotCapacityFrames)
@@ -139,7 +155,7 @@ final class AudioRingBuffer: @unchecked Sendable {
         for channel in 0 ..< channelCount {
             base.advanced(by: channel * slotCapacityFrames).update(from: channelData[channel], count: framesToCopy)
         }
-        metadata[slot] = Slot(sampleRate: sampleRate, channelCount: channelCount, frameCount: framesToCopy, hostTime: hostTime, sampleTime: sampleTime)
+        metadata[slot] = Slot(sampleRate: sampleRate, channelCount: channelCount, frameCount: framesToCopy, hostTime: hostTime, sampleTime: sampleTime, sourceEpoch: sourceEpoch)
         writeIndex = (writeIndex + 1) % slotCount
         count += 1
     }
@@ -185,6 +201,7 @@ final class AudioRingBuffer: @unchecked Sendable {
             consume(RawAudioChunk(
                 samples: flat, sampleRate: meta.sampleRate, channelCount: meta.channelCount,
                 frameCount: meta.frameCount, hostTime: meta.hostTime, sampleTime: meta.sampleTime,
+                sourceEpoch: meta.sourceEpoch,
             ))
         }
     }

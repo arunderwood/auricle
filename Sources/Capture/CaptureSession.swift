@@ -114,8 +114,12 @@ public final class CaptureSession: @unchecked Sendable {
     var watchdog = SystemAudioWatchdog()
     /// The first error `WAVWriter.write(_:)` raised, if any — a disk-full
     /// or similar write failure that `drainOnce` catches rather than lets
-    /// `try?` swallow, so a full disk during capture is reported instead
-    /// of silently losing audio.
+    /// `try?` swallow, so it's visible in `watchdogStats` instead of
+    /// silently losing audio. `stop()` still returns the capture's path
+    /// normally on a write error rather than failing the whole capture
+    /// over it — system audio loss already degrades to mic-only rather
+    /// than failing, and a partially-written recording is worth more to
+    /// the caller than none.
     var firstWriteError: CaptureError?
 
     public init(
@@ -291,11 +295,7 @@ public final class CaptureSession: @unchecked Sendable {
         task?.cancel()
         await task?.value
 
-        let url = try finalizeCapture()
-        if let firstWriteError = lock.withLock({ self.firstWriteError }) {
-            throw firstWriteError
-        }
-        return url
+        return try finalizeCapture()
     }
 
     /// Flushes whatever's left in `mixer`, finalizes `writer`, and lands

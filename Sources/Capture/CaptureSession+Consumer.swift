@@ -63,9 +63,9 @@ extension CaptureSession {
     /// Records only the first write failure of the capture — later ones
     /// are the same underlying condition (e.g. a disk that's still full)
     /// repeating, not new information — and logs it once, off the
-    /// real-time thread this method never runs on. `stop()` reports it by
-    /// throwing after otherwise finishing normally, rather than losing it
-    /// the way `try?` did.
+    /// real-time thread this method never runs on. `watchdogStats` is
+    /// what surfaces it; the capture itself keeps running rather than
+    /// losing whatever's already on disk the way an uncaught `try?` did.
     private func recordFirstWriteError(_ error: Error) {
         let captureError = (error as? CaptureError) ?? .streamInterrupted(reason: String(describing: error))
         let isFirst = lock.withLock {
@@ -78,6 +78,17 @@ extension CaptureSession {
     }
 
     private func processSystemChunk(_ chunk: RawAudioChunk, mixer: AudioMixer, state: ConsumerAlignmentState) {
+        if state.currentSystemEpoch != chunk.sourceEpoch {
+            // A rebuild — from any trigger: a property-listener change,
+            // the zero-buffer watchdog, or the no-callback watchdog —
+            // starts a fresh tap with its own `sampleTime`/`hostTime`
+            // counters and, potentially, different real hardware behind
+            // it. Any probe window or correction from the previous epoch
+            // no longer means anything and must not carry forward.
+            state.resetRateProbe()
+            state.currentSystemEpoch = chunk.sourceEpoch
+        }
+
         let isZero = ZeroBufferDetector.isExactZero(chunk.samples)
         let duration = chunk.sampleRate > 0 ? Double(chunk.frameCount) / chunk.sampleRate : 0
         let shouldRebuild = lock.withLock { watchdog.observeBuffer(isExactZero: isZero, duration: duration) }
@@ -133,11 +144,38 @@ extension CaptureSession {
         guard elapsed >= Self.effectiveRateCheckWindowSeconds else { return }
         state.rateChecked = true
         let effectiveRate = (lastSampleTime - firstSampleTime) / elapsed
-        guard effectiveRate > 0 else { return }
-        if abs(effectiveRate - chunk.sampleRate) / chunk.sampleRate > Self.effectiveRateToleranceFraction {
-            state.correctedSystemSampleRate = effectiveRate
-            lock.withLock { watchdog.observeRateCorrection() }
+        guard abs(effectiveRate - chunk.sampleRate) / chunk.sampleRate > Self.effectiveRateToleranceFraction else { return }
+        guard let corrected = Self.plausibleCorrectedSampleRate(measured: effectiveRate, declared: chunk.sampleRate) else {
+            // A measurement this far from anything a real device reports
+            // (a corrupt timestamp, a probe window bug) is worse than the
+            // declared rate it would replace — leave the declared rate in
+            // effect rather than resample at a number that isn't a rate
+            // at all.
+            return
         }
+        state.correctedSystemSampleRate = corrected
+        lock.withLock { watchdog.observeRateCorrection() }
+    }
+
+    /// The nominal sample rates Core Audio devices actually run at.
+    private static let standardSampleRates: [Double] = [8000, 16000, 22050, 24000, 32000, 44100, 48000]
+
+    /// Accepts `measured` as a correction only if it falls within half to
+    /// double `declared` — wide enough to cover every real mismatch this
+    /// check exists for (e.g. 48kHz declared against a 16kHz HFP tap is a
+    /// 3x gap) while rejecting a measurement corrupted by a bad timestamp
+    /// or a probe window that spanned two tap epochs. Snaps an accepted
+    /// value to the nearest standard rate when it's within 2% of one,
+    /// since that's what a real device's declared rate actually is, not
+    /// an arbitrary float derived from noisy callback timing.
+    private static func plausibleCorrectedSampleRate(measured: Double, declared: Double) -> Double? {
+        guard measured.isFinite, measured > 0, declared > 0 else { return nil }
+        guard measured >= declared * 0.5, measured <= declared * 2 else { return nil }
+        if let nearestStandard = standardSampleRates.min(by: { abs($0 - measured) < abs($1 - measured) }),
+           abs(nearestStandard - measured) / nearestStandard <= 0.02 {
+            return nearestStandard
+        }
+        return measured
     }
 
     private func processMicChunk(_ chunk: RawAudioChunk, mixer: AudioMixer, state: ConsumerAlignmentState) {
@@ -152,12 +190,11 @@ extension CaptureSession {
         ingestMic(chunk, mixer: mixer)
     }
 
-    /// A rebuild starts a fresh tap epoch whose host times aren't
-    /// comparable to the old epoch's, so the effective-rate probe's
-    /// baseline is reset here and re-establishes itself from the next
-    /// chunk onward.
-    private func triggerRebuild(state: ConsumerAlignmentState) {
-        state.resetRateProbe()
+    /// Just requests the rebuild — `processSystemChunk`'s own
+    /// `sourceEpoch` check is what resets the effective-rate probe once a
+    /// chunk from the resulting fresh tap epoch actually arrives, however
+    /// this rebuild was triggered.
+    private func triggerRebuild(state _: ConsumerAlignmentState) {
         try? systemAudioSource.rebuild()
     }
 

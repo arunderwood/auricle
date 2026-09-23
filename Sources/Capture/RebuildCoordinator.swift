@@ -36,7 +36,12 @@ final class RebuildCoordinator<Handles>: @unchecked Sendable {
     /// handing it back for the caller to tear down itself. A rebuild
     /// already running on `queue` when this is called still finishes its
     /// own build, but finds `isStopped` set at its own install step and
-    /// tears its freshly built result back down instead of installing it.
+    /// tears its freshly built result back down instead of installing it
+    /// — this method alone does not wait for that to happen, so its `nil`
+    /// return can't tell "nothing was installed" apart from "a rebuild is
+    /// still mid-build and will discard its own result." Callers that
+    /// need to know nothing is left running afterward use
+    /// `markStoppedAndDrainInFlight()` instead.
     func markStopped() -> Handles? {
         lock.withLock {
             let value = current
@@ -44,6 +49,18 @@ final class RebuildCoordinator<Handles>: @unchecked Sendable {
             isStopped = true
             return value
         }
+    }
+
+    /// `markStopped()`, then blocks the caller until any pass currently
+    /// running on `queue` (or still only enqueued, not yet started) has
+    /// fully finished — including a build that was still in flight when
+    /// this was called discarding its own result once it notices
+    /// `isStopped`. Lets a caller like `ProcessTapSource.stop()` return
+    /// only once nothing is left building or installed anywhere.
+    func markStoppedAndDrainInFlight() -> Handles? {
+        let handles = markStopped()
+        queue.sync {}
+        return handles
     }
 
     /// The synchronous entry point: runs on `queue`, serializing against
@@ -56,7 +73,11 @@ final class RebuildCoordinator<Handles>: @unchecked Sendable {
     /// running inline on whatever thread called this (avoiding reentering
     /// a callback that's mid-notification), and coalesces a burst of
     /// near-simultaneous calls behind `pendingAsyncRequest` into one pass.
-    func runAsync(build: @escaping () throws -> Handles, teardown: @escaping (Handles) -> Void) {
+    /// `onFailure`, when given, is called with whatever `build`/`teardown`
+    /// threw — the caller's one chance to observe a failed rebuild that
+    /// this method's own `async` shape would otherwise let vanish
+    /// silently.
+    func runAsync(build: @escaping () throws -> Handles, teardown: @escaping (Handles) -> Void, onFailure: (@Sendable (Error) -> Void)? = nil) {
         let shouldEnqueue = lock.withLock { () -> Bool in
             guard !pendingAsyncRequest else { return false }
             pendingAsyncRequest = true
@@ -65,7 +86,11 @@ final class RebuildCoordinator<Handles>: @unchecked Sendable {
         guard shouldEnqueue else { return }
         queue.async { [weak self] in
             self?.lock.withLock { self?.pendingAsyncRequest = false }
-            try? self?.rebuildOnQueue(build: build, teardown: teardown)
+            do {
+                try self?.rebuildOnQueue(build: build, teardown: teardown)
+            } catch {
+                onFailure?(error)
+            }
         }
     }
 

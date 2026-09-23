@@ -1,6 +1,7 @@
 import AVFoundation
 @testable import Capture
 import Core
+import CoreAudio
 import Foundation
 import Permissions
 import Testing
@@ -360,17 +361,19 @@ struct CaptureSessionTests {
         // eventually consumes the ring is.
         #expect(pushElapsed < .seconds(1))
 
-        // The producer side's real dependency is `AudioRingBuffer.publish`
-        // (`FakeSystemAudioSource.push` above only exercises this fake's
-        // own array), so the same claim is checked directly against that
-        // type too, still while the writer is blocked.
-        let ring = AudioRingBuffer(slotCount: 64, slotCapacityFrames: 8192, maxChannels: 1)
+        // `FakeSystemAudioSource.push` above only exercises this fake's
+        // own array, never `AudioRingBuffer`. `session.micRing` is the
+        // real ring a mic-tap callback publishes into in production —
+        // timing `publish` directly against that live instance, still
+        // while the writer is blocked, is what proves the session's own
+        // producer path never waits on it, not just a disconnected ring
+        // this test built and the session never touches.
         var sample: Float = 0.5
         let ringStart = ContinuousClock.now
         withUnsafeMutablePointer(to: &sample) { samplePointer in
             withUnsafePointer(to: samplePointer) { channelData in
                 for _ in 0 ..< 100 {
-                    ring.publish(channelData: channelData, channelCount: 1, frameCount: 1, sampleRate: 16000, hostTime: 1)
+                    session.micRing.publish(channelData: channelData, channelCount: 1, frameCount: 1, sampleRate: 16000, hostTime: 1)
                 }
             }
         }
@@ -403,6 +406,79 @@ struct CaptureSessionTests {
         let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: true)
         #expect(file.fileFormat.sampleRate == 16000)
         #expect(file.fileFormat.channelCount == 1)
-        #expect(file.length > 0)
+        // Two 0.05s chunks resampled to 16kHz is ~1600 frames total — a
+        // bound tight enough that silently dropping either chunk (the
+        // defect a format-change carry-over bug would cause) fails this
+        // assertion, unlike a bare `> 0`.
+        #expect(abs(Int(file.length) - 1600) <= 64)
+    }
+
+    /// Pushes the epoch-2 chunks common to both halves of
+    /// `aRateCorrectionFromAPriorTapEpochDoesNotSurviveIntoTheNextEpoch`:
+    /// two tiny probe chunks (feeding the effective-rate check) plus one
+    /// dominant 8000-frame payload, all declared and truly at 16kHz —
+    /// `epoch2Start` lets the caller place this after whatever epoch-1
+    /// activity (if any) it already pushed.
+    private func pushEpoch2Chunks(to source: FakeSystemAudioSource, epoch2Start: UInt64) {
+        let oneAndAHalfSeconds = AudioConvertNanosToHostTime(1_500_000_000)
+        let twoSeconds = AudioConvertNanosToHostTime(2_000_000_000)
+        source.push(RawAudioChunk(
+            samples: [Float](repeating: 0, count: 10), sampleRate: 16000, channelCount: 1,
+            frameCount: 10, hostTime: epoch2Start, sampleTime: 0, sourceEpoch: 2,
+        ))
+        source.push(RawAudioChunk(
+            samples: [Float](repeating: 0, count: 10), sampleRate: 16000, channelCount: 1,
+            frameCount: 10, hostTime: epoch2Start + oneAndAHalfSeconds, sampleTime: 24000, sourceEpoch: 2,
+        ))
+        source.push(RawAudioChunk(
+            samples: [Float](repeating: 0, count: 8000), sampleRate: 16000, channelCount: 1,
+            frameCount: 8000, hostTime: epoch2Start + twoSeconds, sampleTime: 32000, sourceEpoch: 2,
+        ))
+    }
+
+    @Test func aRateCorrectionFromAPriorTapEpochDoesNotSurviveIntoTheNextEpoch() async throws {
+        // Baseline: epoch 2's chunks with no epoch-1 activity beforehand
+        // — what correct handling of epoch 2 alone produces, independent
+        // of any converter-priming loss from `AudioMixer`'s own pipeline
+        // setup (not something this test needs to predict exactly).
+        let baselineFixture = SessionFixture()
+        defer { baselineFixture.cleanUp() }
+        let baselineSession = baselineFixture.makeSession(micStatus: .denied)
+        _ = try await baselineSession.start()
+        pushEpoch2Chunks(to: baselineFixture.systemAudioSource, epoch2Start: 1_000_000_000)
+        let baselineURL = try await baselineSession.stop()
+        let baselineFile = try AVAudioFile(forReading: baselineURL, commonFormat: .pcmFormatInt16, interleaved: true)
+
+        // Target: the same epoch-2 chunks, but preceded by an epoch-1 tap
+        // that declares 48kHz while actually delivering at 24kHz — wide
+        // enough a mismatch, over the 1s probe window, to trigger a
+        // correction. If that correction survived the epoch boundary,
+        // epoch 2's dominant 8000-frame chunk would be resampled from the
+        // wrong declared rate (24kHz, a 0.667 ratio to 16kHz) instead of
+        // its own real 16kHz, losing thousands of frames relative to the
+        // baseline — far more than ordinary converter-priming variance
+        // between the two runs' differing pipeline-swap histories.
+        let targetFixture = SessionFixture()
+        defer { targetFixture.cleanUp() }
+        let targetSession = targetFixture.makeSession(micStatus: .denied)
+        _ = try await targetSession.start()
+        let oneAndAHalfSeconds = AudioConvertNanosToHostTime(1_500_000_000)
+        let tenSeconds = AudioConvertNanosToHostTime(10_000_000_000)
+        let epoch1Start: UInt64 = 1_000_000_000
+        targetFixture.systemAudioSource.push(RawAudioChunk(
+            samples: [Float](repeating: 0, count: 10), sampleRate: 48000, channelCount: 1,
+            frameCount: 10, hostTime: epoch1Start, sampleTime: 0, sourceEpoch: 1,
+        ))
+        targetFixture.systemAudioSource.push(RawAudioChunk(
+            samples: [Float](repeating: 0, count: 10), sampleRate: 48000, channelCount: 1,
+            frameCount: 10, hostTime: epoch1Start + oneAndAHalfSeconds, sampleTime: 36000, sourceEpoch: 1,
+        ))
+        try await waitUntil { targetSession.watchdogStats.rateCorrectionCount >= 1 }
+        #expect(targetSession.watchdogStats.rateCorrectionCount == 1)
+        pushEpoch2Chunks(to: targetFixture.systemAudioSource, epoch2Start: epoch1Start + tenSeconds)
+        let targetURL = try await targetSession.stop()
+        let targetFile = try AVAudioFile(forReading: targetURL, commonFormat: .pcmFormatInt16, interleaved: true)
+
+        #expect(abs(Int(targetFile.length) - Int(baselineFile.length)) <= 300)
     }
 }

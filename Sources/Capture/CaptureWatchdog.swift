@@ -98,11 +98,11 @@ struct SystemAudioWatchdog: Sendable, Equatable {
         rebuildCount += 1
     }
 
-    /// Called once per capture when the effective-rate check finds the
+    /// Called once per tap epoch when the effective-rate check finds the
     /// tap's declared rate disagrees with what callback timestamps
     /// measured. Counts the correction; does not touch `rebuildCount`,
-    /// since correcting by resampling at the measured rate is the fix —
-    /// no rebuild is triggered for this trigger.
+    /// because this trigger resamples at the measured rate instead of
+    /// requesting a rebuild.
     mutating func observeRateCorrection() {
         rateCorrectionCount += 1
     }
