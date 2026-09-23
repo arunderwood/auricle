@@ -29,6 +29,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
         Migration002StageEventsMetadataSchemaVersion.identifier,
         Migration003RenameAudioRetentionStatusColumn.identifier,
         Migration004TelemetryGroundingAndPromptSetHash.identifier,
+        Migration005MeetingsCaptureTimeZone.identifier,
     ])
 }
 
@@ -286,7 +287,7 @@ private func columnInfo(_ name: String, in columns: [ColumnInfo]) -> ColumnInfo?
 
     for nullableTextColumn in [
         "capture_started_at", "capture_ended_at", "title", "calendar_event_id",
-        "vault_note_path", "audio_cache_path", "verified_at", "retention_policy",
+        "vault_note_path", "audio_cache_path", "verified_at", "retention_policy", "capture_time_zone",
     ] {
         let column = try #require(columnInfo(nullableTextColumn, in: columns))
         #expect(!column.isNotNull, "expected \(nullableTextColumn) to be nullable")

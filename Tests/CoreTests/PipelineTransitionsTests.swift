@@ -41,6 +41,12 @@ import Testing
 
 @Test func aPairWithNoEntryIsNil() {
     #expect(PipelineTransitions.allowedTargets(stage: .transcribe, activeState: .summarizing) == nil)
-    #expect(PipelineTransitions.allowedTargets(stage: .capture, activeState: .recording) == nil)
+    #expect(PipelineTransitions.allowedTargets(stage: .capture, activeState: .captured) == nil)
     #expect(PipelineTransitions.allowedTargets(stage: .attribute, activeState: .summarizing) == nil)
+}
+
+/// Capture writes its own transitions through `StateStore.finishCapture`; the
+/// entry is the set those writes may land in.
+@Test func theCaptureEntryLeadsToCapturedOrCaptureFailed() {
+    #expect(PipelineTransitions.allowedTargets(stage: .capture, activeState: .recording) == [.captured, .captureFailed])
 }

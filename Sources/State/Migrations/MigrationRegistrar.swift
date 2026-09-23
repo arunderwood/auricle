@@ -20,6 +20,10 @@ enum MigrationRegistrar {
             Migration004TelemetryGroundingAndPromptSetHash.identifier,
             migrate: Migration004TelemetryGroundingAndPromptSetHash.migrate,
         )
+        migrator.registerMigration(
+            Migration005MeetingsCaptureTimeZone.identifier,
+            migrate: Migration005MeetingsCaptureTimeZone.migrate,
+        )
         return migrator
     }
 }

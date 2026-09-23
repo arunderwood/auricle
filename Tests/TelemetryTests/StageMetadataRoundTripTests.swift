@@ -12,6 +12,29 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     #expect(try roundTrip(original) == original)
 }
 
+@Test func captureMetaWithEveryFieldRoundTripsLosslesslyInSnakeCase() throws {
+    let meta = CaptureMeta(
+        micIncluded: true,
+        exactZeroSeconds: 31.5,
+        tapRebuilds: 2,
+        reason: "recovered_after_interruption",
+        errorClass: "permission_revoked_midstream",
+        source: "microphone",
+    )
+    #expect(try roundTrip(.capture(meta)) == .capture(meta))
+
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(meta)) as? [String: Any])
+    #expect(Set(object.keys) == ["mic_included", "exact_zero_seconds", "tap_rebuilds", "reason", "error_class", "source"])
+}
+
+/// An absent field is left out, not written as null, so a row carries only
+/// what its event knew.
+@Test func captureMetaOmitsFieldsItDoesNotHave() throws {
+    let encoded = try String(bytes: JSONEncoder().encode(CaptureMeta(errorClass: "interrupted")), encoding: .utf8)
+    #expect(encoded == #"{"error_class":"interrupted"}"#)
+    #expect(try JSONDecoder().decode(CaptureMeta.self, from: Data("{}".utf8)) == CaptureMeta())
+}
+
 @Test func transcribeMetaRoundTripsLosslessly() throws {
     let original = StageMetadata.transcribe(TranscribeMeta(
         modelID: "whisper-large-v3-turbo",

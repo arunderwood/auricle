@@ -49,9 +49,12 @@ public enum PersistStage {
     }
 
     /// The two ambient inputs the stage reads: the instant a re-run is
-    /// published, and the zone every filename/frontmatter date is rendered
-    /// in. Injectable so tests can pin both; production uses the system clock
-    /// and the process's current zone.
+    /// published, and the current zone. A re-run's `--rerun-<date>` suffix is
+    /// always rendered in the current zone. The capture date and time come
+    /// from the meeting's own `capture_time_zone` and fall back to the current
+    /// zone only when the row has none, or one `TimeZone` does not know.
+    /// Injectable so tests can pin both; production uses the system clock and
+    /// the process's current zone.
     public struct TimeSource: Sendable {
         public let now: @Sendable () -> Date
         public let timeZone: TimeZone
@@ -144,7 +147,8 @@ public enum PersistStage {
 
         // The one documented local-time exception (Decision 2.4): every
         // other timestamp in the system is UTC.
-        let (localDate, localTime24h) = localDateAndTime(from: captureStartedAt, in: clock.timeZone)
+        let captureZone = meeting.localTimeZone(fallback: clock.timeZone)
+        let (localDate, localTime24h) = localDateAndTime(from: captureStartedAt, in: captureZone)
         let resolved = ResolvedMeeting(
             meetingID: meetingID,
             artifact: artifact,

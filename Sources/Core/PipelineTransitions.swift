@@ -16,6 +16,11 @@ public enum PipelineTransitions {
     /// summary is the stub a failed `--publish-anyway` summarize left.
     public static func allowedTargets(stage: PipelineStage, activeState: PipelineState) -> Set<PipelineState>? {
         switch (stage, activeState) {
+        case (.capture, .recording):
+            // Capture writes its own transitions (`StateStore.finishCapture`)
+            // rather than going through `run`; the entry records what they
+            // may be.
+            [.captured, .captureFailed]
         case (.transcribe, .transcribing):
             [.transcribing, .reviewingDiarization, .transcriptionFailed]
         case (.reviewDiarization, .reviewingDiarization):

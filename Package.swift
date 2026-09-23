@@ -78,7 +78,7 @@ let package = Package(
         .target(name: "Permissions", dependencies: ["Core"], path: "Sources/Permissions"),
 
         // === Capture ===
-        .target(name: "Capture", dependencies: ["Core", "State", "Telemetry", "Permissions"], path: "Sources/Capture"),
+        .target(name: "Capture", dependencies: ["Core", "State", "Telemetry", "Permissions", "Notifications"], path: "Sources/Capture"),
 
         // === Strategy interfaces (protocol-only — no concrete deps) ===
         .target(name: "TranscriberInterface", dependencies: ["Core"], path: "Sources/TranscriberInterface"),
@@ -183,7 +183,7 @@ let package = Package(
         .testTarget(
             name: "CaptureTests",
             dependencies: [
-                "Capture", "TestSupport", "Core", "State", "Telemetry",
+                "Capture", "TestSupport", "Core", "State", "Telemetry", "Permissions", "Notifications",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Tests/CaptureTests",
