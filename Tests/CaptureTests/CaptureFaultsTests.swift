@@ -32,6 +32,10 @@ private final class ThrowingSource: SystemAudioSource, @unchecked Sendable {
         lock.withLock { drainCount += 1 }
     }
 
+    var ringLossStats: RingLossStats {
+        RingLossStats(droppedChunkCount: 3, truncatedChunkCount: 1)
+    }
+
     func rebuild() throws {
         if lock.withLock({ failing }) {
             throw SourceFailure()
@@ -113,4 +117,65 @@ private final class FaultLog: @unchecked Sendable {
     #expect(policy.record(at: start.addingTimeInterval(-3600)) == .restart)
     #expect(policy.record(at: start.addingTimeInterval(-3590)) == .restart)
     #expect(policy.record(at: start.addingTimeInterval(-3585)) == .fail)
+}
+
+/// Stands in for `ProcessTapSource` during an AirPods switch to HFP: the
+/// format listener and the default-output-device listener both fire for one
+/// hardware event, and each rebuilds through the source's own serialized
+/// internal path, never through the public `rebuild()`. Some of those
+/// internal rebuilds fail, as a rebuild racing a device change can.
+private final class ListenerRebuildingSource: SystemAudioSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private var internalRebuilds = 0
+    private var failedInternalRebuilds = 0
+
+    var failedCount: Int {
+        lock.withLock { failedInternalRebuilds }
+    }
+
+    func start() throws {}
+
+    func stop() {}
+
+    func drain(_: (RawAudioChunk) -> Void) {}
+
+    var ringLossStats: RingLossStats {
+        RingLossStats()
+    }
+
+    func rebuild() throws {}
+
+    func fireFormatAndOutputDeviceListeners() {
+        for _ in 0 ..< 2 {
+            lock.withLock {
+                internalRebuilds += 1
+                if internalRebuilds.isMultiple(of: 2) {
+                    failedInternalRebuilds += 1
+                }
+            }
+        }
+    }
+}
+
+@Test func theDecoratorForwardsTheWrappedSourcesRingLossStats() {
+    let source = FaultReportingSystemAudioSource(wrapping: ThrowingSource(failing: false)) { _ in }
+
+    #expect(source.ringLossStats == RingLossStats(droppedChunkCount: 3, truncatedChunkCount: 1))
+}
+
+@Test func anAirPodsStyleListenerBurstReportsNoFaultAndNeverTripsTheCap() {
+    let log = FaultLog()
+    let inner = ListenerRebuildingSource()
+    let source = FaultReportingSystemAudioSource(wrapping: inner) { log.append($0) }
+    try? source.start()
+
+    // Three HFP switches inside one 30s window, each firing both listeners:
+    // six internal rebuilds, some failing, none through the public rebuild().
+    for _ in 0 ..< 3 {
+        inner.fireFormatAndOutputDeviceListeners()
+    }
+
+    #expect(inner.failedCount == 3)
+    // `CaptureStage` counts only reported faults toward the 3-in-30s cap.
+    #expect(log.faults.isEmpty)
 }

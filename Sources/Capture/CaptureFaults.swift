@@ -54,6 +54,10 @@ public final class FaultReportingSystemAudioSource: SystemAudioSource {
         wrapped.drain(consume)
     }
 
+    public var ringLossStats: RingLossStats {
+        wrapped.ringLossStats
+    }
+
     public func rebuild() throws {
         do {
             try wrapped.rebuild()

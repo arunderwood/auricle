@@ -51,16 +51,24 @@ extension WAVWriter: CaptureAudioWriting {}
 /// `@unchecked Sendable`: every mutable field is touched only while `lock`
 /// is held.
 public final class CaptureSession: @unchecked Sendable {
-    private static let log = Log(category: "capture-session")
-    private static let consumerPollInterval: Duration = .milliseconds(20)
+    static let log = Log(category: "capture-session")
+    static let consumerPollInterval: Duration = .milliseconds(20)
     private static let micRingSlotCount = 64
     private static let micRingSlotCapacityFrames = 8192
     private static let micRingMaxChannels = 2
-    private static let effectiveRateCheckWindowSeconds: Double = 1
-    private static let effectiveRateToleranceFraction = 0.05
-    private static let maxHeldAlignmentChunks = 200
+    static let effectiveRateCheckWindowSeconds: Double = 1
+    static let effectiveRateToleranceFraction = 0.05
+    static let maxHeldAlignmentChunks = 200
+    /// Caps how much leading silence stream alignment will ever prime one
+    /// side with — 30 seconds of 16kHz frames. A legitimate startup offset
+    /// between the mic and system clocks is a fraction of a second; this
+    /// bound exists only to turn a corrupt host-time delta (e.g. an
+    /// uptime-scale value slipping past the `> 0` validity checks
+    /// upstream) into a large-but-bounded allocation instead of one sized
+    /// by days of system uptime.
+    static let maxLeadInFrames = AudioImporter.sampleRate * 30
 
-    private enum Phase: Equatable {
+    enum Phase: Equatable {
         case idle
         /// Reserved atomically by `start()` before any async work begins,
         /// so two concurrent `start()` calls can't both pass the `.idle`
@@ -80,11 +88,11 @@ public final class CaptureSession: @unchecked Sendable {
         case stopFailed(reason: String)
     }
 
-    private let meetingID: MeetingID
+    let meetingID: MeetingID
     private let engine: AVAudioEngine
-    private let systemAudioSource: SystemAudioSource
+    let systemAudioSource: SystemAudioSource
     private let permissionChecker: PermissionChecking
-    private let cacheDirectory: @Sendable (MeetingID) throws -> URL
+    let cacheDirectory: @Sendable (MeetingID) throws -> URL
     /// Test seam: production always calls `AVAudioEngine.start()`, but a
     /// concrete `AVAudioEngine` can't otherwise be made to fail
     /// deterministically without real audio hardware.
@@ -93,17 +101,26 @@ public final class CaptureSession: @unchecked Sendable {
     /// deliberately slow writer to prove the producer side never blocks on
     /// it.
     private let makeWriter: (@Sendable (MeetingID) throws -> CaptureAudioWriting)?
-    private let noCallbackThreshold: TimeInterval
+    let noCallbackThreshold: TimeInterval
 
-    private let micRing = AudioRingBuffer(slotCount: micRingSlotCount, slotCapacityFrames: micRingSlotCapacityFrames, maxChannels: micRingMaxChannels)
+    let micRing = AudioRingBuffer(slotCount: micRingSlotCount, slotCapacityFrames: micRingSlotCapacityFrames, maxChannels: micRingMaxChannels)
 
-    private let lock = NSLock()
-    private var phase: Phase = .idle
-    private var mixer: AudioMixer?
-    private var writer: CaptureAudioWriting?
-    private var micIncluded = false
+    let lock = NSLock()
+    var phase: Phase = .idle
+    var mixer: AudioMixer?
+    var writer: CaptureAudioWriting?
+    var micIncluded = false
     private var consumerTask: Task<Void, Never>?
-    private var watchdog = SystemAudioWatchdog()
+    var watchdog = SystemAudioWatchdog()
+    /// The first error `WAVWriter.write(_:)` raised, if any — a disk-full
+    /// or similar write failure that `drainOnce` catches rather than lets
+    /// `try?` swallow, so it's visible in `watchdogStats` instead of
+    /// silently losing audio. `stop()` still returns the capture's path
+    /// normally on a write error rather than failing the whole capture
+    /// over it — system audio loss already degrades to mic-only rather
+    /// than failing, and a partially-written recording is worth more to
+    /// the caller than none.
+    var firstWriteError: CaptureError?
 
     public init(
         meetingID: MeetingID,
@@ -132,9 +149,20 @@ public final class CaptureSession: @unchecked Sendable {
     /// A snapshot of the system-audio watchdog's counters, for Story 5.4's
     /// capture metadata to read once it exists.
     public var watchdogStats: CaptureWatchdogStats {
+        let systemRingStats = systemAudioSource.ringLossStats
+        let micRingStats = micRing.snapshotDropStats()
         lock.lock()
         defer { lock.unlock() }
-        return CaptureWatchdogStats(exactZeroSeconds: watchdog.exactZeroSeconds, rebuildCount: watchdog.rebuildCount)
+        return CaptureWatchdogStats(
+            exactZeroSeconds: watchdog.exactZeroSeconds,
+            rebuildCount: watchdog.rebuildCount,
+            rateCorrectionCount: watchdog.rateCorrectionCount,
+            systemRingDroppedChunkCount: systemRingStats.droppedChunkCount,
+            systemRingTruncatedChunkCount: systemRingStats.truncatedChunkCount,
+            micRingDroppedChunkCount: micRingStats.droppedChunkCount,
+            micRingTruncatedChunkCount: micRingStats.truncatedChunkCount,
+            firstWriteErrorDescription: firstWriteError.map { String(describing: $0) },
+        )
     }
 
     /// Starts system audio unconditionally and the microphone unless
@@ -256,7 +284,7 @@ public final class CaptureSession: @unchecked Sendable {
         // guarantees it has finished whatever it was already doing with
         // `mixer`/`writer` — including a final drain of anything queued
         // right before this point — before `finalizeCapture()` touches
-        // either itself. That ordering is the whole fix: a write to an
+        // either itself. This ordering is required because a write to an
         // already-`finalize()`d `FileHandle` raises an uncatchable
         // exception, not a catchable Swift error, so the two must never
         // be able to overlap.
@@ -320,250 +348,20 @@ public final class CaptureSession: @unchecked Sendable {
     /// into `micRing` and returns — no locks beyond the ring's own bounded
     /// one, no allocation, no I/O, no logging (NFR-P13). All resampling,
     /// mixing and writing happens in `runConsumerLoop()`, off this thread.
+    /// A buffer with no valid host time is dropped rather than published
+    /// with a placeholder: `resolveAlignmentIfPossible` compares host
+    /// times across the mic and system streams, and a placeholder would
+    /// read as a real, comparable timestamp instead of the "unknown" it
+    /// actually is.
     private func publishMicBuffer(_ buffer: AVAudioPCMBuffer, time: AVAudioTime) {
-        guard let channelData = buffer.floatChannelData else { return }
+        guard let channelData = buffer.floatChannelData, time.isHostTimeValid else { return }
         micRing.publish(
             channelData: channelData,
             channelCount: Int(buffer.format.channelCount),
             frameCount: Int(buffer.frameLength),
             sampleRate: buffer.format.sampleRate,
-            hostTime: time.isHostTimeValid ? time.hostTime : 0,
+            hostTime: time.hostTime,
+            sampleTime: time.isSampleTimeValid ? Double(time.sampleTime) : 0,
         )
-    }
-}
-
-/// The consumer side of `CaptureSession`'s real-time design (see the
-/// type's own doc comment): everything here runs on the background `Task`
-/// `start()` launches, never on the mic-tap or IOProc callback thread, so
-/// it's free to allocate, lock, and do file I/O. A separate `extension`
-/// (rather than more of the primary declaration) so the type's real-time
-/// contract — what runs where — is visible in the file's own structure,
-/// not just its comments.
-extension CaptureSession {
-    // MARK: - Consumer (off the real-time thread — see the type doc)
-
-    private func runConsumerLoop() async {
-        let micIncluded = lock.withLock { self.micIncluded }
-        let state = ConsumerAlignmentState(micIncluded: micIncluded)
-        var lastSystemActivity = ContinuousClock.now
-
-        while !Task.isCancelled {
-            guard let (mixer, writer) = runningComponents() else { break }
-            let before = lastSystemActivity
-            drainOnce(mixer: mixer, writer: writer, state: state, micIncluded: micIncluded, sawActivity: &lastSystemActivity)
-            checkNoCallbackWatchdog(lastSystemActivity: &lastSystemActivity)
-            if lastSystemActivity == before {
-                try? await Task.sleep(for: Self.consumerPollInterval)
-            }
-        }
-
-        // A final drain after cancellation, so anything queued right
-        // before `stop()` cancelled this task isn't lost before `stop()`'s
-        // own flush — `runningComponents()` still returns them during
-        // `.stopping`, only becoming nil once `stop()` reaches a terminal
-        // phase after this task has already exited.
-        if let (mixer, writer) = runningComponents() {
-            var unused = lastSystemActivity
-            drainOnce(mixer: mixer, writer: writer, state: state, micIncluded: micIncluded, sawActivity: &unused)
-        }
-    }
-
-    private func drainOnce(mixer: AudioMixer, writer: CaptureAudioWriting, state: ConsumerAlignmentState, micIncluded: Bool, sawActivity: inout ContinuousClock.Instant) {
-        systemAudioSource.drain { chunk in
-            sawActivity = .now
-            self.processSystemChunk(chunk, mixer: mixer, state: state)
-        }
-        if micIncluded {
-            micRing.drainAll { chunk in
-                self.processMicChunk(chunk, mixer: mixer, state: state)
-            }
-        }
-
-        let pcm = mixer.drain()
-        if !pcm.isEmpty {
-            try? writer.write(pcm)
-        }
-    }
-
-    private func processSystemChunk(_ chunk: RawAudioChunk, mixer: AudioMixer, state: ConsumerAlignmentState) {
-        let isZero = ZeroBufferDetector.isExactZero(chunk.samples)
-        let duration = chunk.sampleRate > 0 ? Double(chunk.frameCount) / chunk.sampleRate : 0
-        let shouldRebuild = lock.withLock { watchdog.observeBuffer(isExactZero: isZero, duration: duration) }
-        if shouldRebuild {
-            triggerRebuild(state: state)
-        }
-
-        // A stale or wrong declared rate (e.g. AirPods switching to HFP
-        // mid-call) would otherwise resample every subsequent buffer at
-        // the wrong ratio without ever erroring: once, over the first ~1
-        // second of system audio, compare the arrival rate implied by
-        // host-time deltas against the tap's declared rate.
-        if !state.rateChecked, chunk.sampleRate > 0 {
-            if state.rateProbeFirstHostTime == nil {
-                state.rateProbeFirstHostTime = chunk.hostTime
-            }
-            state.rateProbeFrames += chunk.frameCount
-            let elapsed = Self.hostTimeToSeconds(chunk.hostTime &- (state.rateProbeFirstHostTime ?? chunk.hostTime))
-            if elapsed >= Self.effectiveRateCheckWindowSeconds {
-                state.rateChecked = true
-                let effectiveRate = Double(state.rateProbeFrames) / elapsed
-                if abs(effectiveRate - chunk.sampleRate) / chunk.sampleRate > Self.effectiveRateToleranceFraction {
-                    triggerRebuild(state: state)
-                }
-            }
-        }
-
-        guard state.alignmentResolved else {
-            if state.firstSystemHostTime == nil {
-                state.firstSystemHostTime = chunk.hostTime
-            }
-            state.heldSystemChunks.append(chunk)
-            resolveAlignmentIfPossible(state: state, mixer: mixer)
-            return
-        }
-        ingestSystem(chunk, mixer: mixer)
-    }
-
-    private func processMicChunk(_ chunk: RawAudioChunk, mixer: AudioMixer, state: ConsumerAlignmentState) {
-        guard state.alignmentResolved else {
-            if state.firstMicHostTime == nil {
-                state.firstMicHostTime = chunk.hostTime
-            }
-            state.heldMicChunks.append(chunk)
-            resolveAlignmentIfPossible(state: state, mixer: mixer)
-            return
-        }
-        ingestMic(chunk, mixer: mixer)
-    }
-
-    /// A rebuild starts a fresh tap epoch whose host times aren't
-    /// comparable to the old epoch's, so the effective-rate probe's
-    /// baseline is reset here and re-establishes itself from the next
-    /// chunk onward.
-    private func triggerRebuild(state: ConsumerAlignmentState) {
-        state.resetRateProbe()
-        try? systemAudioSource.rebuild()
-    }
-
-    /// Waits until the first chunk from every side that will ever deliver
-    /// one has arrived, then primes whichever side started later with
-    /// exactly the leading silence needed to align both streams by host
-    /// time rather than by raw buffered-sample-count parity — a fixed
-    /// startup offset, not continuous drift correction (the aggregate
-    /// device's own drift compensation, see `ProcessTapSource`, covers
-    /// the system side's clock over a long meeting).
-    private func resolveAlignmentIfPossible(state: ConsumerAlignmentState, mixer: AudioMixer) {
-        guard !state.alignmentResolved else { return }
-        let micReady = !state.micIncluded || state.firstMicHostTime != nil
-        let systemReady = state.firstSystemHostTime != nil
-        let forced = state.heldSystemChunks.count + state.heldMicChunks.count > Self.maxHeldAlignmentChunks
-        guard (micReady && systemReady) || forced else { return }
-
-        if state.micIncluded, let systemHostTime = state.firstSystemHostTime, let micHostTime = state.firstMicHostTime {
-            if systemHostTime < micHostTime {
-                let lagFrames = Int(Self.hostTimeToSeconds(micHostTime - systemHostTime) * Double(AudioImporter.sampleRate))
-                mixer.primeMicLeadIn(frames: lagFrames)
-            } else if micHostTime < systemHostTime {
-                let lagFrames = Int(Self.hostTimeToSeconds(systemHostTime - micHostTime) * Double(AudioImporter.sampleRate))
-                mixer.primeSystemLeadIn(frames: lagFrames)
-            }
-        }
-
-        state.alignmentResolved = true
-        let heldSystem = state.heldSystemChunks
-        let heldMic = state.heldMicChunks
-        state.heldSystemChunks = []
-        state.heldMicChunks = []
-        for chunk in heldSystem {
-            ingestSystem(chunk, mixer: mixer)
-        }
-        for chunk in heldMic {
-            ingestMic(chunk, mixer: mixer)
-        }
-    }
-
-    /// Drives the "no callback at all" rebuild trigger (a dead IOProc
-    /// calls back zero times, not with zero-valued buffers, so
-    /// `SystemAudioWatchdog.observeBuffer` alone can never see it).
-    /// Re-arms `lastSystemActivity` after triggering, mirroring
-    /// `observeBuffer`'s own "at most once per threshold" behavior.
-    private func checkNoCallbackWatchdog(lastSystemActivity: inout ContinuousClock.Instant) {
-        let elapsed = Self.seconds(ContinuousClock.now - lastSystemActivity)
-        guard elapsed >= noCallbackThreshold else { return }
-        lock.withLock { watchdog.observeNoCallback() }
-        try? systemAudioSource.rebuild()
-        lastSystemActivity = .now
-    }
-
-    private func ingestSystem(_ chunk: RawAudioChunk, mixer: AudioMixer) {
-        guard let buffer = Self.makeBuffer(from: chunk) else { return }
-        do {
-            try mixer.ingestSystem(buffer)
-        } catch {
-            Self.log.error("system audio chunk dropped", ["reason": .sensitive(String(describing: error))])
-        }
-    }
-
-    private func ingestMic(_ chunk: RawAudioChunk, mixer: AudioMixer) {
-        guard let buffer = Self.makeBuffer(from: chunk) else { return }
-        do {
-            try mixer.ingestMic(buffer)
-        } catch {
-            Self.log.error("mic audio chunk dropped", ["reason": .sensitive(String(describing: error))])
-        }
-    }
-
-    /// Reconstructs an `AVAudioPCMBuffer` from a drained chunk — an
-    /// allocation, safe here since this runs only on the consumer task,
-    /// never on the real-time callback thread that produced the chunk.
-    private static func makeBuffer(from chunk: RawAudioChunk) -> AVAudioPCMBuffer? {
-        guard
-            chunk.frameCount > 0, chunk.channelCount > 0,
-            let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: chunk.sampleRate, channels: AVAudioChannelCount(chunk.channelCount), interleaved: false),
-            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(chunk.frameCount)),
-            let channelData = buffer.floatChannelData
-        else { return nil }
-        buffer.frameLength = AVAudioFrameCount(chunk.frameCount)
-        chunk.samples.withUnsafeBufferPointer { source in
-            guard let base = source.baseAddress else { return }
-            for channel in 0 ..< chunk.channelCount {
-                channelData[channel].update(from: base.advanced(by: channel * chunk.frameCount), count: chunk.frameCount)
-            }
-        }
-        return buffer
-    }
-
-    private func runningComponents() -> (AudioMixer, CaptureAudioWriting)? {
-        lock.lock()
-        defer { lock.unlock() }
-        switch phase {
-        case .running, .stopping:
-            guard let mixer, let writer else { return nil }
-            return (mixer, writer)
-        default:
-            return nil
-        }
-    }
-
-    private static func hostTimeToSeconds(_ ticks: UInt64) -> Double {
-        Double(AudioConvertHostTimeToNanos(ticks)) / 1_000_000_000
-    }
-
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-    }
-}
-
-/// Story 5.8's onboarding trigger: there is no public API to check or
-/// request the "System Audio Recording" TCC grant (research.md), so the
-/// only way to surface the OS's prompt is to actually run a tap briefly.
-public enum SystemAudioPermissionProbe {
-    /// Runs `source` for one second and discards every buffer — purely so
-    /// macOS shows the System Audio Recording prompt the first time this
-    /// runs, for onboarding to trigger ahead of the first real capture.
-    public static func prompt(source: SystemAudioSource = ProcessTapSource()) async throws {
-        try source.start()
-        defer { source.stop() }
-        try await Task.sleep(for: .seconds(1))
     }
 }

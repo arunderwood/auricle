@@ -53,6 +53,10 @@ private final class FailingSource: SystemAudioSource, @unchecked Sendable {
 
     func drain(_: (RawAudioChunk) -> Void) {}
 
+    var ringLossStats: RingLossStats {
+        RingLossStats()
+    }
+
     func rebuild() throws {
         lock.withLock { rebuilds += 1 }
         if failRebuild {
