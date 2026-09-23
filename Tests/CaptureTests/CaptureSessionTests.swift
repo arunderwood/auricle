@@ -38,6 +38,11 @@ private final class FakeSystemAudioSource: SystemAudioSource, @unchecked Sendabl
     private(set) var stopCallCount = 0
     private(set) var rebuildCallCount = 0
 
+    /// No ring of its own to lose chunks from — always reports no loss.
+    var ringLossStats: RingLossStats {
+        RingLossStats()
+    }
+
     func start() throws {
         lock.lock()
         defer { lock.unlock() }
@@ -73,20 +78,27 @@ private final class FakeSystemAudioSource: SystemAudioSource, @unchecked Sendabl
     }
 }
 
-/// A slow `CaptureAudioWriting`: `write(_:)` blocks for `delaySeconds`
-/// before returning, standing in for a disk stall. Used to prove the
-/// real-time producer side (`FakeSystemAudioSource.push(_:)`, standing in
-/// for a real audio callback) never waits on it.
+/// A slow `CaptureAudioWriting`: `write(_:)` marks `hasStarted` on entry,
+/// then blocks for `delaySeconds` before returning, standing in for a disk
+/// stall. Used to prove the real-time producer side (`FakeSystemAudioSource
+/// .push(_:)` and the real `AudioRingBuffer.publish(_:)`, standing in for a
+/// real audio callback) never waits on it. `hasStarted` is what lets a
+/// test poll until the consumer task is actually inside the blocking call,
+/// rather than guessing at a sleep duration.
 private final class SlowWriter: CaptureAudioWriting, @unchecked Sendable {
     private let delaySeconds: Double
     private let lock = NSLock()
     private(set) var writeCount = 0
+    private(set) var hasStarted = false
 
     init(delaySeconds: Double) {
         self.delaySeconds = delaySeconds
     }
 
     func write(_: Data) throws {
+        lock.lock()
+        hasStarted = true
+        lock.unlock()
         Thread.sleep(forTimeInterval: delaySeconds)
         lock.lock()
         writeCount += 1
@@ -321,26 +333,76 @@ struct CaptureSessionTests {
         _ = try? await session.stop()
     }
 
-    @Test func aSlowWriterNeverBlocksTheProducerSidePush() async throws {
+    @Test func aSlowWriterNeverBlocksTheProducerSideOrTheRealRingBuffer() async throws {
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
         let slowWriter = SlowWriter(delaySeconds: 1)
         let session = fixture.makeSession(micStatus: .denied, makeWriter: { _ in slowWriter })
         _ = try await session.start()
 
-        let start = ContinuousClock.now
+        fixture.systemAudioSource.push(systemChunk())
+        // Waits until the consumer task is actually inside the blocking
+        // `write(_:)` call — the state a real disk stall would leave the
+        // producer side racing against, rather than guessing at a sleep
+        // long enough for the consumer to have gotten there.
+        try await waitUntil { slowWriter.hasStarted }
+        #expect(slowWriter.hasStarted)
+
+        let pushStart = ContinuousClock.now
         for _ in 0 ..< 5 {
             fixture.systemAudioSource.push(systemChunk())
         }
-        let elapsed = ContinuousClock.now - start
+        let pushElapsed = ContinuousClock.now - pushStart
 
         // Pushing must not have waited on the writer at all — a real
         // audio callback doing the equivalent (a raw copy into a ring
         // buffer) is microseconds of work regardless of how slow whatever
         // eventually consumes the ring is.
-        #expect(elapsed < .seconds(1))
+        #expect(pushElapsed < .seconds(1))
+
+        // The producer side's real dependency is `AudioRingBuffer.publish`
+        // (`FakeSystemAudioSource.push` above only exercises this fake's
+        // own array), so the same claim is checked directly against that
+        // type too, still while the writer is blocked.
+        let ring = AudioRingBuffer(slotCount: 64, slotCapacityFrames: 8192, maxChannels: 1)
+        var sample: Float = 0.5
+        let ringStart = ContinuousClock.now
+        withUnsafeMutablePointer(to: &sample) { samplePointer in
+            withUnsafePointer(to: samplePointer) { channelData in
+                for _ in 0 ..< 100 {
+                    ring.publish(channelData: channelData, channelCount: 1, frameCount: 1, sampleRate: 16000, hostTime: 1)
+                }
+            }
+        }
+        let ringElapsed = ContinuousClock.now - ringStart
+        #expect(ringElapsed < .milliseconds(100))
 
         _ = try? await session.stop()
         #expect(slowWriter.writeCount >= 1)
+    }
+
+    @Test func midStreamSystemFormatChangeIsHandledWithoutLosingAudio() async throws {
+        let fixture = SessionFixture()
+        defer { fixture.cleanUp() }
+        let session = fixture.makeSession(micStatus: .denied)
+        _ = try await session.start()
+
+        fixture.systemAudioSource.push(systemChunk(seconds: 0.05, sampleRate: 48000))
+        try await Task.sleep(for: .milliseconds(50))
+        // A watchdog rebuild (e.g. an AirPods HFP switch, or the tap's
+        // format-change listener firing) can hand the system side a new
+        // declared sample rate mid-capture, with no gap in the chunks
+        // `FakeSystemAudioSource` delivers in between — the shape
+        // `AudioMixer.ingestSystem` must handle by swapping in a new
+        // resampling pipeline rather than dropping the prior pipeline's
+        // still-buffered samples.
+        fixture.systemAudioSource.push(systemChunk(seconds: 0.05, sampleRate: 44100))
+
+        let url = try await session.stop()
+
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: true)
+        #expect(file.fileFormat.sampleRate == 16000)
+        #expect(file.fileFormat.channelCount == 1)
+        #expect(file.length > 0)
     }
 }

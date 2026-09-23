@@ -25,19 +25,27 @@ import Foundation
 /// allocation, no locking beyond the ring's own bounded `os_unfair_lock`,
 /// no I/O, no logging (NFR-P13). It runs directly on Core Audio's own I/O
 /// thread (`AudioDeviceCreateIOProcIDWithBlock`'s dispatch queue is `nil`)
-/// rather than being handed off to a queue, since there is no longer any
-/// heavier work to move off that thread. Everything else — resampling,
-/// mixing, the watchdog, `WAVWriter.write(_:)` — happens in whatever
-/// consumer calls `drain(_:)`, which `CaptureSession` runs on a background
-/// `Task`.
+/// rather than being handed off to a queue, since the callback does only a
+/// bounds check and a copy — nothing heavier needs to move off that
+/// thread. Everything else — resampling, mixing, the watchdog,
+/// `WAVWriter.write(_:)` — happens in whatever consumer calls `drain(_:)`,
+/// which `CaptureSession` runs on a background `Task`.
 ///
-/// `@unchecked Sendable`: every mutable field other than `ring` (which is
-/// its own thread-safe type) is touched only while `lock` is held,
-/// including from the IOProc callback and from Core Audio's own property-
-/// listener dispatch queue.
+/// `@unchecked Sendable`: every mutable field is either its own
+/// thread-safe type (`ring`, `coordinator`) or touched only from within a
+/// closure `coordinator` itself serializes. Every build/tear-down pass —
+/// `start()`, `rebuild()`, and the property listeners' `rebuildAsync()` —
+/// runs through `coordinator`, so two triggers for one hardware event
+/// (e.g. an AirPods profile switch firing both listeners) never each
+/// build their own tap/aggregate/IOProc set and leak the loser's.
 public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     private static let log = Log(category: "process-tap-source")
-    private static let ringSlotCount = 64
+    /// Sized for a few seconds of headroom at the aggregate device's
+    /// typical ~512-frame/48kHz I/O buffer (~10.67ms/slot): 512 slots is
+    /// roughly 5.5s, enough that a disk stall shorter than that never
+    /// drops system audio even before `AudioMixer`'s own starvation
+    /// padding kicks in.
+    private static let ringSlotCount = 512
     private static let ringSlotCapacityFrames = 8192
 
     private struct ActiveHandles {
@@ -48,52 +56,38 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     }
 
     private let ring = AudioRingBuffer(slotCount: ringSlotCount, slotCapacityFrames: ringSlotCapacityFrames, maxChannels: 1)
-    private let lock = NSLock()
-    private var activeHandles: ActiveHandles?
-    private var isStopped = false
+    private let coordinator = RebuildCoordinator<ActiveHandles>(label: "com.auricle.capture.process-tap.rebuild")
 
     public init() {}
 
     deinit {
         // An instance dropped without an explicit `stop()` must not leak
         // the tap/aggregate device until the process exits.
-        if let handles = activeHandles {
+        if let handles = coordinator.markStopped() {
             Self.tearDown(handles)
         }
     }
 
+    public var ringLossStats: RingLossStats {
+        let stats = ring.snapshotDropStats()
+        return RingLossStats(droppedChunkCount: stats.droppedChunkCount, truncatedChunkCount: stats.truncatedChunkCount)
+    }
+
     public func start() throws {
-        lock.lock()
-        guard activeHandles == nil, !isStopped else {
-            lock.unlock()
+        guard coordinator.isIdle else {
             throw CaptureError.streamInterrupted(reason: "ProcessTapSource.start() called more than once")
         }
-        lock.unlock()
-        try buildAndStart()
+        try coordinator.runSync(build: buildHandles, teardown: Self.tearDown)
     }
 
     public func stop() {
-        lock.lock()
-        let handles = activeHandles
-        activeHandles = nil
-        isStopped = true
-        lock.unlock()
-        if let handles {
+        if let handles = coordinator.markStopped() {
             Self.tearDown(handles)
         }
     }
 
     public func rebuild() throws {
-        lock.lock()
-        let previous = activeHandles
-        activeHandles = nil
-        let stopped = isStopped
-        lock.unlock()
-        guard !stopped else { return }
-        if let previous {
-            Self.tearDown(previous)
-        }
-        try buildAndStart()
+        try coordinator.runSync(build: buildHandles, teardown: Self.tearDown)
     }
 
     public func drain(_ consume: (RawAudioChunk) -> Void) {
@@ -102,15 +96,11 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
 
     // MARK: - Setup / teardown
 
-    /// Builds a fresh tap, aggregate device, IOProc and property listeners,
-    /// and starts it — used by both `start()` and `rebuild()`, since a
-    /// rebuild is exactly "tear down, then run this again."
-    private func buildAndStart() throws {
-        lock.lock()
-        let alreadyStopped = isStopped
-        lock.unlock()
-        guard !alreadyStopped else { return }
-
+    /// Builds a fresh tap, aggregate device, IOProc and property listeners
+    /// and returns them — `coordinator` is what actually installs them
+    /// (and tears down whatever they replace), for both the first
+    /// `start()` and every later `rebuild()`.
+    private func buildHandles() throws -> ActiveHandles {
         let ownProcessObjectID = try Self.processObjectID(forPID: ProcessInfo.processInfo.processIdentifier)
         let tapDescription = CATapDescription(monoGlobalTapButExcludeProcesses: [ownProcessObjectID])
         tapDescription.isPrivate = true
@@ -127,7 +117,7 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
                 let ioProcID = try startIOProc(aggregateDeviceID: aggregateDeviceID, sampleRate: sampleRate)
                 do {
                     let listeners = try installPropertyListeners(tapID: tapID)
-                    installActiveHandles(tapID: tapID, aggregateDeviceID: aggregateDeviceID, ioProcID: ioProcID, listeners: listeners)
+                    return ActiveHandles(tapID: tapID, aggregateDeviceID: aggregateDeviceID, ioProcID: ioProcID, listeners: listeners)
                 } catch {
                     AudioDeviceStop(aggregateDeviceID, ioProcID)
                     AudioDeviceDestroyIOProcID(aggregateDeviceID, ioProcID)
@@ -173,7 +163,8 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     /// down (but not the aggregate device — the caller owns that) if
     /// `AudioDeviceStart` fails after registration already succeeded. Runs
     /// directly on Core Audio's own I/O thread (`inDispatchQueue: nil`):
-    /// `handleInput` no longer does enough work to need moving off it.
+    /// `handleInput` does only a bounds check and a raw-pointer copy, work
+    /// light enough to run directly on it.
     private func startIOProc(aggregateDeviceID: AudioObjectID, sampleRate: Double) throws -> AudioDeviceIOProcID {
         var ioProcID: AudioDeviceIOProcID?
         let createStatus = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, nil) { [weak self] _, inInputData, inInputTime, _, _ in
@@ -192,8 +183,8 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
     }
 
     /// The two property listeners `installPropertyListeners` registers,
-    /// kept together (rather than as a 3-tuple) so `installActiveHandles`
-    /// and `tearDown` can pass them around as one value.
+    /// kept together (rather than as a 3-tuple) so `ActiveHandles` and
+    /// `tearDown` can pass them around as one value.
     private struct PropertyListenerRegistration {
         let queue: DispatchQueue
         let formatListener: AudioObjectPropertyListenerBlock
@@ -224,37 +215,19 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
         return PropertyListenerRegistration(queue: queue, formatListener: formatListener, outputDeviceListener: deviceListener)
     }
 
-    /// Dispatches off whatever thread the property-change listener fired
-    /// on — never runs the actual teardown/rebuild inline on a Core Audio
-    /// callback, to avoid tearing down the very object that just called
-    /// us.
+    /// Routes the actual rebuild through `coordinator.runAsync`, never
+    /// running it inline on whatever thread the property-change listener
+    /// fired on (avoiding tearing down the very object that just called
+    /// us) and never racing a concurrently triggered rebuild.
     private func rebuildAsync() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            try? self?.rebuild()
-        }
-    }
-
-    /// Installs the freshly built handles — unless `stop()` raced ahead of
-    /// this build, in which case the new handles are torn back down
-    /// immediately instead of resurrecting a source told to stop.
-    private func installActiveHandles(tapID: AudioObjectID, aggregateDeviceID: AudioObjectID, ioProcID: AudioDeviceIOProcID, listeners: PropertyListenerRegistration) {
-        let handles = ActiveHandles(tapID: tapID, aggregateDeviceID: aggregateDeviceID, ioProcID: ioProcID, listeners: listeners)
-        lock.lock()
-        let stoppedWhileBuilding = isStopped
-        if !stoppedWhileBuilding {
-            activeHandles = handles
-        }
-        lock.unlock()
-        if stoppedWhileBuilding {
-            Self.tearDown(handles)
-        }
+        coordinator.runAsync(build: buildHandles, teardown: Self.tearDown)
     }
 
     /// Tears down one full tap/aggregate/IOProc/listener set. A free
-    /// function rather than an instance method: it must run on handles
-    /// this instance no longer holds a reference to once a rebuild has
-    /// already installed new ones, and from `deinit`, where `self` is
-    /// already being torn down.
+    /// function rather than an instance method: `coordinator` calls it on
+    /// handles this instance no longer holds a reference to once a
+    /// rebuild has already installed new ones, and from `deinit`, where
+    /// `self` is already being torn down.
     private static func tearDown(_ handles: ActiveHandles) {
         var formatAddress = Self.propertyAddress(kAudioTapPropertyFormat)
         AudioObjectRemovePropertyListenerBlock(handles.tapID, &formatAddress, handles.listeners.queue, handles.listeners.formatListener)
@@ -273,9 +246,17 @@ public final class ProcessTapSource: SystemAudioSource, @unchecked Sendable {
         guard inputData.pointee.mNumberBuffers > 0, let data = inputData.pointee.mBuffers.mData else { return }
         let frameCount = Int(inputData.pointee.mBuffers.mDataByteSize) / MemoryLayout<Float>.size
         guard frameCount > 0 else { return }
+        // A chunk with no valid host time cannot be used for stream
+        // alignment (`CaptureSession.resolveAlignmentIfPossible` compares
+        // host times across the mic and system streams), so it is dropped
+        // here rather than published with a placeholder value that would
+        // read as a real, comparable timestamp downstream.
+        let flags = inputTime.pointee.mFlags
+        guard flags.contains(.hostTimeValid) else { return }
+        let sampleTime = flags.contains(.sampleTimeValid) ? inputTime.pointee.mSampleTime : 0
         let channelPointer = data.assumingMemoryBound(to: Float.self)
         withUnsafePointer(to: channelPointer) { channelData in
-            ring.publish(channelData: channelData, channelCount: 1, frameCount: frameCount, sampleRate: sampleRate, hostTime: inputTime.pointee.mHostTime)
+            ring.publish(channelData: channelData, channelCount: 1, frameCount: frameCount, sampleRate: sampleRate, hostTime: inputTime.pointee.mHostTime, sampleTime: sampleTime)
         }
     }
 

@@ -13,9 +13,22 @@ final class ConsumerAlignmentState {
     var firstMicHostTime: UInt64?
     var heldSystemChunks: [RawAudioChunk] = []
     var heldMicChunks: [RawAudioChunk] = []
+    /// The first and most recently observed (host time, sample time) pair
+    /// from the current tap epoch's system chunks — the effective-rate
+    /// probe's window. `sampleTime` advances by exactly each chunk's frame
+    /// count every callback, so the ratio of its delta to the matching
+    /// `hostTime` delta gives the producer's actual sample rate without
+    /// the rounding error a per-chunk frame-count sum has.
     var rateProbeFirstHostTime: UInt64?
-    var rateProbeFrames = 0
+    var rateProbeFirstSampleTime: Double?
+    var rateProbeLastHostTime: UInt64?
+    var rateProbeLastSampleTime: Double?
     var rateChecked = false
+    /// Set once the effective-rate probe finds the tap's declared rate
+    /// disagrees with the measured one — the rate every subsequent system
+    /// chunk's buffer is built at instead of its own declared
+    /// `sampleRate`, until the next rebuild starts a fresh epoch.
+    var correctedSystemSampleRate: Double?
 
     init(micIncluded: Bool) {
         self.micIncluded = micIncluded
@@ -24,10 +37,14 @@ final class ConsumerAlignmentState {
 
     /// A rebuild starts a fresh tap epoch whose host times aren't
     /// comparable to the old epoch's, so the effective-rate probe's
-    /// baseline must be re-established from the next chunk onward.
+    /// baseline and any correction from the previous epoch must be
+    /// re-established from the next chunk onward.
     func resetRateProbe() {
         rateProbeFirstHostTime = nil
-        rateProbeFrames = 0
+        rateProbeFirstSampleTime = nil
+        rateProbeLastHostTime = nil
+        rateProbeLastSampleTime = nil
         rateChecked = false
+        correctedSystemSampleRate = nil
     }
 }

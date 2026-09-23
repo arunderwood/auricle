@@ -18,6 +18,24 @@ public struct RawAudioChunk: Sendable {
     /// buffered-sample-count parity (Decision: two independent hardware
     /// clocks start at different moments).
     public let hostTime: UInt64
+    /// The producer's running sample counter (`AudioTimeStamp.mSampleTime`
+    /// for the system tap, `AVAudioTime.sampleTime` for the mic) at this
+    /// chunk's first frame — advances by exactly `frameCount` every
+    /// callback, unlike `hostTime`'s wall-clock ticks. `CaptureSession`'s
+    /// effective-rate check divides a `sampleTime` delta by the matching
+    /// `hostTime` delta to measure the producer's actual sample rate
+    /// without any per-chunk rounding error. Defaults to 0 for a caller
+    /// that has no sample-time source to report.
+    public let sampleTime: Double
+
+    public init(samples: [Float], sampleRate: Double, channelCount: Int, frameCount: Int, hostTime: UInt64, sampleTime: Double = 0) {
+        self.samples = samples
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+        self.frameCount = frameCount
+        self.hostTime = hostTime
+        self.sampleTime = sampleTime
+    }
 }
 
 /// A fixed-capacity single-producer/single-consumer ring of raw audio
@@ -32,14 +50,24 @@ public struct RawAudioChunk: Sendable {
 /// `publish`/`peekNext`/`freeNext` — true single-producer/single-consumer
 /// contention over a bounded, sub-microsecond critical section (one slot's
 /// worth of samples, capped at construction), not the kind of hold time
-/// NFR-P13 is worried about. Disk I/O, resampling, mixing, and logging all
-/// now happen only in the consumer, never here.
+/// NFR-P13 is worried about. Disk I/O, resampling, mixing, and logging
+/// happen only in the consumer, never here.
 final class AudioRingBuffer: @unchecked Sendable {
     struct Slot: Sendable {
         var sampleRate: Double = 0
         var channelCount: Int = 0
         var frameCount: Int = 0
         var hostTime: UInt64 = 0
+        var sampleTime: Double = 0
+    }
+
+    /// How many chunks `publish` has dropped (the ring was full) or
+    /// truncated (the chunk was larger than one slot's fixed capacity)
+    /// since this ring was created. Guarded by `unfairLock` alongside the
+    /// index state it's updated next to.
+    struct DropStats: Sendable, Equatable {
+        var droppedChunkCount = 0
+        var truncatedChunkCount = 0
     }
 
     private let slotCapacityFrames: Int
@@ -56,6 +84,7 @@ final class AudioRingBuffer: @unchecked Sendable {
     /// reads to answer "has the producer stopped calling back entirely" —
     /// distinct from a slot arriving that happens to be all zero.
     private var lastPublishHostTime: UInt64 = 0
+    private var dropStats = DropStats()
 
     init(slotCount: Int, slotCapacityFrames: Int, maxChannels: Int) {
         precondition(slotCount > 0 && slotCapacityFrames > 0 && maxChannels > 0)
@@ -76,18 +105,20 @@ final class AudioRingBuffer: @unchecked Sendable {
 
     /// Producer-only (the real-time callback). `channelData[c]` must have
     /// at least `frameCount` valid samples for each `c < channelCount`.
-    /// Silently drops the chunk if the ring is full or `channelCount`/
-    /// `frameCount` exceed this ring's fixed capacity — logging or
-    /// throwing here would itself violate the real-time constraint this
-    /// type exists to uphold. `AudioMixer`'s starvation padding and
+    /// Silently drops the chunk if the ring is full, or truncates it to
+    /// `slotCapacityFrames` if it's larger than one slot's fixed capacity
+    /// — logging or throwing here would itself violate the real-time
+    /// constraint this type exists to uphold; `dropStats` is what a
+    /// consumer reads instead. `AudioMixer`'s starvation padding and
     /// `secondsSinceLastPublish`'s "no callback" signal are what a caller
-    /// watches instead.
+    /// also watches.
     func publish(
         channelData: UnsafePointer<UnsafeMutablePointer<Float>>,
         channelCount: Int,
         frameCount: Int,
         sampleRate: Double,
         hostTime: UInt64,
+        sampleTime: Double = 0,
     ) {
         guard channelCount > 0, channelCount <= maxChannels, frameCount > 0 else { return }
         let framesToCopy = min(frameCount, slotCapacityFrames)
@@ -95,14 +126,20 @@ final class AudioRingBuffer: @unchecked Sendable {
         os_unfair_lock_lock(&unfairLock)
         defer { os_unfair_lock_unlock(&unfairLock) }
         lastPublishHostTime = hostTime
-        guard count < slotCount else { return }
+        if frameCount > slotCapacityFrames {
+            dropStats.truncatedChunkCount += 1
+        }
+        guard count < slotCount else {
+            dropStats.droppedChunkCount += 1
+            return
+        }
 
         let slot = writeIndex
         let base = samples.advanced(by: slot * slotCapacityFrames * maxChannels)
         for channel in 0 ..< channelCount {
             base.advanced(by: channel * slotCapacityFrames).update(from: channelData[channel], count: framesToCopy)
         }
-        metadata[slot] = Slot(sampleRate: sampleRate, channelCount: channelCount, frameCount: framesToCopy, hostTime: hostTime)
+        metadata[slot] = Slot(sampleRate: sampleRate, channelCount: channelCount, frameCount: framesToCopy, hostTime: hostTime, sampleTime: sampleTime)
         writeIndex = (writeIndex + 1) % slotCount
         count += 1
     }
@@ -145,7 +182,10 @@ final class AudioRingBuffer: @unchecked Sendable {
                 }
             }
             freeNext()
-            consume(RawAudioChunk(samples: flat, sampleRate: meta.sampleRate, channelCount: meta.channelCount, frameCount: meta.frameCount, hostTime: meta.hostTime))
+            consume(RawAudioChunk(
+                samples: flat, sampleRate: meta.sampleRate, channelCount: meta.channelCount,
+                frameCount: meta.frameCount, hostTime: meta.hostTime, sampleTime: meta.sampleTime,
+            ))
         }
     }
 
@@ -161,5 +201,13 @@ final class AudioRingBuffer: @unchecked Sendable {
         os_unfair_lock_unlock(&unfairLock)
         guard last > 0, now > last else { return 0 }
         return hostTicksToSeconds(now - last)
+    }
+
+    /// Consumer-only: the running drop/truncation counts since this ring
+    /// was created.
+    func snapshotDropStats() -> DropStats {
+        os_unfair_lock_lock(&unfairLock)
+        defer { os_unfair_lock_unlock(&unfairLock) }
+        return dropStats
     }
 }
