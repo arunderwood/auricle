@@ -506,3 +506,23 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 
 - closes: `_bmad-output/implementation-artifacts/spec-5-3-wavwriter-streaming-pcm-16-bit-16khz-mono-wav.md`, "`WAVWriter` has no `Sendable`/actor isolation and no lock"
   resolution: Settled by Story 5.2's actual usage pattern, as this entry anticipated. `WAVWriter` is now driven from exactly one place: the single background consumer `Task` `CaptureSession.runConsumerLoop()` launches in `start()`. The mic-tap and Core Audio IOProc callbacks never touch it directly — they only publish raw frames into a per-source `AudioRingBuffer` (`Sources/Capture/AudioRingBuffer.swift`); the consumer task is the sole thread that drains those rings, mixes, and calls `write(_:)`/`finalize()`. `CaptureSession.stop()` stops both sources, cancels that task, and `await`s its exit before calling `finalize()`, so a `write()` can never race a `finalize()` — the single-writer contract is enforced by construction, not by adding locking or idempotency to `WAVWriter` itself. Fix lands in `Sources/Capture/CaptureSession.swift` (PR #118 review, following an external review of PR #116).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
+  summary: The Microphone step's [Try Again] can never appear in the real app.
+  evidence: `PermissionChecker`'s production `requestMicrophone` maps `AVCaptureDevice.requestAccess`'s Bool to `.granted`/`.denied` only (`Sources/Permissions/PermissionChecker.swift`), so `request(.microphone)` never returns `.notDetermined`, the only status `PermissionStepContent` offers Try Again for. The rule matches the Story 5.8 AC; making it reachable is a Story 5.1 checker change. Severity low. Logged from the Story 5.8 review (PR #119).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
+  summary: After Open Settings, a user who grants Microphone and returns still sees the denied copy and a Skip caption ("Recordings will have system audio only.") that is now false.
+  evidence: `OnboardingCoordinator.permissionStatus` is never re-read after the request. `PermissionChecker` clears its memo on app activation, but nothing re-checks. Capture reads the real grant at record time, so the recording is correct. Fix: re-check `checker.check(category)` when the app becomes active and advance on `.granted`. Severity low. Logged from the Story 5.8 review (PR #119).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
+  summary: `OnboardingCoordinator`'s default `permissionSteps` is still the always-advance `DefaultPermissionStep` map. Only `AuricleApp` wires the real steps, and no test covers that wiring.
+  evidence: A regression in `App/Auricle/AuricleApp.swift`'s `makeOnboardingCoordinator()` would silently restore request-then-advance with no denied-state screens (AGENTS.md's `App/`-coverage pitfall). Fix: a `Sources/AppUI` factory for the production step map with a test, or make the real steps the default. Severity low. Logged from the Story 5.8 review (PR #119).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
+  summary: On a denied Microphone step, the prominent button is [Skip], not [Open Settings].
+  evidence: `PermissionStepView.actionButton` styles `content.actions.last` as `.borderedProminent` (`App/Auricle/Onboarding/PermissionStepView.swift`), and the denied actions are `[.openSettings, .skip]`. Fix: a `primaryAction` field on `PermissionStepContent`, asserted in `PermissionStepContentTests`. Severity low. Logged from the Story 5.8 review (PR #119).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
+  summary: Two System Audio tests in `Tests/AppUITests/PermissionStepsTests.swift` each wait a real 1 s, because `SystemAudioPermissionProbe.prompt`'s sleep is hard-coded.
+  evidence: `SystemAudioPermissionProbe.prompt(source:)` calls `Task.sleep(for: .seconds(1))` with no duration parameter (`Sources/Capture/CaptureSession.swift`). Fix: inject the duration, defaulting to 1 s. Severity low. Logged from the Story 5.8 review (PR #119).

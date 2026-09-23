@@ -299,6 +299,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            opener: { _ in true },
         )
         #expect(coordinator.step == .welcome)
     }
@@ -309,6 +310,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            opener: { _ in true },
         )
 
         #expect(coordinator.step == .welcome)
@@ -329,6 +331,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            opener: { _ in true },
         )
         for _ in OnboardingStep.allCases {
             coordinator.advance()
@@ -347,6 +350,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            opener: { _ in true },
         )
         coordinator.advance() // welcome -> microphone
 
@@ -362,6 +366,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            opener: { _ in true },
         )
 
         await coordinator.requestCurrentPermission() // step is .welcome
@@ -384,6 +389,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: configure,
             applicationSupportDirectory: applicationSupportDirectory,
+            opener: { _ in true },
         )
 
         #expect(!OnboardingMarker.exists(applicationSupportDirectory: applicationSupportDirectory))
@@ -400,6 +406,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: applicationSupportDirectory,
+            opener: { _ in true },
         )
 
         #expect(throws: OnboardingConfigureModel.FinishError.self) {
