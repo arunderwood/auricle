@@ -237,7 +237,11 @@ func metadata(_ event: StageEvent?) throws -> CaptureMeta {
     return try JSONDecoder().decode(CaptureMeta.self, from: Data(json.utf8))
 }
 
-func eventually(timeout: TimeInterval = 3, _ condition: () async throws -> Bool) async throws {
+/// The timeout only bounds a failing test: a passing condition returns on the
+/// first poll that sees it. It is generous because a loaded CI runner can
+/// starve the cooperative pool for several seconds before a background task
+/// such as the system-audio backoff is scheduled.
+func eventually(timeout: TimeInterval = 30, _ condition: () async throws -> Bool) async throws {
     let deadline = Date().addingTimeInterval(timeout)
     while try await !condition() {
         if Date() > deadline {
