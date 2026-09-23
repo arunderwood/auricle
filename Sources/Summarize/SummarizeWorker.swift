@@ -25,6 +25,7 @@ public enum SummarizeWorker {
         config: SummarizerConfig,
         calendarSource: (any CalendarSource)?,
         publishAnyway: Bool,
+        selfWikilink: String? = nil,
     ) async -> WorkerExitStatus {
         await exitStatus {
             try await SummarizeStage.run(
@@ -37,6 +38,7 @@ public enum SummarizeWorker {
                 config: config,
                 calendarSource: calendarSource,
                 publishAnyway: publishAnyway,
+                selfWikilink: selfWikilink,
             )
         }
     }

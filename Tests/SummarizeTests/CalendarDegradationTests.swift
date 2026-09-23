@@ -177,6 +177,62 @@ private func runExpectingDegradation(_ source: StubCalendarSource?) async throws
     #expect(try await fixture.state() == "persisting")
 }
 
+// MARK: - Configured self.wikilink
+
+@Test func aConfiguredSelfWikilinkWinsOverTheCalendarSelf() async throws {
+    let fixture = try await makeFixture()
+    defer { fixture.cleanUp() }
+    let primary = StageStubStrategy(.success(makeStageGrounded()))
+
+    _ = try await fixture.run(primary: primary, calendarSource: StubCalendarSource(.success(makeEvent())), selfWikilink: "[[Me]]")
+
+    #expect(try rawJSON(at: fixture.summaryURL())["self_wikilink"] as? String == "[[Me]]")
+    #expect(try fixture.readSummary().attendees == ["[[Me]]", "[[Ben Ng]]"])
+}
+
+@Test func aConfiguredSelfWikilinkWinsOverTheCalendarSelfInThePublishAnywayStub() async throws {
+    let fixture = try await makeFixture()
+    defer { fixture.cleanUp() }
+    let failing = StageStubStrategy(.failure(SummarizerError.malformedResponse))
+
+    _ = try await fixture.run(
+        primary: failing,
+        calendarSource: StubCalendarSource(.success(makeEvent())),
+        publishAnyway: true,
+        selfWikilink: "[[Me]]",
+    )
+
+    let raw = try rawJSON(at: fixture.summaryURL())
+    #expect(raw["self_wikilink"] as? String == "[[Me]]")
+    #expect(raw["attendees"] as? [String] == ["[[Me]]", "[[Ben Ng]]"])
+}
+
+@Test func withoutAConfiguredSelfWikilinkTheCalendarSelfIsWritten() async throws {
+    let fixture = try await makeFixture()
+    defer { fixture.cleanUp() }
+    let primary = StageStubStrategy(.success(makeStageGrounded()))
+
+    _ = try await fixture.run(primary: primary, calendarSource: StubCalendarSource(.success(makeEvent())), selfWikilink: nil)
+
+    #expect(try rawJSON(at: fixture.summaryURL())["self_wikilink"] as? String == "[[Ada Lovelace]]")
+}
+
+@Test func aConfiguredSelfWikilinkIsWrittenWhenTheCalendarDegrades() async throws {
+    let fixture = try await makeFixture()
+    defer { fixture.cleanUp() }
+    let primary = StageStubStrategy(.success(makeStageGrounded()))
+
+    _ = try await fixture.run(
+        primary: primary,
+        calendarSource: StubCalendarSource(.failure(CalendarError.unreachable)),
+        selfWikilink: "[[Me]]",
+    )
+
+    let raw = try rawJSON(at: fixture.summaryURL())
+    #expect(raw["self_wikilink"] as? String == "[[Me]]")
+    #expect(raw["needs_calendar_enrichment"] as? Bool == true)
+}
+
 @Test func aMatchedEventPublishesTheStandardNoteThatTheReaderParses() async throws {
     let fixture = try await makeFixture()
     defer { fixture.cleanUp() }

@@ -133,6 +133,7 @@ struct InternalStageWorker: AsyncParsableCommand {
             glossary: vaultGlossary(vaultPath: vaultPath),
             config: SummarizerConfig(),
             calendarSource: calendarSource(),
+            selfWikilink: (try? Config.load())?.selfWikilink,
         )
     }
 

@@ -7,6 +7,7 @@ import Persist
 import State
 import SwiftUI
 import UserNotifications
+import VaultGlossary
 
 /// Notification authorization is requested at runtime via UNUserNotificationCenter
 /// and gated by NSUserNotificationsUsageDescription in Info.plist — macOS has no
@@ -54,6 +55,14 @@ struct AuricleApp: App {
             writeVaultPath: { try ConfigWriter.set("vault_path", to: $0.path) },
             writeAPIKey: { try KeychainAPIKey.write($0) },
             configuredVaultPath: { (try? Config.load())?.vaultPath },
+            writeSelfWikilink: { try ConfigWriter.set("self.wikilink", to: $0) },
+            configuredSelfWikilink: { (try? Config.load())?.selfWikilink },
+            fullUserName: NSFullUserName(),
+            vaultTerms: { url in
+                await Task.detached(priority: .userInitiated) {
+                    VaultGlossaryBuilder(vaultPath: url).buildOrEmpty()
+                }.value
+            },
         )
         return OnboardingCoordinator(
             checker: permissionChecker,

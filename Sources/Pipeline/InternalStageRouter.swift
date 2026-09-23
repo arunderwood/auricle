@@ -55,17 +55,21 @@ public enum InternalStageRouter {
         public let glossary: Glossary
         public let config: SummarizerConfig
         public let calendarSource: (any CalendarSource)?
+        /// The configured `self.wikilink`, which wins over the calendar's self identity.
+        public let selfWikilink: String?
 
         public init(
             orchestrator: SummarizerOrchestrator,
             glossary: Glossary,
             config: SummarizerConfig,
             calendarSource: (any CalendarSource)?,
+            selfWikilink: String?,
         ) {
             self.orchestrator = orchestrator
             self.glossary = glossary
             self.config = config
             self.calendarSource = calendarSource
+            self.selfWikilink = selfWikilink
         }
     }
 
@@ -172,6 +176,7 @@ public enum InternalStageRouter {
             config: dependencies.config,
             calendarSource: dependencies.calendarSource,
             publishAnyway: arguments.publishAnyway,
+            selfWikilink: dependencies.selfWikilink,
         )
     }
 }

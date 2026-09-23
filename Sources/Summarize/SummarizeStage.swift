@@ -55,6 +55,7 @@ public enum SummarizeStage {
         timeZone: TimeZone = .current,
         calendarSource: (any CalendarSource)? = nil,
         publishAnyway: Bool = false,
+        selfWikilink: String? = nil,
     ) async throws -> StageRunner.StageOutcome {
         try await run(
             meetingID: meetingID,
@@ -67,6 +68,7 @@ public enum SummarizeStage {
             timeZone: timeZone,
             calendarSource: calendarSource,
             publishAnyway: publishAnyway,
+            selfWikilink: selfWikilink,
             promptSetHash: bundledPromptSetHash,
         )
     }
@@ -85,6 +87,7 @@ public enum SummarizeStage {
         timeZone: TimeZone = .current,
         calendarSource: (any CalendarSource)? = nil,
         publishAnyway: Bool = false,
+        selfWikilink: String? = nil,
         promptSetHash: @escaping @Sendable (SummarizationMode) throws -> String = bundledPromptSetHash,
     ) async throws -> StageRunner.StageOutcome {
         guard let meeting = try await stateStore.fetchMeeting(id: meetingID.rawValue) else {
@@ -100,6 +103,7 @@ public enum SummarizeStage {
                         timeZone: timeZone,
                         calendarSource: calendarSource,
                         publishAnyway: publishAnyway,
+                        selfWikilink: selfWikilink,
                         promptSetHash: promptSetHash,
                     ),
                     stateStore: stateStore,
@@ -138,6 +142,9 @@ public enum SummarizeStage {
         /// A failure after the calendar step leaves a stub summary for persist
         /// instead of failing the stage.
         let publishAnyway: Bool
+        /// The configured `self.wikilink`; `nil` leaves the calendar's self
+        /// identity, if any, to supply the note's self link.
+        let selfWikilink: String?
         let promptSetHash: @Sendable (SummarizationMode) throws -> String
     }
 
@@ -185,6 +192,7 @@ public enum SummarizeStage {
             artifact = try SummaryArtifactMapper.artifact(
                 title: title,
                 match: enrichment.match,
+                configuredSelfWikilink: context.selfWikilink,
                 grounded: outcome.summary,
                 transcriptSegments: segments,
                 needsAttribution: needsAttribution,
@@ -197,6 +205,7 @@ public enum SummarizeStage {
                 stub: SummaryArtifactMapper.stubArtifact(
                     title: title,
                     match: enrichment.match,
+                    configuredSelfWikilink: context.selfWikilink,
                     transcriptSegments: segments,
                     needsAttribution: needsAttribution,
                 ),

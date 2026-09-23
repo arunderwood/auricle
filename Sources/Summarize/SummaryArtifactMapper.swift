@@ -84,9 +84,14 @@ enum SummaryArtifactMapper {
     /// event title, no attendees and no self link, and `needsCalendarEnrichment`
     /// is set so persist tags the note for a later backfill. With one, the
     /// event supplies all four and the tag is not set.
+    ///
+    /// `configuredSelfWikilink` is the user's own `self.wikilink` from config;
+    /// when set it wins over the calendar's self identity, with or without a
+    /// match, because it is the user's explicit statement of who they are.
     static func artifact(
         title: String,
         match: CalendarEnrichment.Match? = nil,
+        configuredSelfWikilink: String? = nil,
         grounded: SummaryWithGrounding,
         transcriptSegments: [TranscriptSegmentArtifact],
         needsAttribution: Bool,
@@ -95,8 +100,8 @@ enum SummaryArtifactMapper {
         try SummaryArtifact(
             title: match?.title ?? title,
             calendarEventTitle: match?.title,
-            attendees: match?.attendeeWikilinks ?? [],
-            selfWikilink: match?.selfWikilink,
+            attendees: attendees(of: match, configuredSelfWikilink: configuredSelfWikilink),
+            selfWikilink: configuredSelfWikilink ?? match?.selfWikilink,
             needsAttribution: needsAttribution,
             needsCalendarEnrichment: match == nil,
             summary: grounded.summary,
@@ -112,14 +117,15 @@ enum SummaryArtifactMapper {
     static func stubArtifact(
         title: String,
         match: CalendarEnrichment.Match? = nil,
+        configuredSelfWikilink: String? = nil,
         transcriptSegments: [TranscriptSegmentArtifact],
         needsAttribution: Bool,
     ) -> SummaryArtifact {
         SummaryArtifact(
             title: match?.title ?? title,
             calendarEventTitle: match?.title,
-            attendees: match?.attendeeWikilinks ?? [],
-            selfWikilink: match?.selfWikilink,
+            attendees: attendees(of: match, configuredSelfWikilink: configuredSelfWikilink),
+            selfWikilink: configuredSelfWikilink ?? match?.selfWikilink,
             needsAttribution: needsAttribution,
             needsCalendarEnrichment: match == nil,
             needsSummary: true,
@@ -128,6 +134,15 @@ enum SummaryArtifactMapper {
             decisions: [],
             transcriptSegments: transcriptSegments,
         )
+    }
+
+    /// The event's attendee links, with the calendar's self link replaced by
+    /// the configured one when both exist: persist recognizes the user among
+    /// the attendees by `selfWikilink`, so the two must name the same page.
+    private static func attendees(of match: CalendarEnrichment.Match?, configuredSelfWikilink: String?) -> [String] {
+        let attendees = match?.attendeeWikilinks ?? []
+        guard let configuredSelfWikilink, let calendarSelf = match?.selfWikilink else { return attendees }
+        return attendees.map { $0 == calendarSelf ? configuredSelfWikilink : $0 }
     }
 
     private static func quotedItems(_ items: [GroundedItem], transcriptBytes: [UInt8]) throws -> [QuotedItemArtifact] {
