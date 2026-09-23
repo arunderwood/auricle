@@ -67,7 +67,9 @@ public struct StageEventRecord: Sendable {
 /// `StageRunner`'s two-transaction pattern or a future direct `retried`
 /// call, funnels through `record(event:)` rather than calling
 /// `StateStore.recordStageTransition`/`insertStageEvent` directly — this
-/// actor wraps those calls, unchanged, and is the only caller of them.
+/// actor wraps those calls, unchanged, and is the only caller of them. The
+/// capture stage's `beginCapture`/`finishCapture` writes route through
+/// `recordCaptureStarted`/`recordCaptureFinished` for the same reason.
 public actor StageEventLogger {
     /// The `StageMetadata` shape this logger's callers currently encode
     /// against (Decision 4.5). A future incompatible reshaping of
@@ -90,6 +92,12 @@ public actor StageEventLogger {
         /// state or `updated_at` to guard. Rejected rather than ignored, so a
         /// caller that believes it is guarding something finds out.
         case unexpectedStateGuard(kind: StageEventKind)
+        /// A capture finishes as `completed` or `failed`; `started` belongs to
+        /// `recordCaptureStarted` and `retried` to `record(event:)`.
+        case invalidCaptureFinish(kind: StageEventKind)
+        /// A capture can finish only into a state the transition table allows
+        /// capture to leave `recording` for.
+        case captureTargetNotAllowed(targetState: PipelineState)
     }
 
     private let stateStore: StateStore
@@ -137,5 +145,61 @@ public actor StageEventLogger {
                 ),
             )
         }
+    }
+
+    /// Capture's Txn A: inserts `meeting` (already in `recording`) and its
+    /// `capture`/`started` event in one `StateStore` write. Capture creates its
+    /// own row and runs for hours between its two transactions, so it does not
+    /// go through `StageRunner`.
+    public func recordCaptureStarted(meeting: Meeting, occurredAt: String, metadataJSON: String? = nil) async throws {
+        try await stateStore.beginCapture(
+            meeting: meeting,
+            event: StageEvent(
+                meetingID: meeting.id,
+                stage: PipelineStage.capture.rawValue,
+                event: StageEventKind.started.rawValue,
+                occurredAt: occurredAt,
+                metadataJSON: metadataJSON,
+                metadataSchemaVersion: Self.currentMetadataSchemaVersion,
+            ),
+        )
+    }
+
+    /// Capture's Txn B: the end time, duration and `targetState` plus the
+    /// `completed` or `failed` event, written only while the row is still
+    /// `recording` (`StateStore.finishCapture`).
+    public func recordCaptureFinished(
+        meetingID: MeetingID,
+        kind: StageEventKind,
+        targetState: PipelineState,
+        occurredAt: String,
+        endedAt: String,
+        durationSeconds: Int?,
+        durationMS: Int? = nil,
+        errorMessage: String? = nil,
+        metadataJSON: String? = nil,
+    ) async throws {
+        guard kind == .completed || kind == .failed else {
+            throw RecordError.invalidCaptureFinish(kind: kind)
+        }
+        guard PipelineTransitions.allowedTargets(stage: .capture, activeState: .recording)?.contains(targetState) == true else {
+            throw RecordError.captureTargetNotAllowed(targetState: targetState)
+        }
+        try await stateStore.finishCapture(
+            meetingID: meetingID.rawValue,
+            endedAt: endedAt,
+            durationSeconds: durationSeconds,
+            targetState: targetState.rawValue,
+            event: StageEvent(
+                meetingID: meetingID.rawValue,
+                stage: PipelineStage.capture.rawValue,
+                event: kind.rawValue,
+                occurredAt: occurredAt,
+                durationMS: durationMS,
+                errorMessage: errorMessage,
+                metadataJSON: metadataJSON,
+                metadataSchemaVersion: Self.currentMetadataSchemaVersion,
+            ),
+        )
     }
 }

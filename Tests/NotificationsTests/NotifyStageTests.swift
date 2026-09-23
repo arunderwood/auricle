@@ -12,10 +12,13 @@ private struct RecordingNotifier: Notifier {
     func fire(meetingID _: MeetingID, title _: String, vaultPath: String) async {
         calls.value.append(vaultPath)
     }
+
+    func fireCaptureFailed(meetingID _: MeetingID, reason _: CaptureFailureReason) async {}
 }
 
 private struct NoopNotifier: Notifier {
     func fire(meetingID _: MeetingID, title _: String, vaultPath _: String) async {}
+    func fireCaptureFailed(meetingID _: MeetingID, reason _: CaptureFailureReason) async {}
 }
 
 final class LockedBox<T>: @unchecked Sendable {

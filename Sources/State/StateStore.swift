@@ -32,6 +32,10 @@ public enum StateStoreError: Error, Sendable, Equatable {
     /// The file exists but is empty or holds fewer migrations than this
     /// binary registers. Only the GUI migrates.
     case schemaNotMigrated
+    /// `beginCapture`/`finishCapture` were handed an event that is not a
+    /// `capture` event for the meeting being written, or `beginCapture` one
+    /// that is not `started`.
+    case invalidCaptureEvent(id: String)
     /// The file holds a migration this binary does not register: a newer
     /// binary has migrated it.
     case schemaSuperseded
@@ -120,8 +124,9 @@ public actor StateStore {
 
     /// Column-scoped writers, not a whole-row update: a caller holding an older
     /// `Meeting` snapshot would write every column back, `state` included, and
-    /// undo any transition made since. `recordStageTransition` is the only
-    /// writer of `meetings.state`.
+    /// undo any transition made since. `recordStageTransition`,
+    /// `beginCapture` and `finishCapture` are the only writers of
+    /// `meetings.state`.
     public func setVaultNotePath(meetingID: String, path: String) async throws {
         try await writer.write { db in
             try db.execute(sql: "UPDATE meetings SET vault_note_path = ? WHERE id = ?", arguments: [path, meetingID])
@@ -229,6 +234,64 @@ public actor StateStore {
             return stageEvent
         }
     }
+
+    /// Txn A of a live capture: the `meetings` row and its `capture`/`started`
+    /// event in one write, so a crash can never leave a `recording` row with no
+    /// event or an event with no row. Capture is the one stage that creates its
+    /// own row, which is why it has its own pair of writes instead of
+    /// `recordStageTransition`.
+    public func beginCapture(meeting: Meeting, event: StageEvent) async throws {
+        guard event.meetingID == meeting.id, event.stage == Self.captureStage, event.event == "started" else {
+            throw StateStoreError.invalidCaptureEvent(id: meeting.id)
+        }
+        try await writer.write { db in
+            var meeting = meeting
+            try meeting.insert(db)
+            var event = event
+            try event.insert(db)
+        }
+    }
+
+    /// Txn B of a live capture: `capture_ended_at`, `duration_seconds` and
+    /// `state` plus the `completed`/`failed` event in one write. Guarded on
+    /// `state = 'recording'`, so a capture already finished by `stop`, by a
+    /// fault or by launch recovery is never finished twice: a row in any other
+    /// state throws `staleWrite`, a missing row `meetingNotFound`, and neither
+    /// lands the event.
+    @discardableResult
+    public func finishCapture(
+        meetingID: String,
+        endedAt: String,
+        durationSeconds: Int?,
+        targetState: String,
+        event: StageEvent,
+    ) async throws -> StageEvent {
+        guard event.meetingID == meetingID, event.stage == Self.captureStage else {
+            throw StateStoreError.invalidCaptureEvent(id: meetingID)
+        }
+        return try await writer.write { db in
+            try db.execute(
+                sql: """
+                UPDATE meetings SET capture_ended_at = ?, duration_seconds = ?, state = ?
+                WHERE id = ? AND state = 'recording'
+                """,
+                arguments: [endedAt, durationSeconds, targetState, meetingID],
+            )
+            guard db.changesCount > 0 else {
+                let rowExists = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS (SELECT 1 FROM meetings WHERE id = ?)",
+                    arguments: [meetingID],
+                ) ?? false
+                throw rowExists ? StateStoreError.staleWrite(id: meetingID) : StateStoreError.meetingNotFound(id: meetingID)
+            }
+            var stageEvent = event
+            try stageEvent.insert(db)
+            return stageEvent
+        }
+    }
+
+    private static let captureStage = "capture"
 
     /// Oldest first. `id` breaks ties because `occurred_at` is whole seconds
     /// wherever application code wrote it, so a `started` and a `completed` from

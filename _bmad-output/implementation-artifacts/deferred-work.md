@@ -507,6 +507,12 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - closes: `_bmad-output/implementation-artifacts/spec-5-3-wavwriter-streaming-pcm-16-bit-16khz-mono-wav.md`, "`WAVWriter` has no `Sendable`/actor isolation and no lock"
   resolution: Settled by Story 5.2's actual usage pattern, as this entry anticipated. `WAVWriter` is now driven from exactly one place: the single background consumer `Task` `CaptureSession.runConsumerLoop()` launches in `start()`. The mic-tap and Core Audio IOProc callbacks never touch it directly — they only publish raw frames into a per-source `AudioRingBuffer` (`Sources/Capture/AudioRingBuffer.swift`); the consumer task is the sole thread that drains those rings, mixes, and calls `write(_:)`/`finalize()`. `CaptureSession.stop()` stops both sources, cancels that task, and `await`s its exit before calling `finalize()`, so a `write()` can never race a `finalize()` — the single-writer contract is enforced by construction, not by adding locking or idempotency to `WAVWriter` itself. Fix lands in `Sources/Capture/CaptureSession.swift` (PR #118 review, following an external review of PR #116).
 
+- closes: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`, "The note date and the `meeting-at-<HHMM>` slug use the time zone at persist time"
+  resolution: Built in Story 5.4 (`spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`). Migration 005 adds the nullable `meetings.capture_time_zone`; `CaptureStage.start` stores `TimeZone.current.identifier` in it, and imported rows leave it NULL. `Meeting.localTimeZone(fallback:)` resolves it, falling back to the current zone for NULL or an identifier `TimeZone` does not know. `PersistStage` renders the note date and `meeting-at-<HHMM>` with it, and `SummarizeStage` the generic title. Fix lives in `Sources/State/Meeting.swift`, `Sources/Persist/PersistStage.swift` and `Sources/Summarize/SummarizeStage.swift`.
+
+- closes: `_bmad-output/implementation-artifacts/epic-2-retro-2026-09-18.md`, "`PersistStage.TimeSource.timeZone` dates both the note and the `--rerun-<date>` suffix"
+  resolution: Built in Story 5.4 (`spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`). `TimeSource.timeZone` stays the current zone and still dates the `--rerun-<date>` suffix; the capture zone is read from the meeting row per publish, so `TimeSource` needs no second field. `Tests/PersistTests/PersistStageCaptureZoneTests.swift` covers a re-run whose current zone and capture zone fall on different dates.
+
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
   summary: The Microphone step's [Try Again] can never appear in the real app.
   evidence: `PermissionChecker`'s production `requestMicrophone` maps `AVCaptureDevice.requestAccess`'s Bool to `.granted`/`.denied` only (`Sources/Permissions/PermissionChecker.swift`), so `request(.microphone)` never returns `.notDetermined`, the only status `PermissionStepContent` offers Try Again for. The rule matches the Story 5.8 AC; making it reachable is a Story 5.1 checker change. Severity low. Logged from the Story 5.8 review (PR #119).
@@ -526,6 +532,26 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-8-j0-permission-steps-microphone-system-audio-notifications.md`
   summary: Two System Audio tests in `Tests/AppUITests/PermissionStepsTests.swift` each wait a real 1 s, because `SystemAudioPermissionProbe.prompt`'s sleep is hard-coded.
   evidence: `SystemAudioPermissionProbe.prompt(source:)` calls `Task.sleep(for: .seconds(1))` with no duration parameter (`Sources/Capture/CaptureSession.swift`). Fix: inject the duration, defaulting to 1 s. Severity low. Logged from the Story 5.8 review (PR #119).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`
+  summary: `LiveCaptureSession.restart(.microphone)` restarts the engine but cannot reinstall the input tap, which `CaptureSession` installed with the old device format.
+  evidence: maybe-false. After an `AVAudioEngineConfigurationChange` (device switch) the tap may need rebuilding; the restart could then succeed while the mic delivers nothing or the wrong rate, with no mic watchdog to notice. Settled by Story 5.6's live check: switch input devices mid-capture and confirm mic audio continues. The fix needs `CaptureSession.swift`, which a separate fix PR owns. Location `Sources/Capture/LiveCaptureSession.swift`. Severity medium (unverified). Logged from the Story 5.4 review (PR #122).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`
+  summary: One device change may post several `AVAudioEngineConfigurationChange` notifications, each yielding a transient fault toward the 3-in-30s cap.
+  evidence: maybe-false. If three post for one change before a restart lands, the capture fails as `transient_stream_errors`. Settled by counting notifications per device switch in Story 5.6's live run; if confirmed, coalesce faults until `restart` runs. Location `Sources/Capture/LiveCaptureSession.swift`. Severity medium (unverified). Logged from the Story 5.4 review (PR #122).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`
+  summary: A restart that fails slowly (15s or more each) lets earlier faults leave the 30s window, so `handle` and `restart` can recurse without reaching the cap.
+  evidence: maybe-false. `ProcessTapSource.rebuild` and `AVAudioEngine.start` are expected to fail fast. Settled by timing a failing rebuild on hardware; if slow, cap consecutive failed restarts regardless of the window. Location `Sources/Capture/CaptureStage.swift`. Severity medium (unverified). Logged from the Story 5.4 review (PR #122).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`
+  summary: A System Audio revocation that Core Audio does report is classified `transient`, so it degrades the capture to microphone-only (or fails as `all_sources_lost` when no microphone is in the mix) with no notification, instead of failing as `permission_revoked_midstream`.
+  evidence: maybe-false. The spec assumes a revoked tap only delivers exact zeros. Settled by revoking System Audio Recording mid-capture in Story 5.6 and reading the OSStatus the rebuild returns; if distinct, map it to `permissionRevoked(.systemAudio)`. Location `Sources/Capture/CaptureFaults.swift`. Severity medium (unverified). Logged from the Story 5.4 review (PR #122).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-4-capture-stage-state-machine-crash-recovery-revocation.md`
+  summary: Launch recovery treats any `recording` row with no live capture in this process as orphaned, so a second process recording concurrently would have its row settled mid-capture.
+  evidence: maybe-false today: only the single GUI process captures. Becomes real when Story 9.5's `record` CLI verb or a second GUI instance can capture; settle there with an owner marker (PID or lease) on the row. Location `Sources/Capture/CaptureStage.swift`. Severity medium (unverified). Logged from the Story 5.4 review (PR #122).
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-process-tap-avaudioengine-capture-session-audiomixer.md`
   summary: `SystemAudioWatchdog`'s no-callback rebuild threshold is 5 seconds in production (`CaptureSession.noCallbackThreshold`'s default), but the Story 5.2 acceptance criteria describe the watchdog as rebuilding "at most once per 30s."

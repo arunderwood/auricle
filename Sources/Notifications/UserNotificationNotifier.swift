@@ -16,7 +16,8 @@ public protocol NotificationCenterPosting: Sendable {
 }
 
 /// The GUI's notifier. Permission revoked or a failed post is logged and
-/// dropped: the note is already published.
+/// dropped: the note is already published, or the failed capture already
+/// recorded.
 public struct UserNotificationNotifier: Notifier {
     private let center: any NotificationCenterPosting
     private let log: Log
@@ -40,6 +41,25 @@ public struct UserNotificationNotifier: Notifier {
             try await center.post(request)
         } catch {
             log.warn("posting the notification failed", ["meetingID": .publicSafe(meetingID)])
+        }
+    }
+
+    /// Posted under `<id>-capture-failed`, so it never replaces the meeting's
+    /// own published-note notification.
+    public func fireCaptureFailed(meetingID: MeetingID, reason: CaptureFailureReason) async {
+        guard await center.isAuthorized() else {
+            log.warn("notification permission not granted; skipping capture-failed notification", ["meetingID": .publicSafe(meetingID)])
+            return
+        }
+        let request = NotificationRequest(
+            identifier: "\(meetingID.rawValue)-capture-failed",
+            body: reason.message,
+            payload: NotificationPayload(meetingID: meetingID.rawValue),
+        )
+        do {
+            try await center.post(request)
+        } catch {
+            log.warn("posting the capture-failed notification failed", ["meetingID": .publicSafe(meetingID)])
         }
     }
 

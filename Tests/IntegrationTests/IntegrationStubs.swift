@@ -33,6 +33,8 @@ final class RecordingNotifier: Notifier {
     func fire(meetingID _: MeetingID, title _: String, vaultPath: String) async {
         paths.value.append(vaultPath)
     }
+
+    func fireCaptureFailed(meetingID _: MeetingID, reason _: CaptureFailureReason) async {}
 }
 
 /// One synthetic meeting: who says what, and what the stubbed model claims.

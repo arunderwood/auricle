@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 /// GRDB record for `meetings` (architecture.md Decision 2.1) — one row per
@@ -19,6 +20,9 @@ public struct Meeting: Codable, Equatable, Sendable {
     public var audioCachePath: String?
     public var verifiedAt: String?
     public var retentionPolicy: String?
+    /// The IANA zone identifier at capture start; `nil` for an imported
+    /// recording and for any row written before the column existed.
+    public var captureTimeZone: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -34,6 +38,7 @@ public struct Meeting: Codable, Equatable, Sendable {
         case audioCachePath = "audio_cache_path"
         case verifiedAt = "verified_at"
         case retentionPolicy = "retention_policy"
+        case captureTimeZone = "capture_time_zone"
     }
 
     public init(
@@ -50,6 +55,7 @@ public struct Meeting: Codable, Equatable, Sendable {
         audioCachePath: String? = nil,
         verifiedAt: String? = nil,
         retentionPolicy: String? = nil,
+        captureTimeZone: String? = nil,
     ) {
         self.id = id
         self.state = state
@@ -64,6 +70,17 @@ public struct Meeting: Codable, Equatable, Sendable {
         self.audioCachePath = audioCachePath
         self.verifiedAt = verifiedAt
         self.retentionPolicy = retentionPolicy
+        self.captureTimeZone = captureTimeZone
+    }
+}
+
+public extension Meeting {
+    /// The zone a meeting's local dates are rendered in: the stored capture
+    /// zone when it names one `TimeZone` knows, else `fallback`. An unknown
+    /// identifier falls back rather than failing, since a zone database that
+    /// dropped a name must not make a meeting unpublishable.
+    func localTimeZone(fallback: TimeZone) -> TimeZone {
+        captureTimeZone.flatMap(TimeZone.init(identifier:)) ?? fallback
     }
 }
 
