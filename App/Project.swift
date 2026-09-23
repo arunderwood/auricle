@@ -55,10 +55,8 @@ let project = Project(
             destinations: [.mac],
             product: .app,
             bundleId: "com.auricle.app",
-            // The process-tap floor (Story 5.2): `AudioHardwareCreateProcessTap`
-            // requires 14.4, and SwiftPM's `SupportedPlatform.MacOSVersion` has
-            // no `.v14_4` case, so Package.swift can't express it — Tuist's
-            // string form here is the one place this floor is enforced.
+            // The process tap's own minimum (`AudioHardwareCreateProcessTap`),
+            // matching Package.swift's `platforms: [.macOS("14.4")]`.
             deploymentTargets: .macOS("14.4"),
             infoPlist: .file(path: "Auricle/Info.plist"),
             sources: ["Auricle/**"],

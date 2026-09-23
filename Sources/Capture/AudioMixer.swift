@@ -24,8 +24,38 @@ public final class AudioMixer: @unchecked Sendable {
     private let lock = NSLock()
     private var micPipeline: SourcePipeline?
     private var systemPipeline: SourcePipeline?
+    /// Leading-silence frame counts to seed the *first* pipeline a side
+    /// ever builds, so mixing can align by host time rather than raw
+    /// buffered-sample-count parity: whichever side's hardware clock
+    /// started later gets padded with exactly the head start the other
+    /// side had, so same-index frames on both sides correspond to the
+    /// same real moment from then on. A no-op once that side's pipeline
+    /// already exists — priming only ever applies to stream startup, not
+    /// a later format-change rebuild (which uses `carryOver` instead).
+    private var pendingMicLeadInFrames = 0
+    private var pendingSystemLeadInFrames = 0
 
     public init() {}
+
+    /// Seeds the mic pipeline with `frames` of leading silence the next
+    /// time it's built. Called once, at stream-alignment time, before any
+    /// real mic audio has been ingested.
+    public func primeMicLeadIn(frames: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard micPipeline == nil, frames > 0 else { return }
+        pendingMicLeadInFrames = frames
+    }
+
+    /// Seeds the system pipeline with `frames` of leading silence the next
+    /// time it's built. Called once, at stream-alignment time, before any
+    /// real system audio has been ingested.
+    public func primeSystemLeadIn(frames: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard systemPipeline == nil, frames > 0 else { return }
+        pendingSystemLeadInFrames = frames
+    }
 
     /// Feeds a buffer from the microphone. A no-op is impossible to express
     /// here — the mic-denied path (AC's mic-denied scenario) is simply
@@ -34,7 +64,10 @@ public final class AudioMixer: @unchecked Sendable {
     public func ingestMic(_ buffer: AVAudioPCMBuffer) throws {
         lock.lock()
         defer { lock.unlock() }
-        if micPipeline == nil || micPipeline?.sourceFormat != buffer.format {
+        if micPipeline == nil {
+            micPipeline = try SourcePipeline(sourceFormat: buffer.format, carryOver: [Float](repeating: 0, count: pendingMicLeadInFrames))
+            pendingMicLeadInFrames = 0
+        } else if micPipeline?.sourceFormat != buffer.format {
             micPipeline = try SourcePipeline(sourceFormat: buffer.format, carryOver: micPipeline?.buffered ?? [])
         }
         try micPipeline?.append(buffer)
@@ -44,7 +77,10 @@ public final class AudioMixer: @unchecked Sendable {
     public func ingestSystem(_ buffer: AVAudioPCMBuffer) throws {
         lock.lock()
         defer { lock.unlock() }
-        if systemPipeline == nil || systemPipeline?.sourceFormat != buffer.format {
+        if systemPipeline == nil {
+            systemPipeline = try SourcePipeline(sourceFormat: buffer.format, carryOver: [Float](repeating: 0, count: pendingSystemLeadInFrames))
+            pendingSystemLeadInFrames = 0
+        } else if systemPipeline?.sourceFormat != buffer.format {
             systemPipeline = try SourcePipeline(sourceFormat: buffer.format, carryOver: systemPipeline?.buffered ?? [])
         }
         try systemPipeline?.append(buffer)

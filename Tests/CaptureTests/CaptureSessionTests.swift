@@ -27,56 +27,103 @@ private struct FakePermissionChecker: PermissionChecking {
 }
 
 /// A `SystemAudioSource` double: no Core Audio involved, so
-/// `CaptureSessionTests` never needs a live tap or a live Mac — it drives
-/// `CaptureSession`'s wiring by calling `emit(_:)` as if the tap had
-/// produced a buffer.
+/// `CaptureSessionTests` never needs a live tap or a live Mac — `push(_:)`
+/// stands in for a real IOProc publishing into its own internal ring, and
+/// `drain(_:)` is what `CaptureSession`'s consumer task calls to retrieve
+/// it, exactly matching the real protocol's pull shape.
 private final class FakeSystemAudioSource: SystemAudioSource, @unchecked Sendable {
     private let lock = NSLock()
-    private var onBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    private var pending: [RawAudioChunk] = []
     private(set) var startCallCount = 0
     private(set) var stopCallCount = 0
+    private(set) var rebuildCallCount = 0
 
-    func start(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) throws {
+    func start() throws {
         lock.lock()
         defer { lock.unlock() }
         startCallCount += 1
-        self.onBuffer = onBuffer
     }
 
     func stop() {
         lock.lock()
         defer { lock.unlock() }
         stopCallCount += 1
-        onBuffer = nil
     }
 
-    var watchdogStats: SystemAudioWatchdogStats {
-        SystemAudioWatchdogStats()
-    }
-
-    func emit(_ buffer: AVAudioPCMBuffer) {
+    func rebuild() throws {
         lock.lock()
-        let callback = onBuffer
+        defer { lock.unlock() }
+        rebuildCallCount += 1
+    }
+
+    func drain(_ consume: (RawAudioChunk) -> Void) {
+        lock.lock()
+        let chunks = pending
+        pending = []
         lock.unlock()
-        callback?(buffer)
+        chunks.forEach(consume)
+    }
+
+    /// Test-only: the producer-side call this fake stands in for — pushes
+    /// a chunk as if a real IOProc had just published one.
+    func push(_ chunk: RawAudioChunk) {
+        lock.lock()
+        pending.append(chunk)
+        lock.unlock()
     }
 }
 
-/// A silent mono buffer at 48 kHz — enough to exercise `AudioMixer`'s
-/// resample-and-write path without asserting on tone content.
-private func systemBuffer(seconds: Double = 0.2) throws -> AVAudioPCMBuffer {
-    let format = try #require(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false))
-    let frames = AVAudioFrameCount(seconds * 48000)
-    let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
-    buffer.frameLength = frames
-    let samples = try #require(buffer.floatChannelData)[0]
-    for frame in 0 ..< Int(frames) {
-        samples[frame] = 0.4 * Float(sin(2 * Double.pi * 440 * Double(frame) / 48000))
+/// A slow `CaptureAudioWriting`: `write(_:)` blocks for `delaySeconds`
+/// before returning, standing in for a disk stall. Used to prove the
+/// real-time producer side (`FakeSystemAudioSource.push(_:)`, standing in
+/// for a real audio callback) never waits on it.
+private final class SlowWriter: CaptureAudioWriting, @unchecked Sendable {
+    private let delaySeconds: Double
+    private let lock = NSLock()
+    private(set) var writeCount = 0
+
+    init(delaySeconds: Double) {
+        self.delaySeconds = delaySeconds
     }
-    return buffer
+
+    func write(_: Data) throws {
+        Thread.sleep(forTimeInterval: delaySeconds)
+        lock.lock()
+        writeCount += 1
+        lock.unlock()
+    }
+
+    func finalize() throws {}
 }
 
-@available(macOS 14.4, *)
+/// A synthetic tone chunk, the shape a drained `RawAudioChunk` takes.
+private func systemChunk(seconds: Double = 0.05, sampleRate: Double = 48000, amplitude: Float = 0.4, hostTime: UInt64 = 0) -> RawAudioChunk {
+    let frameCount = Int(seconds * sampleRate)
+    let samples = (0 ..< frameCount).map { amplitude * Float(sin(2 * Double.pi * 440 * Double($0) / sampleRate)) }
+    return RawAudioChunk(samples: samples, sampleRate: sampleRate, channelCount: 1, frameCount: frameCount, hostTime: hostTime)
+}
+
+/// A silent chunk — what 30 seconds of these in a row should trip the
+/// zero-buffer watchdog on.
+private func silentSystemChunk(seconds: Double, sampleRate: Double = 16000, hostTime: UInt64 = 0) -> RawAudioChunk {
+    let frameCount = Int(seconds * sampleRate)
+    return RawAudioChunk(samples: [Float](repeating: 0, count: frameCount), sampleRate: sampleRate, channelCount: 1, frameCount: frameCount, hostTime: hostTime)
+}
+
+/// Polls `condition` until it's true or `timeout` elapses — the consumer
+/// task processes drained chunks asynchronously, off the thread that
+/// pushed them, so assertions about its effects can't be made
+/// synchronously right after a `push`.
+private func waitUntil(timeout: TimeInterval = 3, _ condition: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+        if Date() > deadline {
+            return
+        }
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
 private struct SessionFixture {
     let meetingID = MeetingID.generate()
     let root: URL
@@ -94,6 +141,8 @@ private struct SessionFixture {
     func makeSession(
         micStatus: PermissionStatus,
         startEngine: @escaping @Sendable (AVAudioEngine) throws -> Void = { try $0.start() },
+        makeWriter: (@Sendable (MeetingID) throws -> CaptureAudioWriting)? = nil,
+        noCallbackThreshold: TimeInterval = 5,
     ) -> CaptureSession {
         CaptureSession(
             meetingID: meetingID,
@@ -102,6 +151,8 @@ private struct SessionFixture {
             permissionChecker: FakePermissionChecker(microphoneStatus: micStatus),
             cacheDirectory: { root.appendingPathComponent($0.rawValue, isDirectory: true) },
             startEngine: startEngine,
+            makeWriter: makeWriter,
+            noCallbackThreshold: noCallbackThreshold,
         )
     }
 
@@ -110,19 +161,9 @@ private struct SessionFixture {
     }
 }
 
-/// `CaptureSession` is `@available(macOS 14.4, *)` (the process-tap floor),
-/// but Swift Testing's `@Suite`/`@Test` macros can't be combined with an
-/// `@available` attribute on the same declaration — every test body instead
-/// opens with `guard #available(macOS 14.4, *) else { ... }`, which is
-/// always true on any Mac this suite actually runs on (the toolchain's own
-/// minimum is far newer) and keeps the macro expansion unencumbered.
 @Suite(.serialized)
 struct CaptureSessionTests {
     @Test func micPermissionDeniedRecordsSystemAudioOnlyAndNeverStartsTheMicEngine() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
         let session = fixture.makeSession(micStatus: .denied)
@@ -131,8 +172,8 @@ struct CaptureSessionTests {
         #expect(result.micIncluded == false)
         #expect(fixture.systemAudioSource.startCallCount == 1)
 
-        try fixture.systemAudioSource.emit(systemBuffer())
-        let url = try session.stop()
+        fixture.systemAudioSource.push(systemChunk())
+        let url = try await session.stop()
 
         #expect(url == fixture.audioURL())
         #expect(fixture.systemAudioSource.stopCallCount == 1)
@@ -143,10 +184,6 @@ struct CaptureSessionTests {
     }
 
     @Test func micPermissionNotDeterminedStillIncludesTheMic() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         // Only an explicit `.denied` excludes the mic — `.notDetermined`
         // isn't a denial (AC's mic-denied scenario is specifically about
         // `.denied`). The mic engine itself isn't exercised here (no audio
@@ -161,32 +198,24 @@ struct CaptureSessionTests {
         do {
             let result = try await session.start()
             #expect(result.micIncluded == true)
-            _ = try? session.stop()
+            _ = try? await session.stop()
         } catch {
             // Engine start failing in a hardware-less CI environment is not
             // this test's concern.
         }
     }
 
-    @Test func stopBeforeStartThrows() throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
+    @Test func stopBeforeStartThrows() async throws {
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
         let session = fixture.makeSession(micStatus: .denied)
 
-        #expect(throws: CaptureError.self) {
-            try session.stop()
+        await #expect(throws: CaptureError.self) {
+            try await session.stop()
         }
     }
 
     @Test func startCalledTwiceThrows() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
         let session = fixture.makeSession(micStatus: .denied)
@@ -195,32 +224,24 @@ struct CaptureSessionTests {
         await #expect(throws: CaptureError.self) {
             try await session.start()
         }
-        _ = try? session.stop()
+        _ = try? await session.stop()
     }
 
     @Test func stopCalledTwiceIsIdempotentAndReturnsTheSamePath() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
         let session = fixture.makeSession(micStatus: .denied)
         _ = try await session.start()
-        try fixture.systemAudioSource.emit(systemBuffer())
+        fixture.systemAudioSource.push(systemChunk())
 
-        let first = try session.stop()
-        let second = try session.stop()
+        let first = try await session.stop()
+        let second = try await session.stop()
 
         #expect(first == second)
         #expect(fixture.systemAudioSource.stopCallCount == 1)
     }
 
     @Test func micEngineStartFailureTearsDownSystemAudioAndPropagatesTheError() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         struct EngineStartFailure: Error {}
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
@@ -233,15 +254,13 @@ struct CaptureSessionTests {
         #expect(fixture.systemAudioSource.stopCallCount == 1)
     }
 
-    @Test func writerConstructionFailureTearsDownSystemAudioAndPropagatesTheError() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
+    @Test func writerConstructionFailureNeverStartsEitherSourceAndPropagatesTheError() async throws {
+        // `WAVWriter` is built before either source starts (Decision:
+        // a buffer arriving before the writer exists has nowhere to go),
+        // so a construction failure here must mean neither source was
+        // ever touched — nothing to tear down.
         let fixture = SessionFixture()
         defer { fixture.cleanUp() }
-        // Pre-create audio.wav so WAVWriter's O_EXCL create fails, forcing
-        // the WAVWriter-construction-failure branch of start().
         let directory = fixture.root.appendingPathComponent(fixture.meetingID.rawValue, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try AtomicWriter.write(Data(), to: directory.appendingPathComponent(AudioImporter.audioFileName))
@@ -250,20 +269,78 @@ struct CaptureSessionTests {
         await #expect(throws: CaptureError.self) {
             try await session.start()
         }
-        #expect(fixture.systemAudioSource.startCallCount == 1)
-        #expect(fixture.systemAudioSource.stopCallCount == 1)
+        #expect(fixture.systemAudioSource.startCallCount == 0)
+        #expect(fixture.systemAudioSource.stopCallCount == 0)
     }
 
     @Test func permissionProbeStartsAndStopsTheSource() async throws {
-        guard #available(macOS 14.4, *) else {
-            Issue.record("this suite requires macOS 14.4")
-            return
-        }
         let source = FakeSystemAudioSource()
 
         try await SystemAudioPermissionProbe.prompt(source: source)
 
         #expect(source.startCallCount == 1)
         #expect(source.stopCallCount == 1)
+    }
+
+    // MARK: - AC: watchdog and real-time-safety coverage via a fake source
+
+    @Test func thirtySecondsOfZeroSystemAudioTriggersARebuildAndUpdatesWatchdogStats() async throws {
+        let fixture = SessionFixture()
+        defer { fixture.cleanUp() }
+        let session = fixture.makeSession(micStatus: .denied)
+        _ = try await session.start()
+
+        // 30 one-second all-zero chunks — the exact-zero rebuild threshold.
+        for _ in 0 ..< 30 {
+            fixture.systemAudioSource.push(silentSystemChunk(seconds: 1))
+        }
+
+        try await waitUntil { session.watchdogStats.rebuildCount >= 1 }
+
+        #expect(session.watchdogStats.rebuildCount == 1)
+        #expect(session.watchdogStats.exactZeroSeconds >= 30)
+        #expect(fixture.systemAudioSource.rebuildCallCount == 1)
+
+        _ = try? await session.stop()
+    }
+
+    @Test func aSourceThatStopsCallingBackEntirelyTriggersTheNoCallbackWatchdog() async throws {
+        let fixture = SessionFixture()
+        defer { fixture.cleanUp() }
+        let session = fixture.makeSession(micStatus: .denied, noCallbackThreshold: 0.2)
+        _ = try await session.start()
+
+        // Nothing is ever pushed — the shape a removed/changed output
+        // device produces (the aggregate device simply stops calling the
+        // IOProc, not calling it with zero-valued buffers).
+        try await waitUntil { fixture.systemAudioSource.rebuildCallCount >= 1 }
+
+        #expect(fixture.systemAudioSource.rebuildCallCount >= 1)
+        #expect(session.watchdogStats.rebuildCount >= 1)
+
+        _ = try? await session.stop()
+    }
+
+    @Test func aSlowWriterNeverBlocksTheProducerSidePush() async throws {
+        let fixture = SessionFixture()
+        defer { fixture.cleanUp() }
+        let slowWriter = SlowWriter(delaySeconds: 1)
+        let session = fixture.makeSession(micStatus: .denied, makeWriter: { _ in slowWriter })
+        _ = try await session.start()
+
+        let start = ContinuousClock.now
+        for _ in 0 ..< 5 {
+            fixture.systemAudioSource.push(systemChunk())
+        }
+        let elapsed = ContinuousClock.now - start
+
+        // Pushing must not have waited on the writer at all — a real
+        // audio callback doing the equivalent (a raw copy into a ring
+        // buffer) is microseconds of work regardless of how slow whatever
+        // eventually consumes the ring is.
+        #expect(elapsed < .seconds(1))
+
+        _ = try? await session.stop()
+        #expect(slowWriter.writeCount >= 1)
     }
 }
