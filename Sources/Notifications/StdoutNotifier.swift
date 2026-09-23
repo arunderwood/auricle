@@ -1,8 +1,9 @@
 import Core
 import Foundation
 
-/// The CLI's notifier: the note path, then its Obsidian URL, one per line.
-/// The CLI posts no system notification.
+/// The CLI's notifier: the note path, then its Obsidian URL, one per line; a
+/// failed capture is one line naming the meeting. The CLI posts no system
+/// notification.
 public struct StdoutNotifier: Notifier {
     public typealias Sink = @Sendable (String) -> Void
 
@@ -31,5 +32,9 @@ public struct StdoutNotifier: Notifier {
         } else {
             log.warn("could not build an obsidian URL for the note", ["meetingID": .publicSafe(meetingID)])
         }
+    }
+
+    public func fireCaptureFailed(meetingID: MeetingID, reason: CaptureFailureReason) async {
+        sink("\(meetingID.rawValue): \(reason.message)")
     }
 }

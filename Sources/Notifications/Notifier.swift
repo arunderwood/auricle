@@ -1,12 +1,33 @@
 import Core
 import Foundation
 
-/// Tells the maintainer a note is published. Implementations report their own
-/// failures (a denied permission, a closed pipe) and never throw: the notify
-/// stage must reach `awaiting_verification` whether or not anyone was told.
+/// Tells the maintainer a note is published, or that a recording stopped on
+/// its own. Implementations report their own failures (a denied permission, a
+/// closed pipe) and never throw: the notify stage must reach
+/// `awaiting_verification` whether or not anyone was told, and a failed capture
+/// is already recorded in `stage_events` before anyone is told about it.
 public protocol Notifier: Sendable {
     /// `vaultPath` is the absolute note path from `meetings.vault_note_path`.
     func fire(meetingID: MeetingID, title: String, vaultPath: String) async
+
+    /// A capture ended for `reason` without the user stopping it.
+    func fireCaptureFailed(meetingID: MeetingID, reason: CaptureFailureReason) async
+}
+
+/// Why a capture ended without the user stopping it, for the ones worth a
+/// notification. Only a revocation the OS reported is: every other failure
+/// shows in the meeting list, and a notification for it would say nothing
+/// the user can act on.
+public enum CaptureFailureReason: Sendable, Equatable {
+    case permissionRevokedMidstream
+
+    /// The line the user reads.
+    public var message: String {
+        switch self {
+        case .permissionRevokedMidstream:
+            "Recording stopped — a permission was revoked. The partial audio is saved."
+        }
+    }
 }
 
 /// The `userInfo` a posted notification carries, so a click can find the

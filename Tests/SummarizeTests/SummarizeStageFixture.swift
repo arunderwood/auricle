@@ -140,6 +140,7 @@ struct StageFixture {
         captureStartedAt: String? = stageDefaultCaptureStartedAt,
         insertMeetingRow: Bool = true,
         store: StateStore? = nil,
+        captureTimeZone: String? = nil,
     ) async throws {
         let resolvedStore = try store ?? StateStore.forTesting(writer: DatabaseQueue())
         self.store = resolvedStore
@@ -152,6 +153,7 @@ struct StageFixture {
             createdAt: "2026-04-28T09:00:00Z",
             updatedAt: "2026-04-28T09:00:00Z",
             captureStartedAt: captureStartedAt,
+            captureTimeZone: captureTimeZone,
         ))
     }
 

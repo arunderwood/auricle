@@ -65,4 +65,21 @@ struct UserNotificationNotifierTests {
         await UserNotificationNotifier(center: FakeCenter(fails: true), log: recorder.log).fire(meetingID: id, title: "T", vaultPath: "/v/x.md")
         #expect(recorder.records.count == 1)
     }
+
+    @Test func captureFailedPostsUnderItsOwnIdentifier() async {
+        let center = FakeCenter()
+        await UserNotificationNotifier(center: center).fireCaptureFailed(meetingID: id, reason: .permissionRevokedMidstream)
+        let request = center.posted.withLock { $0 }.first
+        #expect(request?.identifier == "\(id.rawValue)-capture-failed")
+        #expect(request?.body == "Recording stopped — a permission was revoked. The partial audio is saved.")
+        #expect(request?.payload == NotificationPayload(meetingID: id.rawValue))
+    }
+
+    @Test func captureFailedWithNotificationsDeniedWarnsAndPostsNothing() async {
+        let center = FakeCenter(authorized: false)
+        let recorder = LogRecorder()
+        await UserNotificationNotifier(center: center, log: recorder.log).fireCaptureFailed(meetingID: id, reason: .permissionRevokedMidstream)
+        #expect(center.posted.withLock { $0 }.isEmpty)
+        #expect(recorder.records.map(\.level) == [.default])
+    }
 }

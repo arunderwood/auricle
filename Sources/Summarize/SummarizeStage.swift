@@ -39,6 +39,10 @@ public enum SummarizeStage {
     /// given the part of it this meeting's attendees and transcript touch, and
     /// that part is written to the meeting's `glossary.json`.
     ///
+    /// `timeZone` is the current zone. The generic title is rendered in the
+    /// meeting's `capture_time_zone` instead whenever the row names a zone
+    /// `TimeZone` knows.
+    ///
     /// Throws `StateStoreError.meetingNotFound` when `meetingID` has no row,
     /// before anything is recorded: `StageRunner.run`'s first transaction
     /// cannot start for a meeting that does not exist, and where foreign
@@ -94,13 +98,14 @@ public enum SummarizeStage {
             throw StateStoreError.meetingNotFound(id: meetingID.rawValue)
         }
         let captureStartedAt = meeting.captureStartedAt
+        let titleZone = meeting.localTimeZone(fallback: timeZone)
         return try await stageRunner.run(stage: .summarize, meetingID: meetingID, activeState: .summarizing) {
             do {
                 return try await summarize(
                     meetingID: meetingID,
                     context: RunContext(
                         captureStartedAt: captureStartedAt,
-                        timeZone: timeZone,
+                        timeZone: titleZone,
                         calendarSource: calendarSource,
                         publishAnyway: publishAnyway,
                         selfWikilink: selfWikilink,

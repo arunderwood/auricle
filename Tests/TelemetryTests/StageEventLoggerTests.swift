@@ -246,3 +246,80 @@ private func makeMeeting(id: String, state: String) -> Meeting {
 
     #expect(try await store.fetchStageEvents(meetingID: id.rawValue).isEmpty)
 }
+
+// MARK: - Capture: through `beginCapture`/`finishCapture`
+
+@Test func captureStartAndFinishRouteThroughTheCaptureTransactionsStampingTheSchemaVersion() async throws {
+    let store = try makeStore()
+    let id = meetingID("CP1")
+    let logger = StageEventLogger(stateStore: store)
+
+    try await logger.recordCaptureStarted(
+        meeting: Meeting(
+            id: id.rawValue,
+            state: "recording",
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+            captureStartedAt: "2026-01-01T00:00:00Z",
+        ),
+        occurredAt: "2026-01-01T00:00:00Z",
+    )
+    try await logger.recordCaptureFinished(
+        meetingID: id,
+        kind: .completed,
+        targetState: .captured,
+        occurredAt: "2026-01-01T01:00:00Z",
+        endedAt: "2026-01-01T01:00:00Z",
+        durationSeconds: 3600,
+        metadataJSON: #"{"mic_included":true}"#,
+    )
+
+    let meeting = try #require(try await store.fetchMeeting(id: id.rawValue))
+    #expect(meeting.state == "captured")
+    #expect(meeting.durationSeconds == 3600)
+    let events = try await store.fetchStageEvents(meetingID: id.rawValue)
+    #expect(events.map(\.stage) == ["capture", "capture"])
+    #expect(events.map(\.event) == ["started", "completed"])
+    #expect(events.allSatisfy { $0.metadataSchemaVersion == StageEventLogger.currentMetadataSchemaVersion })
+    #expect(events.last?.metadataJSON == #"{"mic_included":true}"#)
+}
+
+@Test func aCaptureFinishMustBeCompletedOrFailed() async throws {
+    let store = try makeStore()
+    let logger = StageEventLogger(stateStore: store)
+    for kind in [StageEventKind.started, .retried] {
+        await #expect(throws: StageEventLogger.RecordError.invalidCaptureFinish(kind: kind)) {
+            try await logger.recordCaptureFinished(
+                meetingID: meetingID("CP2"),
+                kind: kind,
+                targetState: .captured,
+                occurredAt: "x",
+                endedAt: "x",
+                durationSeconds: nil,
+            )
+        }
+    }
+}
+
+@Test func aCaptureFinishIntoAStateOutsideTheTransitionTableIsRefused() async throws {
+    let store = try makeStore()
+    let id = meetingID("CP3")
+    let logger = StageEventLogger(stateStore: store)
+    try await logger.recordCaptureStarted(
+        meeting: Meeting(id: id.rawValue, state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"),
+        occurredAt: "2026-01-01T00:00:00Z",
+    )
+
+    await #expect(throws: StageEventLogger.RecordError.captureTargetNotAllowed(targetState: .transcribing)) {
+        try await logger.recordCaptureFinished(
+            meetingID: id,
+            kind: .completed,
+            targetState: .transcribing,
+            occurredAt: "2026-01-01T01:00:00Z",
+            endedAt: "2026-01-01T01:00:00Z",
+            durationSeconds: 3600,
+        )
+    }
+    #expect(try await store.fetchMeeting(id: id.rawValue)?.state == "recording")
+    #expect(try await store.fetchStageEvents(meetingID: id.rawValue).map(\.event) == ["started"])
+}

@@ -263,3 +263,17 @@ private func readAudio(_ url: URL) throws -> ReadAudio {
     let events = try await fixture.store.fetchStageEvents(meetingID: id.rawValue)
     #expect(events[0].metadataJSON?.contains("\"source_format\":\"m4a\"") == true)
 }
+
+/// An imported recording has no capture zone; its notes use the current zone.
+@Test func anImportedMeetingHasNoCaptureTimeZone() async throws {
+    let fixture = try ImporterFixture()
+    defer { fixture.cleanUp() }
+    let source = fixture.sourceFile("call.wav")
+    defer { try? FileManager.default.removeItem(at: source) }
+    try writeTone(to: source, seconds: 1, sampleRate: 16000, channels: 1)
+
+    let id = try await fixture.importer.importAudio(from: source)
+
+    let meeting = try #require(try await fixture.store.fetchMeeting(id: id.rawValue))
+    #expect(meeting.captureTimeZone == nil)
+}

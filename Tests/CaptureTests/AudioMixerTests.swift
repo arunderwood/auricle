@@ -124,4 +124,20 @@ struct AudioMixerTests {
 
         #expect(!mixer.drain().isEmpty)
     }
+
+    /// The mirror of the case above, and what a capture that lost system
+    /// audio relies on: a starved system side is padded with silence, and
+    /// the microphone's audio still comes through.
+    @Test func drainKeepsTheMicWhenTheSystemSideIsStarvedPastTheBound() throws {
+        let mixer = AudioMixer()
+        try mixer.ingestSystem(sineBuffer(sampleRate: 16000, seconds: 0.01))
+        try mixer.ingestMic(sineBuffer(sampleRate: 16000, seconds: 0.01))
+        _ = mixer.drain()
+
+        try mixer.ingestMic(sineBuffer(sampleRate: 16000, seconds: 2.1))
+
+        let samples = int16Samples(mixer.drain())
+        #expect(samples.count >= 32000)
+        #expect((samples.map { abs(Int($0)) }.max() ?? 0) > 5000)
+    }
 }

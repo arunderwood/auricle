@@ -7,10 +7,10 @@
 ///
 /// `Codable` conformance is hand-written rather than compiler-synthesized:
 /// Swift does not synthesize `Codable` for an enum with associated values, and
-/// `capture`/`attribute`'s placeholder payloads are both content-identical
-/// empty objects (`{}`) — indistinguishable by content alone, so the case
-/// must be recovered from which keyed-container key is present, not from the
-/// payload's shape.
+/// a `CaptureMeta` with no fields set and `attribute`'s placeholder payload
+/// are both content-identical empty objects (`{}`) — indistinguishable by
+/// content alone, so the case must be recovered from which keyed-container
+/// key is present, not from the payload's shape.
 public enum StageMetadata: Equatable, Sendable {
     case capture(CaptureMeta)
     case transcribe(TranscribeMeta)
@@ -77,11 +77,106 @@ extension StageMetadata: Codable {
     }
 }
 
-/// No example shape exists yet for `capture` (Decision 4.5 gives concrete
-/// JSON only for `transcribe`/`reviewDiarization`/`summarize`/`persist`/
-/// `notify`) — real fields are the future Capture-stage story's own call.
+/// A live capture's `completed`/`failed`/`retried` payload. Every field is
+/// optional and omitted when absent, so a row carries only what its event
+/// knows and a later capture field is an additive change: `mic_included`,
+/// `exact_zero_seconds` and `tap_rebuilds` describe a finished capture;
+/// `reason` says why an interrupted capture was recovered; `error_class` is
+/// why a capture failed, the same key `StageRunner` writes for other stages;
+/// `source` names which input (`microphone`, `system_audio`) a fault came from.
+/// The three `system_audio_*` fields are present only on a capture that lost
+/// system audio and carried on with the microphone: the most recent loss and
+/// restore, as ISO 8601 UTC, and how many times it was lost. A `retried`
+/// event also carries `attempt_number`, `previous_error_class` and
+/// `backoff_ms`, the shape every stage's `retried` metadata takes.
 public struct CaptureMeta: Codable, Equatable, Sendable {
-    public init() {}
+    public var micIncluded: Bool?
+    public var exactZeroSeconds: Double?
+    public var tapRebuilds: Int?
+    public var reason: String?
+    public var errorClass: String?
+    public var source: String?
+    public var attemptNumber: Int?
+    public var previousErrorClass: String?
+    public var backoffMS: Int?
+    public var systemAudioLostAt: String?
+    public var systemAudioRestoredAt: String?
+    public var systemAudioLossCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case micIncluded = "mic_included"
+        case exactZeroSeconds = "exact_zero_seconds"
+        case tapRebuilds = "tap_rebuilds"
+        case reason
+        case errorClass = "error_class"
+        case source
+        case attemptNumber = "attempt_number"
+        case previousErrorClass = "previous_error_class"
+        case backoffMS = "backoff_ms"
+        case systemAudioLostAt = "system_audio_lost_at"
+        case systemAudioRestoredAt = "system_audio_restored_at"
+        case systemAudioLossCount = "system_audio_loss_count"
+    }
+
+    public init(
+        micIncluded: Bool? = nil,
+        exactZeroSeconds: Double? = nil,
+        tapRebuilds: Int? = nil,
+        reason: String? = nil,
+        errorClass: String? = nil,
+        source: String? = nil,
+        attemptNumber: Int? = nil,
+        previousErrorClass: String? = nil,
+        backoffMS: Int? = nil,
+        systemAudioLostAt: String? = nil,
+        systemAudioRestoredAt: String? = nil,
+        systemAudioLossCount: Int? = nil,
+    ) {
+        self.micIncluded = micIncluded
+        self.exactZeroSeconds = exactZeroSeconds
+        self.tapRebuilds = tapRebuilds
+        self.reason = reason
+        self.errorClass = errorClass
+        self.source = source
+        self.attemptNumber = attemptNumber
+        self.previousErrorClass = previousErrorClass
+        self.backoffMS = backoffMS
+        self.systemAudioLostAt = systemAudioLostAt
+        self.systemAudioRestoredAt = systemAudioRestoredAt
+        self.systemAudioLossCount = systemAudioLossCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        micIncluded = try container.decodeIfPresent(Bool.self, forKey: .micIncluded)
+        exactZeroSeconds = try container.decodeIfPresent(Double.self, forKey: .exactZeroSeconds)
+        tapRebuilds = try container.decodeIfPresent(Int.self, forKey: .tapRebuilds)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        errorClass = try container.decodeIfPresent(String.self, forKey: .errorClass)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
+        attemptNumber = try container.decodeIfPresent(Int.self, forKey: .attemptNumber)
+        previousErrorClass = try container.decodeIfPresent(String.self, forKey: .previousErrorClass)
+        backoffMS = try container.decodeIfPresent(Int.self, forKey: .backoffMS)
+        systemAudioLostAt = try container.decodeIfPresent(String.self, forKey: .systemAudioLostAt)
+        systemAudioRestoredAt = try container.decodeIfPresent(String.self, forKey: .systemAudioRestoredAt)
+        systemAudioLossCount = try container.decodeIfPresent(Int.self, forKey: .systemAudioLossCount)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(micIncluded, forKey: .micIncluded)
+        try container.encodeIfPresent(exactZeroSeconds, forKey: .exactZeroSeconds)
+        try container.encodeIfPresent(tapRebuilds, forKey: .tapRebuilds)
+        try container.encodeIfPresent(reason, forKey: .reason)
+        try container.encodeIfPresent(errorClass, forKey: .errorClass)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(attemptNumber, forKey: .attemptNumber)
+        try container.encodeIfPresent(previousErrorClass, forKey: .previousErrorClass)
+        try container.encodeIfPresent(backoffMS, forKey: .backoffMS)
+        try container.encodeIfPresent(systemAudioLostAt, forKey: .systemAudioLostAt)
+        try container.encodeIfPresent(systemAudioRestoredAt, forKey: .systemAudioRestoredAt)
+        try container.encodeIfPresent(systemAudioLossCount, forKey: .systemAudioLossCount)
+    }
 }
 
 /// architecture.md:1231 — `{"model_id": "whisper-large-v3-turbo",
@@ -190,7 +285,7 @@ public struct ReviewDiarizationMeta: Codable, Equatable, Sendable {
 }
 
 /// No example shape exists yet for `attribute` — real fields are the future
-/// Attribute-stage story's own call (see `CaptureMeta`).
+/// Attribute-stage story's own call.
 public struct AttributeMeta: Codable, Equatable, Sendable {
     public init() {}
 }
