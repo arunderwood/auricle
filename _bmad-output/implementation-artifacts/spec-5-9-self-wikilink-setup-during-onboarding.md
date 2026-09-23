@@ -2,7 +2,7 @@
 title: 'Story 5.9: self.wikilink Setup During Onboarding'
 type: 'feature'
 created: '2026-09-22'
-status: 'in-review'
+status: 'done'
 baseline_revision: '09d921497b485bdc3cd3e0c18e19bc110bbd3bb3'
 review_loop_iteration: 0
 followup_review_recommended: true
