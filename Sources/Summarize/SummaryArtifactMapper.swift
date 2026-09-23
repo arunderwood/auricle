@@ -86,8 +86,9 @@ enum SummaryArtifactMapper {
     /// event supplies all four and the tag is not set.
     ///
     /// `configuredSelfWikilink` is the user's own `self.wikilink` from config;
-    /// when set it wins over the calendar's self identity, with or without a
-    /// match, because it is the user's explicit statement of who they are.
+    /// when it normalizes it wins over the calendar's self identity, with or
+    /// without a match, because it is the user's explicit statement of who
+    /// they are. One that does not normalize is ignored.
     static func artifact(
         title: String,
         match: CalendarEnrichment.Match? = nil,
@@ -97,7 +98,8 @@ enum SummaryArtifactMapper {
         needsAttribution: Bool,
         transcriptBytes: [UInt8],
     ) throws -> SummaryArtifact {
-        try SummaryArtifact(
+        let configuredSelfWikilink = normalized(configuredSelfWikilink)
+        return try SummaryArtifact(
             title: match?.title ?? title,
             calendarEventTitle: match?.title,
             attendees: attendees(of: match, configuredSelfWikilink: configuredSelfWikilink),
@@ -121,7 +123,8 @@ enum SummaryArtifactMapper {
         transcriptSegments: [TranscriptSegmentArtifact],
         needsAttribution: Bool,
     ) -> SummaryArtifact {
-        SummaryArtifact(
+        let configuredSelfWikilink = normalized(configuredSelfWikilink)
+        return SummaryArtifact(
             title: match?.title ?? title,
             calendarEventTitle: match?.title,
             attendees: attendees(of: match, configuredSelfWikilink: configuredSelfWikilink),
@@ -134,6 +137,10 @@ enum SummaryArtifactMapper {
             decisions: [],
             transcriptSegments: transcriptSegments,
         )
+    }
+
+    private static func normalized(_ configuredSelfWikilink: String?) -> String? {
+        configuredSelfWikilink.flatMap { try? SelfWikilink.normalized($0) }
     }
 
     /// The event's attendee links, with the calendar's self link replaced by

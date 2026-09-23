@@ -72,7 +72,8 @@ public struct Config: Sendable, Equatable {
     public let attribution: Attribution
     public let diarizationReview: DiarizationReview
     /// The wikilink text (e.g. `"[[Jordan]]"`) identifying this user, in the
-    /// vault's own wikilink syntax.
+    /// vault's own wikilink syntax. Always in `SelfWikilink.normalized` form,
+    /// so a bare `Jordan` in the file reads as `[[Jordan]]`.
     public let selfWikilink: String?
 
     public init(
@@ -147,8 +148,17 @@ public struct Config: Sendable, Equatable {
                 enabled: raw.diarizationReview?.enabled ?? false,
                 model: nonEmpty(raw.diarizationReview?.model) ?? DiarizationReview.defaultModel,
             ),
-            selfWikilink: nonEmpty(raw.selfTable?.wikilink),
+            selfWikilink: selfWikilink(raw.selfTable?.wikilink),
         )
+    }
+
+    private static func selfWikilink(_ value: String?) throws -> String? {
+        guard let value = nonEmpty(value) else { return nil }
+        do {
+            return try SelfWikilink.normalized(value)
+        } catch {
+            throw ConfigError.invalidValue(key: "self.wikilink", reason: error.reason)
+        }
     }
 
     private static func attribution(_ raw: RawAttribution?) throws -> Attribution {

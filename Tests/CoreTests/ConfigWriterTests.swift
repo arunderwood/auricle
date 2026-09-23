@@ -135,10 +135,10 @@ private func readFile(_ url: URL) throws -> String {
     defer { try? FileManager.default.removeItem(at: home) }
     let value = "a\"b\\c"
 
-    try ConfigWriter.set("self.wikilink", to: value, homeDirectory: home)
+    try ConfigWriter.set("google_calendar.client_id", to: value, homeDirectory: home)
 
     let file = Config.defaultFileURL(homeDirectory: home)
-    #expect(try Config.parse(readFile(file), homeDirectory: home).selfWikilink == value)
+    #expect(try Config.parse(readFile(file), homeDirectory: home).googleCalendar.clientID == value)
 }
 
 @Test func selfWikilinkRoundTripsThroughConfigLoad() throws {
@@ -285,4 +285,27 @@ func setRejectsACredentialShapedKey(key: String, value: String) throws {
     try ConfigWriter.set("vault_path", to: "/v", homeDirectory: home)
 
     #expect(try readFile(file) == "# c\nvault_path = \"/v\"\n\n[self]\nwikilink = \"[[A]]\"\n")
+}
+
+@Test func aBareSelfWikilinkIsWrittenAsAWikilink() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    try ConfigWriter.set("self.wikilink", to: "Jordan", homeDirectory: home)
+
+    #expect(try readFile(Config.defaultFileURL(homeDirectory: home)) == "[self]\nwikilink = \"[[Jordan]]\"\n")
+    #expect(try Config.load(homeDirectory: home).selfWikilink == "[[Jordan]]")
+}
+
+@Test func anInvalidSelfWikilinkThrowsAndLeavesTheFileUnchanged() throws {
+    let home = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: home) }
+    let file = try writeConfig("[self]\nwikilink = \"[[Old]]\"\n", inHome: home)
+
+    #expect(throws: ConfigWriter.WriterError.wouldProduceInvalidConfig(
+        .invalidValue(key: "self.wikilink", reason: SelfWikilinkError.malformed.reason),
+    )) {
+        try ConfigWriter.set("self.wikilink", to: "[[Jordan|me]]", homeDirectory: home)
+    }
+    #expect(try readFile(file) == "[self]\nwikilink = \"[[Old]]\"\n")
 }

@@ -72,7 +72,6 @@ struct SelfWikilinkConfirmTests {
         ("Jordan", "[[Jordan]]"),
         ("  [[Jordan]]  ", "[[Jordan]]"),
         ("[[ Jordan Lee ]]", "[[Jordan Lee]]"),
-        ("[[Jordan Lee|Jordan]]", "[[Jordan Lee|Jordan]]"),
     ])
     func acceptedTextIsStoredWrappedAndAdvances(text: String, stored: String) throws {
         let model = try makeModel(vaultDirectory: vault)
@@ -96,7 +95,10 @@ struct SelfWikilinkConfirmTests {
         #expect(model.subStep == .selfWikilink)
     }
 
-    @Test("Stray brackets are refused", arguments: ["[[Jo]]n]]", "Jo[n", "[[Jordan", "Jordan]]", "[[[Jordan]]]"])
+    @Test("Link syntax and stray brackets are refused", arguments: [
+        "[[Jo]]n]]", "Jo[n", "[[Jordan", "Jordan]]", "[[[Jordan]]]",
+        "[[Jordan Lee|Jordan]]", "[[|me]]", "[[Jordan|]]", "[[Jo\n]]", "[[Name#Heading]]", "Jo^n", "a\\b",
+    ])
     func strayBracketsStayAndThrow(text: String) throws {
         let model = try makeModel(vaultDirectory: vault)
         model.selfWikilinkText = text

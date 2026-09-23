@@ -17,14 +17,6 @@ public enum VaultPathValidationError: Error, Sendable, Equatable {
     case other(String)
 }
 
-/// A `self.wikilink` entry that `confirmSelfWikilink()` refused.
-public enum SelfWikilinkError: Error, Sendable, Equatable {
-    /// Nothing is left once whitespace and a surrounding `[[`/`]]` are removed.
-    case empty
-    /// A `[` or `]` remains inside the link target, so it cannot be one wikilink.
-    case malformed
-}
-
 /// The Configure step's sub-steps, advanced in this order as each completes.
 public enum ConfigureSubStep: CaseIterable, Sendable, Equatable {
     case vaultPath
@@ -67,9 +59,6 @@ public final class OnboardingConfigureModel {
     public private(set) var vaultTerms = Glossary()
 
     private static let maxSuggestions = 5
-    /// Characters with meaning inside `[[…]]`: a name carrying one would
-    /// produce a link that points somewhere other than the name.
-    private static let wikilinkSyntaxCharacters = CharacterSet(charactersIn: "[]|#^\\")
 
     private let opener: URLOpener
     private let validateVaultPath: @Sendable (URL) throws -> Void
@@ -127,16 +116,11 @@ public final class OnboardingConfigureModel {
         advanceSubStep()
     }
 
-    /// `[[<fullUserName>]]` with link-syntax characters removed, or empty
+    /// `[[<fullUserName>]]` sanitized by `SelfWikilink.fromName`, or empty
     /// when nothing of the name remains — an empty field asks the user to
     /// type one rather than suggesting `[[]]`.
     public static func defaultSelfWikilink(fullUserName: String) -> String {
-        let name = fullUserName
-            .unicodeScalars
-            .filter { !wikilinkSyntaxCharacters.contains($0) }
-            .reduce(into: "") { $0.unicodeScalars.append($1) }
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? "" : "[[\(name)]]"
+        SelfWikilink.fromName(fullUserName).map { "[[\($0)]]" } ?? ""
     }
 
     /// Reads the validated vault's page names for `selfWikilinkSuggestions`.
@@ -174,18 +158,17 @@ public final class OnboardingConfigureModel {
         selfWikilinkText = "[[\(name)]]"
     }
 
-    /// Accepts the field as bare text or a single `[[…]]` link, stores it as
-    /// `[[…]]` for `finish()`, and advances. Throws, stays on this sub-step,
-    /// and records `selfWikilinkError` when it is empty or has stray brackets.
+    /// Normalizes the field through `SelfWikilink.normalized`, stores the
+    /// result for `finish()`, and advances. Throws, stays on this sub-step,
+    /// and records `selfWikilinkError` when the value is refused.
     public func confirmSelfWikilink() throws {
-        let target: String
+        let link: String
         do {
-            target = try Self.validatedLinkTarget(selfWikilinkText)
-        } catch let error as SelfWikilinkError {
+            link = try SelfWikilink.normalized(selfWikilinkText)
+        } catch {
             selfWikilinkError = error
             throw error
         }
-        let link = "[[\(target)]]"
         selfWikilinkError = nil
         selfWikilink = link
         selfWikilinkText = link
@@ -270,19 +253,6 @@ public final class OnboardingConfigureModel {
             target = target[..<bar]
         }
         return target.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// The inside of the `[[…]]` to store: the text without surrounding
-    /// whitespace and without a surrounding `[[`/`]]` pair. An alias stays.
-    private static func validatedLinkTarget(_ text: String) throws(SelfWikilinkError) -> String {
-        var inner = Substring(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        if inner.hasPrefix("[["), inner.hasSuffix("]]"), inner.count >= 4 {
-            inner = inner.dropFirst(2).dropLast(2)
-        }
-        let target = inner.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty else { throw .empty }
-        guard !target.contains(where: { $0 == "[" || $0 == "]" }) else { throw .malformed }
-        return target
     }
 
     /// 0 for a case-insensitive prefix match on the whole name or any word,

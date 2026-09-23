@@ -1,5 +1,6 @@
 import AppKit
 import AppUI
+import Core
 import SwiftUI
 
 /// Renders the current `ConfigureSubStep` and forwards user actions to
@@ -171,7 +172,7 @@ struct ConfigureStepView: View {
         case .empty:
             "Enter a name to link to."
         case .malformed:
-            "Use a single link like [[Your Name]], with no other brackets."
+            "Use a single page name like [[Your Name]], without an alias or any of [ ] | # ^ \\."
         }
     }
 

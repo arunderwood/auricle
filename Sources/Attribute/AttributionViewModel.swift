@@ -30,7 +30,9 @@ public final class AttributionViewModel {
     public private(set) var draft: AttributionFile
     /// Calendar attendees, then vault people, then previously labeled names.
     public let knownNames: [String]
-    /// The calendar attendee who is the user, if the calendar says.
+    /// The user's own name for "this is me": the bare name of the configured
+    /// `self.wikilink` when it normalizes, else the calendar attendee marked
+    /// as self, else `nil`.
     public let selfName: String?
     /// The speaker who talked longest: "this is me" starts here.
     public let suggestedSelfSpeaker: String?
@@ -51,6 +53,7 @@ public final class AttributionViewModel {
     public init(
         meetingID: MeetingID,
         inputs: AttributionInputs,
+        configuredSelfWikilink: String? = nil,
         glossary: Glossary = Glossary(),
         previous: any PreviousLabelings = NoPreviousLabelings(),
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
@@ -71,7 +74,11 @@ public final class AttributionViewModel {
         self.draft = draft
 
         let attendees = inputs.calendar?.event?.attendees ?? []
-        selfName = attendees.first { $0.isSelf }?.displayName.flatMap(Self.nonEmpty)
+        let configuredSelfName = configuredSelfWikilink
+            .flatMap { try? SelfWikilink.normalized($0) }
+            .map(SpeakerNaming.bareName)
+            .flatMap(Self.nonEmpty)
+        selfName = configuredSelfName ?? attendees.first { $0.isSelf }?.displayName.flatMap(Self.nonEmpty)
         knownNames = Self.orderedUnique(attendees.compactMap { $0.displayName.flatMap(Self.nonEmpty) } + glossary.people + previous.previousNames())
         suggestedSelfSpeaker = Self.longestSpeaker(in: inputs.diarization)
         recurringPrefill = Self.prefill(

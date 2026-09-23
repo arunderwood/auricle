@@ -190,6 +190,18 @@ private func runExpectingDegradation(_ source: StubCalendarSource?) async throws
     #expect(try fixture.readSummary().attendees == ["[[Me]]", "[[Ben Ng]]"])
 }
 
+@Test func aBareConfiguredSelfWikilinkIsWrittenAsAWikilink() async throws {
+    let fixture = try await makeFixture()
+    defer { fixture.cleanUp() }
+    let primary = StageStubStrategy(.success(makeStageGrounded()))
+
+    _ = try await fixture.run(primary: primary, calendarSource: StubCalendarSource(.success(makeEvent())), selfWikilink: "Me")
+
+    let raw = try rawJSON(at: fixture.summaryURL())
+    #expect(raw["self_wikilink"] as? String == "[[Me]]")
+    #expect(raw["attendees"] as? [String] == ["[[Me]]", "[[Ben Ng]]"])
+}
+
 @Test func aConfiguredSelfWikilinkWinsOverTheCalendarSelfInThePublishAnywayStub() async throws {
     let fixture = try await makeFixture()
     defer { fixture.cleanUp() }

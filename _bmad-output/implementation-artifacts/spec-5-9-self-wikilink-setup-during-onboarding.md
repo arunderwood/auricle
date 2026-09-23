@@ -2,7 +2,7 @@
 title: 'Story 5.9: self.wikilink Setup During Onboarding'
 type: 'feature'
 created: '2026-09-22'
-status: 'done'
+status: 'in-review'
 baseline_revision: '09d921497b485bdc3cd3e0c18e19bc110bbd3bb3'
 review_loop_iteration: 0
 followup_review_recommended: true
@@ -128,6 +128,15 @@ deferred: []
   - `[low]` `[reject]` intent-alignment: the SwiftUI view and `NSFullUserName` wiring have no automated coverage. — same `App/` coverage limit; the logic is in `AppUI` and covered.
   - `[false]` `[reject]` intent-alignment: precedence is applied only in summarize, not in Epic 7 consumers. — no Epic 7 consumer exists yet; summarize is the only stage that emits a self identity today.
   - `[false]` `[reject]` intent-alignment: the ship step and branch name cannot be judged from the diff. — not a defect in the diff; the ship step moves the work to a `feat/` branch.
+
+### 2026-09-22 — PR #120 review (Epic 5 overview session)
+- verdicts: 5 findings — high 0, medium 4, low 1, false 0, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` epic-5-overview: the diff rewrote `epic-5-context.md`, dropping detail (the verified-deep-link rule, why `WAVWriter` is not atomic) and conflicting with #119. — patch: restored main's version; only the Configure sub-step order line changes, to match the shipped order (vault path, `self.wikilink`, Obsidian, API key).
+  - `[medium]` `[patch]` epic-5-overview: `AttributionViewModel.markThisIsMe()` takes its name only from the calendar `isSelf` attendee. This corrects the earlier `false` row that said no Epic 7 consumer exists. — patch: `AttributionViewModel.init` takes `configuredSelfWikilink`, and `selfName` prefers its bare name over the calendar; tests added. No production caller builds the view model yet; the Epic 7 sheet passes `Config.selfWikilink` when it does.
+  - `[medium]` `[patch]` epic-5-overview: a `self.wikilink` set outside onboarding (`auricle config set self.wikilink "Jordan"`) flows through raw, so summarize writes a bare `Jordan`. This corrects the earlier `low` rejection of the same point. — patch: one `Core.SelfWikilink.normalized` helper, used by `Config.parse` (an invalid value throws `invalidValue`), `ConfigWriter.set`, onboarding and `SummaryArtifactMapper`.
+  - `[medium]` `[patch]` epic-5-overview: typed validation rejected only `[`/`]`, so `[[|me]]` (empty target) got past it and left the user's name in the filename. This corrects the earlier `low` rejection. — patch: `normalized` rejects `| # ^ \`, newlines and control characters in the target, and an empty target; aliases are no longer accepted.
+  - `[low]` `[patch]` epic-5-overview: the spec was marked `done` before lint, swift and app CI were green. — patch: status is `in-review` until CI passes on the rebased branch.
 
 ## Design Notes
 

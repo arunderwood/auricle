@@ -49,6 +49,16 @@ private let home = URL(fileURLWithPath: "/fake/home", isDirectory: true)
     #expect(config.selfWikilink == "[[Jordan]]")
 }
 
+@Test func aBareSelfWikilinkReadsAsAWikilink() throws {
+    #expect(try Config.parse("[self]\nwikilink = \"Jordan\"\n", homeDirectory: home).selfWikilink == "[[Jordan]]")
+}
+
+@Test func anAliasedSelfWikilinkIsAnInvalidValue() {
+    #expect(throws: ConfigError.invalidValue(key: "self.wikilink", reason: SelfWikilinkError.malformed.reason)) {
+        try Config.parse("[self]\nwikilink = \"[[|me]]\"\n", homeDirectory: home)
+    }
+}
+
 @Test func selfWikilinkIsNilWhenAbsentOrEmpty() throws {
     #expect(try Config.parse("", homeDirectory: home).selfWikilink == nil)
     #expect(try Config.parse("[self]\nwikilink = \"\"\n", homeDirectory: home).selfWikilink == nil)
