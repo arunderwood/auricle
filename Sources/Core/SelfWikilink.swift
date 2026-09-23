@@ -41,6 +41,22 @@ public enum SelfWikilink {
         return "[[\(target)]]"
     }
 
+    /// The page a hand-written value links to, as `[[target]]`, or `nil` when
+    /// it names none. Tolerant where `normalized` is strict: an alias, heading
+    /// or block reference is valid Obsidian syntax in a file the user edits,
+    /// so it is dropped rather than refused, leaving the page that
+    /// `FilenameResolver` and attribution match on.
+    public static func target(ofConfigured text: String) -> String? {
+        var inner = Substring(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        if inner.hasPrefix("[["), inner.hasSuffix("]]"), inner.count >= 4 {
+            inner = inner.dropFirst(2).dropLast(2)
+        }
+        if let suffix = inner.firstIndex(where: { $0 == "|" || $0 == "#" || $0 == "^" }) {
+            inner = inner[..<suffix]
+        }
+        return try? normalized(String(inner))
+    }
+
     /// A person's name made safe to wrap in `[[…]]`: link-syntax and control
     /// characters dropped, runs of whitespace collapsed to one space, and the
     /// ends trimmed. `nil` when nothing of the name remains.

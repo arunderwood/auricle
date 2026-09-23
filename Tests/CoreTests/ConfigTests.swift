@@ -53,10 +53,16 @@ private let home = URL(fileURLWithPath: "/fake/home", isDirectory: true)
     #expect(try Config.parse("[self]\nwikilink = \"Jordan\"\n", homeDirectory: home).selfWikilink == "[[Jordan]]")
 }
 
-@Test func anAliasedSelfWikilinkIsAnInvalidValue() {
-    #expect(throws: ConfigError.invalidValue(key: "self.wikilink", reason: SelfWikilinkError.malformed.reason)) {
-        try Config.parse("[self]\nwikilink = \"[[|me]]\"\n", homeDirectory: home)
-    }
+@Test(arguments: ["[[Jordan Lee|Jordan]]", "[[Jordan Lee#Work]]", "[[Jordan Lee^block]]", "Jordan Lee|Jordan"])
+func aHandWrittenSelfWikilinkReadsAsItsPage(value: String) throws {
+    #expect(try Config.parse("[self]\nwikilink = \"\(value)\"\n", homeDirectory: home).selfWikilink == "[[Jordan Lee]]")
+}
+
+@Test(arguments: ["[[|me]]", "[[#Work]]", "[[Jo\\nLee]]"])
+func aSelfWikilinkNamingNoPageReadsAsUnsetAndKeepsTheOtherKeys(value: String) throws {
+    let config = try Config.parse("vault_path = \"~/vault\"\n[self]\nwikilink = \"\(value)\"\n", homeDirectory: home)
+    #expect(config.selfWikilink == nil)
+    #expect(config.vaultPath?.path == home.appendingPathComponent("vault").path)
 }
 
 @Test func selfWikilinkIsNilWhenAbsentOrEmpty() throws {

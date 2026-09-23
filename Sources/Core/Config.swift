@@ -25,6 +25,7 @@ public enum ConfigError: Error, Sendable, Equatable {
 /// template with blank values behaves like a file without them.
 public struct Config: Sendable, Equatable {
     public static let defaultMeetingsSubdir = "Meetings"
+    private static let log = Log(category: "config")
 
     public struct GoogleCalendar: Sendable, Equatable {
         public let clientID: String?
@@ -72,8 +73,9 @@ public struct Config: Sendable, Equatable {
     public let attribution: Attribution
     public let diarizationReview: DiarizationReview
     /// The wikilink text (e.g. `"[[Jordan]]"`) identifying this user, in the
-    /// vault's own wikilink syntax. Always in `SelfWikilink.normalized` form,
-    /// so a bare `Jordan` in the file reads as `[[Jordan]]`.
+    /// vault's own wikilink syntax. Always the bare page link
+    /// `SelfWikilink.target(ofConfigured:)` reads: `Jordan` reads as
+    /// `[[Jordan]]`, and `[[Jordan|me]]` or `[[Jordan#Work]]` as `[[Jordan]]`.
     public let selfWikilink: String?
 
     public init(
@@ -152,13 +154,15 @@ public struct Config: Sendable, Equatable {
         )
     }
 
-    private static func selfWikilink(_ value: String?) throws -> String? {
+    /// Reads as unset, with a warning, when the value names no page: a
+    /// hand-edited identity link must not make every other key unreadable.
+    private static func selfWikilink(_ value: String?) -> String? {
         guard let value = nonEmpty(value) else { return nil }
-        do {
-            return try SelfWikilink.normalized(value)
-        } catch {
-            throw ConfigError.invalidValue(key: "self.wikilink", reason: error.reason)
+        guard let link = SelfWikilink.target(ofConfigured: value) else {
+            log.warn("self.wikilink names no page; reading it as unset")
+            return nil
         }
+        return link
     }
 
     private static func attribution(_ raw: RawAttribution?) throws -> Attribution {
