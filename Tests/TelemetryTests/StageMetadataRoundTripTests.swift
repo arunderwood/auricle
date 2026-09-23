@@ -27,6 +27,21 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     #expect(Set(object.keys) == ["mic_included", "exact_zero_seconds", "tap_rebuilds", "reason", "error_class", "source"])
 }
 
+@Test func captureMetaSystemAudioLossFieldsRoundTripInSnakeCase() throws {
+    let meta = CaptureMeta(
+        micIncluded: true,
+        systemAudioLostAt: "2026-09-22T10:05:00Z",
+        systemAudioRestoredAt: "2026-09-22T10:06:00Z",
+        systemAudioLossCount: 2,
+    )
+    #expect(try roundTrip(.capture(meta)) == .capture(meta))
+
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(meta)) as? [String: Any])
+    #expect(object["system_audio_lost_at"] as? String == "2026-09-22T10:05:00Z")
+    #expect(object["system_audio_restored_at"] as? String == "2026-09-22T10:06:00Z")
+    #expect(object["system_audio_loss_count"] as? Int == 2)
+}
+
 /// An absent field is left out, not written as null, so a row carries only
 /// what its event knew.
 @Test func captureMetaOmitsFieldsItDoesNotHave() throws {

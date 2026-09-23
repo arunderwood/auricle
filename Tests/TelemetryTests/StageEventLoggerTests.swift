@@ -300,3 +300,26 @@ private func makeMeeting(id: String, state: String) -> Meeting {
         }
     }
 }
+
+@Test func aCaptureFinishIntoAStateOutsideTheTransitionTableIsRefused() async throws {
+    let store = try makeStore()
+    let id = meetingID("CP3")
+    let logger = StageEventLogger(stateStore: store)
+    try await logger.recordCaptureStarted(
+        meeting: Meeting(id: id.rawValue, state: "recording", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"),
+        occurredAt: "2026-01-01T00:00:00Z",
+    )
+
+    await #expect(throws: StageEventLogger.RecordError.captureTargetNotAllowed(targetState: .transcribing)) {
+        try await logger.recordCaptureFinished(
+            meetingID: id,
+            kind: .completed,
+            targetState: .transcribing,
+            occurredAt: "2026-01-01T01:00:00Z",
+            endedAt: "2026-01-01T01:00:00Z",
+            durationSeconds: 3600,
+        )
+    }
+    #expect(try await store.fetchMeeting(id: id.rawValue)?.state == "recording")
+    #expect(try await store.fetchStageEvents(meetingID: id.rawValue).map(\.event) == ["started"])
+}

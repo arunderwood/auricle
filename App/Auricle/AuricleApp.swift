@@ -11,7 +11,6 @@ import State
 import SwiftUI
 import Telemetry
 import UserNotifications
-import VaultGlossary
 
 /// Notification authorization is requested at runtime via UNUserNotificationCenter
 /// and gated by NSUserNotificationsUsageDescription in Info.plist — macOS has no
@@ -26,7 +25,9 @@ struct AuricleApp: App {
     /// unavailable rather than crashing the app.
     private static let stateStore = makeStateStore()
     private static let notificationDelegate = makeNotificationDelegate()
-    /// The GUI's only capture stage. Story 5.6's debug trigger drives it.
+    /// The process's one capture stage: it owns every recording the GUI makes,
+    /// and hands each captured meeting to the pipeline. `nil` when the state
+    /// store could not be opened.
     static let captureStage = makeCaptureStage()
 
     init() {
@@ -95,10 +96,11 @@ struct AuricleApp: App {
         }
     }
 
-    /// The GUI's `Notifier` is a `UserNotificationNotifier`. It tells the user
-    /// about a capture a revoked permission stopped; the published-note side
-    /// fires once the GUI runs the pipeline through notify. Without a
-    /// configured vault there is no note to open, so no click delegate.
+    /// The GUI's `Notifier` is a `UserNotificationNotifier`. The GUI's pipeline
+    /// runs stop at `review-diarization`, before notify, so the one
+    /// notification it posts is for a capture a revoked permission stopped.
+    /// Without a configured vault there is no note to open, so no click
+    /// delegate.
     static func makeNotifier() -> any Notifier {
         let authorization = PermissionCheckedNotificationAuthorization(permissionChecker: permissionChecker)
         return UserNotificationNotifier(center: SystemNotificationCenter(authorization: authorization))
@@ -129,8 +131,11 @@ struct AuricleApp: App {
     }
 
     /// A captured meeting runs as far as `review-diarization`, which leaves it
-    /// `awaiting_attribution` for the user.
-    private static func runPipelineAfterCapture(_ meetingID: MeetingID, store: StateStore, notifier: any Notifier) async {
+    /// `awaiting_attribution` for the user. `nonisolated`, so reading the
+    /// config and waiting on the worker subprocesses stays off the main actor.
+    /// No glossary: only attribute reads it, and this run stops before
+    /// attribute.
+    private nonisolated static func runPipelineAfterCapture(_ meetingID: MeetingID, store: StateStore, notifier: any Notifier) async {
         let log = Log(category: "app")
         let config: Config
         do {
@@ -139,14 +144,12 @@ struct AuricleApp: App {
             log.warn("config unreadable; the captured meeting was not processed", ["meetingID": .publicSafe(meetingID)])
             return
         }
-        let glossary = config.vaultPath.map { VaultGlossaryBuilder(vaultPath: $0).buildOrEmpty() } ?? Glossary()
         let runner = PipelineRunner(environment: PipelineRunner.Environment(
             stateStore: store,
             launcher: SubprocessStageLauncher(dispatcher: SubprocessDispatcher()),
             notifier: notifier,
             vaultPath: config.vaultPath,
             meetingsSubdir: config.meetingsSubdir,
-            glossary: glossary,
         ))
         let result = await runner.run(meetingID: meetingID, options: RunOptions(to: .reviewDiarization))
         if result.exitCode != WorkerExitCode.success {

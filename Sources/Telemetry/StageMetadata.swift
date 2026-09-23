@@ -84,6 +84,11 @@ extension StageMetadata: Codable {
 /// `reason` says why an interrupted capture was recovered; `error_class` is
 /// why a capture failed, the same key `StageRunner` writes for other stages;
 /// `source` names which input (`microphone`, `system_audio`) a fault came from.
+/// The three `system_audio_*` fields are present only on a capture that lost
+/// system audio and carried on with the microphone: the most recent loss and
+/// restore, as ISO 8601 UTC, and how many times it was lost. A `retried`
+/// event also carries `attempt_number`, `previous_error_class` and
+/// `backoff_ms`, the shape every stage's `retried` metadata takes.
 public struct CaptureMeta: Codable, Equatable, Sendable {
     public var micIncluded: Bool?
     public var exactZeroSeconds: Double?
@@ -91,6 +96,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
     public var reason: String?
     public var errorClass: String?
     public var source: String?
+    public var attemptNumber: Int?
+    public var previousErrorClass: String?
+    public var backoffMS: Int?
+    public var systemAudioLostAt: String?
+    public var systemAudioRestoredAt: String?
+    public var systemAudioLossCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case micIncluded = "mic_included"
@@ -99,6 +110,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         case reason
         case errorClass = "error_class"
         case source
+        case attemptNumber = "attempt_number"
+        case previousErrorClass = "previous_error_class"
+        case backoffMS = "backoff_ms"
+        case systemAudioLostAt = "system_audio_lost_at"
+        case systemAudioRestoredAt = "system_audio_restored_at"
+        case systemAudioLossCount = "system_audio_loss_count"
     }
 
     public init(
@@ -108,6 +125,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         reason: String? = nil,
         errorClass: String? = nil,
         source: String? = nil,
+        attemptNumber: Int? = nil,
+        previousErrorClass: String? = nil,
+        backoffMS: Int? = nil,
+        systemAudioLostAt: String? = nil,
+        systemAudioRestoredAt: String? = nil,
+        systemAudioLossCount: Int? = nil,
     ) {
         self.micIncluded = micIncluded
         self.exactZeroSeconds = exactZeroSeconds
@@ -115,6 +138,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         self.reason = reason
         self.errorClass = errorClass
         self.source = source
+        self.attemptNumber = attemptNumber
+        self.previousErrorClass = previousErrorClass
+        self.backoffMS = backoffMS
+        self.systemAudioLostAt = systemAudioLostAt
+        self.systemAudioRestoredAt = systemAudioRestoredAt
+        self.systemAudioLossCount = systemAudioLossCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +154,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         reason = try container.decodeIfPresent(String.self, forKey: .reason)
         errorClass = try container.decodeIfPresent(String.self, forKey: .errorClass)
         source = try container.decodeIfPresent(String.self, forKey: .source)
+        attemptNumber = try container.decodeIfPresent(Int.self, forKey: .attemptNumber)
+        previousErrorClass = try container.decodeIfPresent(String.self, forKey: .previousErrorClass)
+        backoffMS = try container.decodeIfPresent(Int.self, forKey: .backoffMS)
+        systemAudioLostAt = try container.decodeIfPresent(String.self, forKey: .systemAudioLostAt)
+        systemAudioRestoredAt = try container.decodeIfPresent(String.self, forKey: .systemAudioRestoredAt)
+        systemAudioLossCount = try container.decodeIfPresent(Int.self, forKey: .systemAudioLossCount)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -135,6 +170,12 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         try container.encodeIfPresent(reason, forKey: .reason)
         try container.encodeIfPresent(errorClass, forKey: .errorClass)
         try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(attemptNumber, forKey: .attemptNumber)
+        try container.encodeIfPresent(previousErrorClass, forKey: .previousErrorClass)
+        try container.encodeIfPresent(backoffMS, forKey: .backoffMS)
+        try container.encodeIfPresent(systemAudioLostAt, forKey: .systemAudioLostAt)
+        try container.encodeIfPresent(systemAudioRestoredAt, forKey: .systemAudioRestoredAt)
+        try container.encodeIfPresent(systemAudioLossCount, forKey: .systemAudioLossCount)
     }
 }
 

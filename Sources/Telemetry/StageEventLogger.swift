@@ -95,6 +95,9 @@ public actor StageEventLogger {
         /// A capture finishes as `completed` or `failed`; `started` belongs to
         /// `recordCaptureStarted` and `retried` to `record(event:)`.
         case invalidCaptureFinish(kind: StageEventKind)
+        /// A capture can finish only into a state the transition table allows
+        /// capture to leave `recording` for.
+        case captureTargetNotAllowed(targetState: PipelineState)
     }
 
     private let stateStore: StateStore
@@ -178,6 +181,9 @@ public actor StageEventLogger {
     ) async throws {
         guard kind == .completed || kind == .failed else {
             throw RecordError.invalidCaptureFinish(kind: kind)
+        }
+        guard PipelineTransitions.allowedTargets(stage: .capture, activeState: .recording)?.contains(targetState) == true else {
+            throw RecordError.captureTargetNotAllowed(targetState: targetState)
         }
         try await stateStore.finishCapture(
             meetingID: meetingID.rawValue,

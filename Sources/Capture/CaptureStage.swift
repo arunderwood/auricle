@@ -31,6 +31,8 @@ public struct CaptureRecoveryOutcome: Sendable, Equatable {
 /// recognize.
 public enum CaptureStageError: Error, Sendable, Equatable {
     case unrecognizedState(meetingID: MeetingID, state: String)
+    /// `start` was called while `meetingID` is still being captured.
+    case captureAlreadyLive(meetingID: MeetingID)
 }
 
 /// The capture stage: owns a meeting from the moment recording starts until
@@ -62,11 +64,31 @@ public actor CaptureStage {
         static let interrupted = "interrupted"
         static let permissionRevokedMidstream = "permission_revoked_midstream"
         static let transientStreamErrors = "transient_stream_errors"
+        static let allSourcesLost = "all_sources_lost"
+    }
+
+    /// `previous_error_class` on a `retried` event: an inline restart follows
+    /// a stream interruption; a backoff attempt follows the loss of system
+    /// audio.
+    enum RetryCause {
+        static let streamInterrupted = "stream_interrupted"
+        static let systemAudioLost = "system_audio_lost"
+    }
+
+    /// The wait before each backoff attempt to bring lost system audio back:
+    /// 5 s, 15 s, 30 s, then every 60 s. `attempt` counts from 0.
+    public static func defaultSystemAudioRetryDelay(attempt: Int) -> Duration {
+        switch attempt {
+        case 0: .seconds(5)
+        case 1: .seconds(15)
+        case 2: .seconds(30)
+        default: .seconds(60)
+        }
     }
 
     static let recoveredReason = "recovered_after_interruption"
 
-    private enum Phase {
+    enum Phase {
         /// `session.start()` has not returned. A stop that arrives now is
         /// held until it does.
         case starting(stopRequested: Bool)
@@ -76,15 +98,29 @@ public actor CaptureStage {
         case finishing
     }
 
-    private struct LiveCapture {
+    /// When system audio was lost and restored, for the capture's metadata.
+    struct SystemAudioLoss {
+        var lostAt: Date?
+        var restoredAt: Date?
+        var count = 0
+    }
+
+    struct LiveCapture {
         let session: any CaptureRecording
         let startedAt: Date
         var phase: Phase
         var micIncluded = false
-        var policy = TransientRestartPolicy()
+        /// One cap per input: a flapping system tap must not use up the
+        /// microphone's allowance, or the reverse.
+        var micPolicy = TransientRestartPolicy()
+        var systemPolicy = TransientRestartPolicy()
+        /// True while system audio is lost and the capture is microphone-only.
+        var systemAudioLost = false
+        var systemAudioLoss = SystemAudioLoss()
+        var systemAudioRetries: Task<Void, Never>?
     }
 
-    private static let log = Log(category: "capture-stage")
+    static let log = Log(category: "capture-stage")
     private static let wavHeaderBytes: UInt64 = 44
 
     private let stateStore: StateStore
@@ -92,18 +128,22 @@ public actor CaptureStage {
     private let notifier: any Notifier
     private let makeSession: SessionFactory
     private let cacheDirectory: @Sendable (MeetingID) throws -> URL
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
     private let timeZone: @Sendable () -> TimeZone
     private let onCaptured: @Sendable (MeetingID) async -> Void
+    let systemAudioRetryDelay: @Sendable (Int) -> Duration
+    let sleep: @Sendable (Duration) async throws -> Void
 
-    private var live: [MeetingID: LiveCapture] = [:]
+    var live: [MeetingID: LiveCapture] = [:]
 
     /// `makeSession` defaults to a `LiveCaptureSession` writing under
     /// `cacheDirectory`, so the path stored in `audio_cache_path` is the path
     /// the session writes. `timeZone` is read at each start, so a Mac that
     /// travels records each meeting in the zone it was in. `onCaptured` runs
     /// in its own task after a stop lands `captured`; a failed or recovered
-    /// capture never reaches it.
+    /// capture never reaches it. `systemAudioRetryDelay` and `sleep` pace the
+    /// backoff that tries to bring lost system audio back; tests replace both
+    /// so they never wait in real time.
     public init(
         stateStore: StateStore,
         stageEventLogger: StageEventLogger,
@@ -113,6 +153,8 @@ public actor CaptureStage {
         now: @escaping @Sendable () -> Date = { Date() },
         timeZone: @escaping @Sendable () -> TimeZone = { TimeZone.current },
         onCaptured: @escaping @Sendable (MeetingID) async -> Void = { _ in },
+        systemAudioRetryDelay: @escaping @Sendable (Int) -> Duration = CaptureStage.defaultSystemAudioRetryDelay(attempt:),
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
     ) {
         self.stateStore = stateStore
         self.stageEventLogger = stageEventLogger
@@ -122,6 +164,8 @@ public actor CaptureStage {
         self.now = now
         self.timeZone = timeZone
         self.onCaptured = onCaptured
+        self.systemAudioRetryDelay = systemAudioRetryDelay
+        self.sleep = sleep
     }
 
     // MARK: - Start
@@ -130,6 +174,11 @@ public actor CaptureStage {
     /// session. A session that fails to start moves the row to
     /// `capture_failed` (`start_failed`) and its error is rethrown.
     public func start(meetingID: MeetingID = .generate()) async throws -> CaptureStartResult {
+        // One meeting at a time: a second capture would either collide with
+        // this one's row or leave it recording with nothing tracking it.
+        if let liveID = live.keys.first {
+            throw CaptureStageError.captureAlreadyLive(meetingID: liveID)
+        }
         let startedAt = now()
         let stamp = ISO8601UTC.string(from: startedAt)
         let audioPath = try? cacheDirectory(meetingID).appendingPathComponent(AudioImporter.audioFileName).path
@@ -140,15 +189,7 @@ public actor CaptureStage {
         live[meetingID] = LiveCapture(session: session, startedAt: startedAt, phase: .starting(stopRequested: false))
         do {
             try await stageEventLogger.recordCaptureStarted(
-                meeting: Meeting(
-                    id: meetingID.rawValue,
-                    state: PipelineState.recording.rawValue,
-                    createdAt: stamp,
-                    updatedAt: stamp,
-                    captureStartedAt: stamp,
-                    audioCachePath: audioPath,
-                    captureTimeZone: timeZone().identifier,
-                ),
+                meeting: recordingRow(meetingID, stamp: stamp, audioPath: audioPath),
                 occurredAt: stamp,
             )
         } catch {
@@ -235,11 +276,13 @@ public actor CaptureStage {
         }
 
         live[meetingID]?.phase = .finishing
+        live[meetingID]?.systemAudioRetries?.cancel()
+        let loss = live[meetingID]?.systemAudioLoss ?? SystemAudioLoss()
         let audioURL: URL
         do {
             audioURL = try await capture.session.stop()
         } catch {
-            await finishFailed(meetingID, startedAt: capture.startedAt, errorClass: ErrorClass.interrupted, error: error)
+            await finishFailed(meetingID, startedAt: capture.startedAt, errorClass: ErrorClass.interrupted, loss: loss, error: error)
             live[meetingID] = nil
             return .captureFailed
         }
@@ -247,11 +290,11 @@ public actor CaptureStage {
         // Read after `stop()`: its final drain can still add to the counters.
         let stats = capture.session.watchdogStats
         let endedAt = now()
-        let meta = CaptureMeta(
+        let meta = Self.withLoss(loss, CaptureMeta(
             micIncluded: capture.micIncluded,
             exactZeroSeconds: stats.exactZeroSeconds,
             tapRebuilds: stats.rebuildCount,
-        )
+        ))
         defer { live[meetingID] = nil }
         try await stageEventLogger.recordCaptureFinished(
             meetingID: meetingID,
@@ -270,6 +313,21 @@ public actor CaptureStage {
         return .captured
     }
 
+    private func recordingRow(_ meetingID: MeetingID, stamp: String, audioPath: String?) -> Meeting {
+        Meeting(
+            id: meetingID.rawValue,
+            state: PipelineState.recording.rawValue,
+            createdAt: stamp,
+            updatedAt: stamp,
+            captureStartedAt: stamp,
+            audioCachePath: audioPath,
+            captureTimeZone: timeZone().identifier,
+        )
+    }
+}
+
+/// Fault handling: inline restarts, and failing a capture that cannot go on.
+extension CaptureStage {
     // MARK: - Faults
 
     private func handle(_ fault: CaptureStreamFault, for meetingID: MeetingID) async {
@@ -278,40 +336,46 @@ public actor CaptureStage {
         case let .permissionRevoked(source):
             await fail(meetingID, errorClass: ErrorClass.permissionRevokedMidstream, source: source, error: CaptureError.permissionRevokedMidstream)
             await notifier.fireCaptureFailed(meetingID: meetingID, reason: .permissionRevokedMidstream)
-        case let .transient(source, reason):
-            let decision = live[meetingID]?.policy.record(at: now()) ?? .fail
-            guard decision == .restart else {
+        case let .transient(.systemAudio, reason):
+            // While lost, the backoff owns system audio; the session's own
+            // watchdog rebuilds keep failing and reporting, and are ignored.
+            guard !capture.systemAudioLost else { return }
+            guard live[meetingID]?.systemPolicy.record(at: now()) == .restart else {
+                await loseSystemAudio(meetingID, reason: reason)
+                return
+            }
+            let attempt = live[meetingID]?.systemPolicy.faultsInWindow ?? 0
+            await restart(.systemAudio, of: meetingID, after: reason, attempt: attempt, session: capture.session)
+        case let .transient(.microphone, reason):
+            guard live[meetingID]?.micPolicy.record(at: now()) == .restart else {
                 await fail(
                     meetingID,
-                    errorClass: ErrorClass.transientStreamErrors,
-                    source: source,
+                    errorClass: capture.systemAudioLost ? ErrorClass.allSourcesLost : ErrorClass.transientStreamErrors,
+                    source: .microphone,
                     error: CaptureError.streamInterrupted(reason: reason),
                 )
                 return
             }
-            await restart(source, of: meetingID, after: reason, session: capture.session)
+            let attempt = live[meetingID]?.micPolicy.faultsInWindow ?? 0
+            await restart(.microphone, of: meetingID, after: reason, attempt: attempt, session: capture.session)
         }
     }
 
-    /// One `retried` event per inline restart. A restart that throws is
-    /// handled as the next fault, so a source that keeps failing reaches the
-    /// cap.
-    private func restart(_ source: CaptureSource, of meetingID: MeetingID, after reason: String, session: any CaptureRecording) async {
-        do {
-            try await stageEventLogger.record(event: StageEventRecord(
-                meetingID: meetingID,
-                stage: .capture,
-                kind: .retried,
-                occurredAt: ISO8601UTC.string(from: now()),
-                errorMessage: reason,
-                metadataJSON: Self.encode(CaptureMeta(source: source.rawValue)),
-            ))
-        } catch {
-            Self.log.warn("could not record a capture retry", [
-                "meeting_id": .publicSafe(meetingID.rawValue),
-                "reason": .sensitive(String(describing: error)),
-            ])
-        }
+    /// One `retried` event per inline restart, numbered by the source's faults
+    /// in the current window. A restart that throws is handled as the next
+    /// fault, so a source that keeps failing reaches the cap.
+    private func restart(
+        _ source: CaptureSource,
+        of meetingID: MeetingID,
+        after reason: String,
+        attempt: Int,
+        session: any CaptureRecording,
+    ) async {
+        await recordRetry(
+            CaptureMeta(source: source.rawValue, attemptNumber: attempt, previousErrorClass: RetryCause.streamInterrupted, backoffMS: 0),
+            for: meetingID,
+            reason: reason,
+        )
 
         // Both awaits here let a stop or a fail run in between; a capture
         // that has left `.running` is not restarted, and a restart error
@@ -331,9 +395,10 @@ public actor CaptureStage {
 
     /// Stops the session, which finalizes the partial WAV so the audio
     /// already captured survives, then fails the row.
-    private func fail(_ meetingID: MeetingID, errorClass: String, source: CaptureSource, error: Error) async {
+    func fail(_ meetingID: MeetingID, errorClass: String, source: CaptureSource, error: Error) async {
         guard let capture = live[meetingID] else { return }
         live[meetingID]?.phase = .finishing
+        capture.systemAudioRetries?.cancel()
         do {
             _ = try await capture.session.stop()
         } catch {
@@ -342,7 +407,14 @@ public actor CaptureStage {
                 "reason": .sensitive(String(describing: error)),
             ])
         }
-        await finishFailed(meetingID, startedAt: capture.startedAt, errorClass: errorClass, source: source, error: error)
+        await finishFailed(
+            meetingID,
+            startedAt: capture.startedAt,
+            errorClass: errorClass,
+            source: source,
+            loss: capture.systemAudioLoss,
+            error: error,
+        )
         live[meetingID] = nil
     }
 }
@@ -431,6 +503,7 @@ extension CaptureStage {
         startedAt: Date,
         errorClass: String,
         source: CaptureSource? = nil,
+        loss: SystemAudioLoss = SystemAudioLoss(),
         error: Error,
     ) async {
         let endedAt = now()
@@ -444,7 +517,7 @@ extension CaptureStage {
                 durationSeconds: Self.wholeSeconds(from: startedAt, to: endedAt),
                 durationMS: Self.milliseconds(from: startedAt, to: endedAt),
                 errorMessage: String(describing: error),
-                metadataJSON: Self.encode(CaptureMeta(errorClass: errorClass, source: source?.rawValue)),
+                metadataJSON: Self.encode(Self.withLoss(loss, CaptureMeta(errorClass: errorClass, source: source?.rawValue))),
             )
         } catch {
             Self.log.error("could not record a failed capture", [
@@ -469,6 +542,34 @@ extension CaptureStage {
     }
 
     // MARK: - Helpers
+
+    /// `meta` with the system-audio loss fields, when there was a loss.
+    private static func withLoss(_ loss: SystemAudioLoss, _ meta: CaptureMeta) -> CaptureMeta {
+        guard loss.count > 0 else { return meta }
+        var meta = meta
+        meta.systemAudioLostAt = loss.lostAt.map(ISO8601UTC.string(from:))
+        meta.systemAudioRestoredAt = loss.restoredAt.map(ISO8601UTC.string(from:))
+        meta.systemAudioLossCount = loss.count
+        return meta
+    }
+
+    func recordRetry(_ meta: CaptureMeta, for meetingID: MeetingID, reason: String) async {
+        do {
+            try await stageEventLogger.record(event: StageEventRecord(
+                meetingID: meetingID,
+                stage: .capture,
+                kind: .retried,
+                occurredAt: ISO8601UTC.string(from: now()),
+                errorMessage: reason,
+                metadataJSON: Self.encode(meta),
+            ))
+        } catch {
+            Self.log.warn("could not record a capture retry", [
+                "meeting_id": .publicSafe(meetingID.rawValue),
+                "reason": .sensitive(String(describing: error)),
+            ])
+        }
+    }
 
     private static func encode(_ meta: CaptureMeta) -> String? {
         let encoder = JSONEncoder()

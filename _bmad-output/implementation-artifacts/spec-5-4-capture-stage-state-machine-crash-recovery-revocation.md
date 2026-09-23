@@ -32,7 +32,7 @@ deferred:
       Sources/Capture/CaptureStage.swift
     severity: medium (unverified)
   - summary: >-
-      A System Audio revocation that Core Audio does report is classified `transient`, so it fails as `transient_stream_errors` with no notification instead of `permission_revoked_midstream`.
+      A System Audio revocation that Core Audio does report is classified `transient`, so it degrades the capture to microphone-only (or fails as `all_sources_lost` when no microphone is in the mix) with no notification, instead of failing as `permission_revoked_midstream`.
     evidence: |-
       maybe-false. The spec assumes a revoked tap only delivers exact zeros. Settled by revoking System Audio Recording mid-capture in Story 5.6 and reading the OSStatus the rebuild returns; if distinct, map it to `permissionRevoked(.systemAudio)`.
     location: >-
@@ -152,6 +152,8 @@ deferred:
 
 ## Spec Change Log
 
+- 2026-09-22 — Maintainer ruling, relayed on 2026-09-22 via the Epic 5 session: when system audio is lost, keep recording the microphone. This supersedes the I/O matrix's "Transient cap" row for the system-audio source; the row still holds for the microphone. Each source now has its own `TransientRestartPolicy`. A system-audio source reaching the cap (3 faults within 30s) is marked lost instead of failing the capture: the loss time and a loss count are recorded, further system-audio faults are ignored, and a backoff task retries `restart(.systemAudio)` after 5s, 15s, 30s, then every 60s, writing one `retried` event per attempt; a successful restart records the restore time and resets the system-audio policy. The capture still fails on a microphone revocation (`permission_revoked_midstream`), on the microphone cap (`transient_stream_errors`), and with the new `error_class` `all_sources_lost` when system audio is lost while the microphone is not in the mix, or the microphone fails while system audio is lost. `CaptureMeta` gains `system_audio_lost_at`, `system_audio_restored_at` and `system_audio_loss_count`, written on the `completed` or `failed` event whenever the loss count is above zero. `architecture.md` Decisions 1.2, 4.2 and 4.4 are updated to match. The maintainer confirmed the ruling directly on 2026-09-22 and may revisit it after MVP.
+
 ## Review Triage Log
 
 ### 2026-09-22 — Review pass
@@ -249,6 +251,6 @@ mutating func record(at now: Date) -> Decision {
 **Verification:**
 - `make check` — exit 0 before review (1570 tests) and re-run after the patches: exit 0, 1576 tests.
 - Protected-file grep on `git diff --name-only` — no match.
-- Idle CPU, NFR-P11: Release `AuricleApp` (ad-hoc signed for measurement), launched with `CFFIXED_USER_HOME` pointing at a scratch home so the real database was not touched, sampled with `top -l 61 -s 1`. Mean 0.0%, max 0.0% over 60 samples. Passes ≤ 1%.
+- Idle CPU, NFR-P11: Release `AuricleApp` (ad-hoc signed for measurement), launched with `CFFIXED_USER_HOME` pointing at a scratch home so the real database was not touched, sampled with `top -l 61 -s 1`. Mean 0.0%, max 0.0% over 60 samples. Passes ≤ 1%. The scratch home was empty: no config, no vault and no existing database, so the app sat on onboarding for the whole run; the idle main window with a configured vault was not measured.
 
 **Residual risks:** no hardware test of fault detection or mic restart (Story 5.6 is the live check); the App-side post-capture pipeline hand-off has no automated test; the five deferred items above.

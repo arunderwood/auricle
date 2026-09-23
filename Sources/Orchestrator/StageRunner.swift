@@ -92,7 +92,10 @@ public actor StageRunner {
         expectedState: PipelineState? = nil,
         work: @Sendable () async throws -> StageOutcome,
     ) async throws -> StageOutcome {
-        guard let allowedTargets = PipelineTransitions.allowedTargets(stage: stage, activeState: activeState) else {
+        // Capture's table entry describes the writes `StateStore.finishCapture`
+        // makes; capture itself never runs through here, so it is refused
+        // like a pair with no entry.
+        guard stage != .capture, let allowedTargets = PipelineTransitions.allowedTargets(stage: stage, activeState: activeState) else {
             logRejectedTransition("stage has no transition table entry for its active state", meetingID: meetingID, stage: stage, activeState: activeState)
             throw TransitionError.unsupportedStage(stage: stage, activeState: activeState)
         }

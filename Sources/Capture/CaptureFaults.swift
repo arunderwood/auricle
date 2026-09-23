@@ -81,6 +81,11 @@ public struct TransientRestartPolicy: Sendable, Equatable {
 
     public init() {}
 
+    /// How many faults the window holds, the one just recorded included.
+    public var faultsInWindow: Int {
+        recent.count
+    }
+
     public mutating func record(at now: Date) -> Decision {
         // An entry dated after `now` (the wall clock stepped back) is dropped
         // too, or it would sit inside the window indefinitely.

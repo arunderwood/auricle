@@ -71,21 +71,21 @@ private actor InvocationCounter {
 @Test func runRefusesAStageAndStatePairWithNoTableEntryBeforeWritingAnything() async throws {
     let store = try makeStore()
     let id = meetingID("TB01")
-    try await store.insertMeeting(makeMeeting(id: id, state: "summarizing"))
+    try await store.insertMeeting(makeMeeting(id: id, state: "recording"))
     let runner = makeRunner(store: store)
     let resolvedID = try #require(MeetingID(ulid: id))
     let workRuns = InvocationCounter()
 
-    await #expect(throws: StageRunner.TransitionError.unsupportedStage(stage: .transcribe, activeState: .summarizing)) {
-        try await runner.run(stage: .transcribe, meetingID: resolvedID, activeState: .summarizing) {
+    await #expect(throws: StageRunner.TransitionError.unsupportedStage(stage: .capture, activeState: .recording)) {
+        try await runner.run(stage: .capture, meetingID: resolvedID, activeState: .recording) {
             await workRuns.increment()
-            return .completed(targetState: .transcribing)
+            return .completed(targetState: .captured)
         }
     }
 
     #expect(await workRuns.count == 0)
     #expect(try await store.fetchStageEvents(meetingID: id).isEmpty)
-    #expect(try await store.fetchMeeting(id: id)?.state == "summarizing")
+    #expect(try await store.fetchMeeting(id: id)?.state == "recording")
 }
 
 @Test func runRefusesAnOutcomeTargetingAStateOutsideItsEntryAndWritesNoTxnB() async throws {
@@ -116,13 +116,13 @@ private actor InvocationCounter {
     let store = try makeStore()
     let unsupported = meetingID("TB04")
     let wrongTarget = meetingID("TB05")
-    try await store.insertMeeting(makeMeeting(id: unsupported, state: "summarizing"))
+    try await store.insertMeeting(makeMeeting(id: unsupported, state: "recording"))
     try await store.insertMeeting(makeMeeting(id: wrongTarget, state: "captured"))
     let recorder = LogRecorder()
     let runner = makeRunner(store: store, log: recorder.log)
 
-    _ = try? await runner.run(stage: .transcribe, meetingID: #require(MeetingID(ulid: unsupported)), activeState: .summarizing) {
-        .completed(targetState: .transcribing)
+    _ = try? await runner.run(stage: .capture, meetingID: #require(MeetingID(ulid: unsupported)), activeState: .recording) {
+        .completed(targetState: .captured)
     }
     let afterUnsupported = recorder.records
     _ = try? await runner.run(stage: .transcribe, meetingID: #require(MeetingID(ulid: wrongTarget)), activeState: .transcribing) {
@@ -130,8 +130,8 @@ private actor InvocationCounter {
     }
 
     #expect(afterUnsupported.map(\.level) == [.error])
-    #expect(afterUnsupported[0].message.contains("stage=transcribe"))
-    #expect(afterUnsupported[0].message.contains("activeState=summarizing"))
+    #expect(afterUnsupported[0].message.contains("stage=capture"))
+    #expect(afterUnsupported[0].message.contains("activeState=recording"))
     let rejected = recorder.records.dropFirst(afterUnsupported.count).filter { $0.level == .error }
     #expect(rejected.count == 1)
     #expect(rejected.first?.message.contains("targetState=published") == true)
