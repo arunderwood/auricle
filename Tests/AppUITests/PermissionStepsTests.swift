@@ -66,6 +66,11 @@ private final class FakeSystemAudioSource: SystemAudioSource, @unchecked Sendabl
         self.failOnStart = failOnStart
     }
 
+    /// No ring of its own to lose chunks from — always reports no loss.
+    var ringLossStats: RingLossStats {
+        RingLossStats()
+    }
+
     var startCallCount: Int {
         lock.withLock { starts }
     }

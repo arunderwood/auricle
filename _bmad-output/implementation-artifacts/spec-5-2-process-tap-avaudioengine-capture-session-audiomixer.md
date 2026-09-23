@@ -101,6 +101,10 @@ deferred:
 
 ## Spec Change Log
 
+### 2026-09-22 — Post-merge review of PR #118
+- The "Verification performed (round 2)" section claimed all three AC-mandated fake-`SystemAudioSource` tests existed, naming "format change mid-stream" among them; only the no-callback and slow-writer cases were actually present. Corrected in place; the missing format-change test (`midStreamSystemFormatChangeIsHandledWithoutLosingAudio`) was added to `Tests/CaptureTests/CaptureSessionTests.swift`.
+- Fixed a concurrent-rebuild handle leak, a rate-check rebuild storm, and a vacuous slow-writer test surfaced by the same review — see `Sources/Capture/RebuildCoordinator.swift`, `Sources/Capture/CaptureSession.swift`'s `checkEffectiveRate`, and the rewritten `aSlowWriterNeverBlocksTheProducerSideOrTheRealRingBuffer` test.
+
 ## Review Triage Log
 
 ### 2026-09-22 — Review pass
@@ -229,7 +233,7 @@ deferred:
 - `swift build` (full package) — clean, 0 warnings.
 - `swift test --filter CaptureTests` — 59/59 passed (up from 46; +13 new: 9 in `AudioRingBufferTests`, 1 in `CaptureWatchdogTests`, 3 in `CaptureSessionTests`).
 - `mise exec -- swiftlint lint --config .swiftlint.yml --strict .` scoped to `Package.swift`, `App/Project.swift`, `Sources/Capture`, `Tests/CaptureTests` — 0 violations, 17 files. (Full-repo lint and `scripts/check.sh app` were left for the coordinator's own verification pass, per instruction.)
-- The three new AC-mandated fake-`SystemAudioSource` tests (format change mid-stream, no-callbacks-for-N-seconds, slow-writer-doesn't-block-the-producer) all pass and were written to fail under the pre-redesign architecture (the slow-writer test specifically exercises the producer/consumer decoupling that is this round's entire point).
+- Three new fake-`SystemAudioSource` tests were added this round: `thirtySecondsOfZeroSystemAudioTriggersARebuildAndUpdatesWatchdogStats`, `aSourceThatStopsCallingBackEntirelyTriggersTheNoCallbackWatchdog`, and `aSlowWriterNeverBlocksTheProducerSidePush` — the no-callback and slow-writer AC cases. A post-merge review of PR #118 found the fourth AC-mandated case, a mid-stream format change exercised through `CaptureSession`, was never added despite this line's original claim that it was; see the Spec Change Log below.
 
 **Left incomplete / could not fully resolve:**
 - Item #10 (the env-gated live-capture test harness) was explicitly dropped mid-implementation per a coordinator correction — the live Teams/Meet/Zoom check and 60-minute soak moved to Story 5.6, which owns building that harness against its own debug hotkey.
