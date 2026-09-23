@@ -46,7 +46,8 @@ struct AuricleApp: App {
         }
     }
 
-    /// `configure`'s `URLOpener` reuses `NotificationDelegate.openInDefaultApp`
+    /// The one `URLOpener` (shared by `configure` and the permission steps'
+    /// Open Settings) reuses `NotificationDelegate.openInDefaultApp`
     /// rather than a second `NSWorkspace.open` call site — one place decides
     /// what "opened successfully" means. Every closure here binds `AppUI` to
     /// this process's real config file, Keychain, and Application Support
@@ -54,10 +55,11 @@ struct AuricleApp: App {
     /// of relying on a default that could silently touch any of them.
     @MainActor
     private static func makeOnboardingCoordinator() -> OnboardingCoordinator {
+        let opener: URLOpener = { url in
+            await (try? NotificationDelegate.openInDefaultApp(url)) != nil
+        }
         let configure = OnboardingConfigureModel(
-            opener: { url in
-                await (try? NotificationDelegate.openInDefaultApp(url)) != nil
-            },
+            opener: opener,
             validateVaultPath: { url in
                 do {
                     try VaultWriter.validateVaultPath(url)
@@ -73,6 +75,12 @@ struct AuricleApp: App {
             checker: permissionChecker,
             configure: configure,
             applicationSupportDirectory: .applicationSupportDirectory,
+            opener: opener,
+            permissionSteps: [
+                .microphone: MicrophonePermissionStep(),
+                .systemAudioCapture: SystemAudioPermissionStep(source: ProcessTapSource()),
+                .notifications: NotificationsPermissionStep(),
+            ],
         )
     }
 
