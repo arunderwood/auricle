@@ -196,6 +196,7 @@ struct StageFixture {
         config: SummarizerConfig = SummarizerConfig(),
         calendarSource: (any CalendarSource)? = nil,
         publishAnyway: Bool = false,
+        selfWikilink: String? = nil,
         promptSetHash: (@Sendable (SummarizationMode) throws -> String)? = nil,
     ) async throws -> StageRunner.StageOutcome {
         let orchestrator = SummarizerOrchestrator(
@@ -214,6 +215,7 @@ struct StageFixture {
                 timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
                 calendarSource: calendarSource,
                 publishAnyway: publishAnyway,
+                selfWikilink: selfWikilink,
                 promptSetHash: promptSetHash,
             )
         }
@@ -228,6 +230,7 @@ struct StageFixture {
             timeZone: #require(TimeZone(identifier: "America/Los_Angeles")),
             calendarSource: calendarSource,
             publishAnyway: publishAnyway,
+            selfWikilink: selfWikilink,
         )
     }
 

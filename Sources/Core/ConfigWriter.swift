@@ -74,7 +74,7 @@ public enum ConfigWriter {
 
         let url = fileURL ?? Config.defaultFileURL(homeDirectory: homeDirectory)
         let existingText = try readExistingText(at: url)
-        let literal = formattedLiteral(for: value, key: key)
+        let literal = try formattedLiteral(for: normalizedValue(value, key: key), key: key)
         let updatedText = apply(key: key, literal: literal, to: existingText)
 
         do {
@@ -85,6 +85,18 @@ public enum ConfigWriter {
 
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try AtomicWriter.write(Data(updatedText.utf8), to: url)
+    }
+
+    /// `self.wikilink` is stored in `SelfWikilink.normalized` form, so
+    /// `set("self.wikilink", to: "Jordan")` writes `"[[Jordan]]"`. An empty
+    /// value passes through unchanged: it is how a user unsets the key.
+    private static func normalizedValue(_ value: String, key: String) throws -> String {
+        guard key == "self.wikilink", !value.isEmpty else { return value }
+        do {
+            return try SelfWikilink.normalized(value)
+        } catch {
+            throw WriterError.wouldProduceInvalidConfig(.invalidValue(key: key, reason: error.reason))
+        }
     }
 
     private static func isSecretShaped(_ key: String) -> Bool {

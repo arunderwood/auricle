@@ -36,10 +36,16 @@ private struct StoreUnavailable: Error {}
 private let transcriptText = "Speaker_1: we should follow up."
 
 /// Records which stage's dependencies the router asked for and the vault path
-/// it handed the summarize factory.
+/// it handed the summarize factory. `selfWikilink` is what the summarize
+/// dependencies carry, as `InternalStageWorker` reads it from config.
 private final class Probe: Sendable {
     let built = Locked<[InternalStageKind]>([])
     let vaultPath = Locked<String?>(nil)
+    private let selfWikilink: String?
+
+    init(selfWikilink: String? = nil) {
+        self.selfWikilink = selfWikilink
+    }
 
     func environment(store: @escaping () throws -> StateStore) -> InternalStageRouter.Environment {
         InternalStageRouter.Environment(
@@ -60,6 +66,7 @@ private final class Probe: Sendable {
                     glossary: Glossary(),
                     config: SummarizerConfig(),
                     calendarSource: nil,
+                    selfWikilink: self.selfWikilink,
                 )
             },
         )
@@ -148,6 +155,37 @@ func publishAnywayReachesTheSummarizeWorker(publishAnyway: Bool) async throws {
     let summaryURL = try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("summary.json")
     #expect(FileManager.default.fileExists(atPath: summaryURL.path) == publishAnyway)
     #expect(exit.code != WorkerExitCode.success || publishAnyway)
+}
+
+@Test func theConfiguredSelfWikilinkReachesTheSummarizeWorker() async throws {
+    let store = try makeStore()
+    let meetingID = MeetingID.generate()
+    try await store.insertMeeting(Meeting(
+        id: meetingID.rawValue,
+        state: "attributing",
+        createdAt: "2026-04-28T09:00:00Z",
+        updatedAt: "2026-04-28T09:00:00Z",
+        captureStartedAt: "2026-04-28T12:00:00Z",
+    ))
+    defer { try? FileManager.default.removeItem(at: CacheArtifactWriter.cacheDirectory(for: meetingID)) }
+    try CacheArtifactWriter.write(
+        CanonicalTranscript(text: transcriptText, utterances: [.init(speakerLabel: "Speaker_1", start: 0, end: transcriptText.utf8.count)]),
+        for: meetingID,
+        named: "transcript.json",
+        schemaVersion: 1,
+    )
+    let arguments = try parse(InternalStageArguments(
+        stage: "summarize",
+        id: meetingID.rawValue,
+        workerProtocolVersion: WorkerProtocolVersion.current,
+        publishAnyway: true,
+    ))
+
+    _ = await InternalStageRouter.run(arguments, environment: Probe(selfWikilink: "[[Me]]").environment(store: { store }))
+
+    let summaryURL = try CacheArtifactWriter.cacheDirectory(for: meetingID).appendingPathComponent("summary.json")
+    let summary = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: summaryURL)) as? [String: Any])
+    #expect(summary["self_wikilink"] as? String == "[[Me]]")
 }
 
 @Test func anInvalidCommandLineEndsBeforeTheStoreOpens() async {

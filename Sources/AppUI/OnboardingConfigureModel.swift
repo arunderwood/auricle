@@ -1,3 +1,4 @@
+import Core
 import Foundation
 import Observation
 
@@ -17,9 +18,6 @@ public enum VaultPathValidationError: Error, Sendable, Equatable {
 }
 
 /// The Configure step's sub-steps, advanced in this order as each completes.
-/// `.selfWikilink` is an inert placeholder: no view renders anything for it
-/// and `advancePastSelfWikilinkPlaceholder()` is the only way through it,
-/// until a real one is registered here.
 public enum ConfigureSubStep: CaseIterable, Sendable, Equatable {
     case vaultPath
     case selfWikilink
@@ -50,25 +48,48 @@ public final class OnboardingConfigureModel {
     public private(set) var vaultPathError: VaultPathValidationError?
     /// The validated vault path, once one has passed `validateVaultPath`.
     public private(set) var vaultPath: URL?
+    /// The `self.wikilink` field's text as the user edits it. Starts at the
+    /// configured value, else `defaultSelfWikilink(fullUserName:)`.
+    public var selfWikilinkText: String
+    /// The last `confirmSelfWikilink()` refusal, if any. Cleared on success.
+    public private(set) var selfWikilinkError: SelfWikilinkError?
+    /// The confirmed `[[…]]` value `finish()` writes; `nil` until confirmed.
+    public private(set) var selfWikilink: String?
+    /// The chosen vault's page names, empty until `loadVaultTerms()` returns.
+    public private(set) var vaultTerms = Glossary()
+
+    private static let maxSuggestions = 5
 
     private let opener: URLOpener
     private let validateVaultPath: @Sendable (URL) throws -> Void
     private let writeVaultPath: @Sendable (URL) throws -> Void
     private let writeAPIKey: @Sendable (String) throws -> Void
+    private let writeSelfWikilink: @Sendable (String) throws -> Void
     private let configuredVaultPath: @Sendable () -> URL?
+    private let loadTerms: @Sendable (URL) async -> Glossary
 
+    /// - Parameter vaultTerms: Returns the page names of the vault at the
+    ///   given path. `loadVaultTerms()` awaits it from the main actor, so an
+    ///   implementation that walks the vault must do that work off it.
     public init(
         opener: @escaping URLOpener,
         validateVaultPath: @escaping @Sendable (URL) throws -> Void,
         writeVaultPath: @escaping @Sendable (URL) throws -> Void,
         writeAPIKey: @escaping @Sendable (String) throws -> Void,
         configuredVaultPath: @escaping @Sendable () -> URL?,
+        writeSelfWikilink: @escaping @Sendable (String) throws -> Void,
+        configuredSelfWikilink: @escaping @Sendable () -> String?,
+        fullUserName: String,
+        vaultTerms: @escaping @Sendable (URL) async -> Glossary,
     ) {
         self.opener = opener
         self.validateVaultPath = validateVaultPath
         self.writeVaultPath = writeVaultPath
         self.writeAPIKey = writeAPIKey
         self.configuredVaultPath = configuredVaultPath
+        self.writeSelfWikilink = writeSelfWikilink
+        loadTerms = vaultTerms
+        selfWikilinkText = configuredSelfWikilink() ?? Self.defaultSelfWikilink(fullUserName: fullUserName)
     }
 
     /// Prefills the picker at the configured vault path, or
@@ -95,8 +116,62 @@ public final class OnboardingConfigureModel {
         advanceSubStep()
     }
 
-    /// Advances past the inert self.wikilink placeholder.
-    public func advancePastSelfWikilinkPlaceholder() {
+    /// `[[<fullUserName>]]` sanitized by `SelfWikilink.fromName`, or empty
+    /// when nothing of the name remains — an empty field asks the user to
+    /// type one rather than suggesting `[[]]`.
+    public static func defaultSelfWikilink(fullUserName: String) -> String {
+        SelfWikilink.fromName(fullUserName).map { "[[\($0)]]" } ?? ""
+    }
+
+    /// Reads the validated vault's page names for `selfWikilinkSuggestions`.
+    /// A no-op before a vault path has validated.
+    public func loadVaultTerms() async {
+        guard let vaultPath else { return }
+        vaultTerms = await loadTerms(vaultPath)
+    }
+
+    /// Up to five vault page names matching the field's text: `people` before
+    /// `uncategorized` (projects and concepts never name a person), then a
+    /// prefix match on the name or any of its words before a substring match,
+    /// then alphabetical. The name already in the field is left out.
+    public var selfWikilinkSuggestions: [String] {
+        let query = Self.linkTarget(of: selfWikilinkText).lowercased()
+        guard !query.isEmpty else { return [] }
+        let current = selfWikilinkText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var seen = Set<String>()
+        var ranked: [RankedSuggestion] = []
+        for (group, names) in [vaultTerms.people, vaultTerms.uncategorized].enumerated() {
+            for name in names where seen.insert(name).inserted && current != "[[\(name)]]" {
+                guard let rank = Self.matchRank(of: name, for: query) else { continue }
+                ranked.append(RankedSuggestion(group: group, rank: rank, name: name))
+            }
+        }
+        return ranked
+            .sorted(by: RankedSuggestion.precedes)
+            .prefix(Self.maxSuggestions)
+            .map(\.name)
+    }
+
+    /// Replaces the field's text with `[[name]]`.
+    public func selectSuggestion(_ name: String) {
+        selfWikilinkText = "[[\(name)]]"
+    }
+
+    /// Normalizes the field through `SelfWikilink.normalized`, stores the
+    /// result for `finish()`, and advances. Throws, stays on this sub-step,
+    /// and records `selfWikilinkError` when the value is refused.
+    public func confirmSelfWikilink() throws {
+        let link: String
+        do {
+            link = try SelfWikilink.normalized(selfWikilinkText)
+        } catch {
+            selfWikilinkError = error
+            throw error
+        }
+        selfWikilinkError = nil
+        selfWikilink = link
+        selfWikilinkText = link
         advanceSubStep()
     }
 
@@ -135,11 +210,59 @@ public final class OnboardingConfigureModel {
         advanceSubStep()
     }
 
-    /// Writes the validated vault path to `~/.auricle/config.toml`.
+    /// Writes the validated vault path, then the confirmed `self.wikilink`
+    /// when there is one, to `~/.auricle/config.toml`.
     /// `OnboardingCoordinator.completeOnboarding()` calls this exactly once.
     public func finish() throws {
         guard let vaultPath else { throw FinishError.vaultPathNotSelected }
         try writeVaultPath(vaultPath)
+        if let selfWikilink {
+            try writeSelfWikilink(selfWikilink)
+        }
+    }
+
+    private struct RankedSuggestion {
+        /// 0 for `people`, 1 for `uncategorized`.
+        let group: Int
+        /// 0 for a prefix match, 1 for a substring match.
+        let rank: Int
+        let name: String
+
+        static func precedes(_ lhs: Self, _ rhs: Self) -> Bool {
+            if lhs.group != rhs.group {
+                return lhs.group < rhs.group
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    /// The text with surrounding whitespace, one leading `[[`, one trailing
+    /// `]]` and any `|alias` removed — what the user means to link to.
+    private static func linkTarget(of text: String) -> String {
+        var target = Substring(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        if target.hasPrefix("[[") {
+            target = target.dropFirst(2)
+        }
+        if target.hasSuffix("]]") {
+            target = target.dropLast(2)
+        }
+        if let bar = target.firstIndex(of: "|") {
+            target = target[..<bar]
+        }
+        return target.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 0 for a case-insensitive prefix match on the whole name or any word,
+    /// 1 for a substring match, `nil` for no match. `query` is lowercased.
+    private static func matchRank(of name: String, for query: String) -> Int? {
+        let lowered = name.lowercased()
+        if lowered.hasPrefix(query) || lowered.split(whereSeparator: \.isWhitespace).contains(where: { $0.hasPrefix(query) }) {
+            return 0
+        }
+        return lowered.contains(query) ? 1 : nil
     }
 
     private func advanceSubStep() {

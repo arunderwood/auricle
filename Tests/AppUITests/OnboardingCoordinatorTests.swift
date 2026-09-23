@@ -1,4 +1,5 @@
 @testable import AppUI
+import Core
 import Foundation
 import os
 import Permissions
@@ -81,7 +82,7 @@ private func validateVaultPath(_ url: URL) throws {
 @MainActor
 private func advanceToAPIKeySubStep(_ model: OnboardingConfigureModel, vaultDirectory: URL) throws {
     try model.selectVaultPath(vaultDirectory)
-    model.advancePastSelfWikilinkPlaceholder()
+    try model.confirmSelfWikilink()
     model.continueFromObsidian()
 }
 
@@ -92,6 +93,7 @@ private func makeConfigureModel(
     writeVaultPath: @escaping @Sendable (URL) throws -> Void = { _ in },
     writeAPIKey: @escaping @Sendable (String) throws -> Void = { _ in },
     configuredVaultPath: @escaping @Sendable () -> URL? = { nil },
+    writeSelfWikilink: @escaping @Sendable (String) throws -> Void = { _ in },
 ) -> OnboardingConfigureModel {
     OnboardingConfigureModel(
         opener: opener,
@@ -99,6 +101,10 @@ private func makeConfigureModel(
         writeVaultPath: writeVaultPath,
         writeAPIKey: writeAPIKey,
         configuredVaultPath: configuredVaultPath,
+        writeSelfWikilink: writeSelfWikilink,
+        configuredSelfWikilink: { nil },
+        fullUserName: "Jordan Lee",
+        vaultTerms: { _ in Glossary() },
     )
 }
 
@@ -179,7 +185,7 @@ struct OnboardingConfigureModelTests {
         #expect(model.defaultVaultDirectory == configured)
     }
 
-    @Test func advancePastSelfWikilinkPlaceholderMovesToObsidian() throws {
+    @Test func confirmingTheSelfWikilinkMovesToObsidian() throws {
         let directory = makeTestDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -187,7 +193,7 @@ struct OnboardingConfigureModelTests {
         try model.selectVaultPath(directory)
         #expect(model.subStep == .selfWikilink)
 
-        model.advancePastSelfWikilinkPlaceholder()
+        try model.confirmSelfWikilink()
         #expect(model.subStep == .obsidian)
     }
 
@@ -197,7 +203,7 @@ struct OnboardingConfigureModelTests {
 
         let model = makeConfigureModel(opener: { _ in true })
         try model.selectVaultPath(directory)
-        model.advancePastSelfWikilinkPlaceholder()
+        try model.confirmSelfWikilink()
         await model.checkObsidian()
         #expect(model.obsidianOpened == true)
     }
@@ -208,7 +214,7 @@ struct OnboardingConfigureModelTests {
 
         let model = makeConfigureModel(opener: { _ in false })
         try model.selectVaultPath(directory)
-        model.advancePastSelfWikilinkPlaceholder()
+        try model.confirmSelfWikilink()
         await model.checkObsidian()
         #expect(model.obsidianOpened == false)
 
@@ -226,7 +232,7 @@ struct OnboardingConfigureModelTests {
             return true
         })
         try model.selectVaultPath(directory)
-        model.advancePastSelfWikilinkPlaceholder()
+        try model.confirmSelfWikilink()
         await model.checkObsidian()
 
         let expectedURL = try #require(URL(string: "obsidian://open?vault=\(directory.lastPathComponent)"))
@@ -280,6 +286,46 @@ struct OnboardingConfigureModelTests {
         try model.selectVaultPath(directory)
         try model.finish()
         #expect(recorder.values == [directory])
+    }
+
+    @Test func finishWritesTheConfirmedSelfWikilinkAfterTheVaultPath() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let writes = Recorder<String>()
+        let model = makeConfigureModel(
+            writeVaultPath: { writes.record("vault_path=\($0.path)") },
+            writeSelfWikilink: { writes.record("self.wikilink=\($0)") },
+        )
+        try model.selectVaultPath(directory)
+        model.selfWikilinkText = "Jordan"
+        try model.confirmSelfWikilink()
+        try model.finish()
+        #expect(writes.values == ["vault_path=\(directory.path)", "self.wikilink=[[Jordan]]"])
+    }
+
+    @Test func finishWithoutAConfirmedSelfWikilinkWritesOnlyTheVaultPath() throws {
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let selfWikilinkWrites = Recorder<String>()
+        let model = makeConfigureModel(writeSelfWikilink: { selfWikilinkWrites.record($0) })
+        try model.selectVaultPath(directory)
+        try model.finish()
+        #expect(selfWikilinkWrites.values.isEmpty)
+    }
+
+    @Test func finishPropagatesASelfWikilinkWriteError() throws {
+        struct WriteFailed: Error {}
+        let directory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let model = makeConfigureModel(writeSelfWikilink: { _ in throw WriteFailed() })
+        try model.selectVaultPath(directory)
+        try model.confirmSelfWikilink()
+        #expect(throws: WriteFailed.self) {
+            try model.finish()
+        }
     }
 
     @Test func finishWithoutAVaultPathThrows() {
@@ -375,15 +421,20 @@ struct OnboardingCoordinatorTests {
         #expect(checker.categoriesRequested.isEmpty)
     }
 
-    @Test func completeOnboardingWritesMarkerAndVaultPathExactlyOnce() throws {
+    @Test func completeOnboardingWritesMarkerVaultPathAndSelfWikilinkExactlyOnce() throws {
         let applicationSupportDirectory = makeTestDirectory()
         defer { try? FileManager.default.removeItem(at: applicationSupportDirectory) }
         let vaultDirectory = makeTestDirectory()
         defer { try? FileManager.default.removeItem(at: vaultDirectory) }
 
         let vaultPathWrites = Recorder<URL>()
-        let configure = makeConfigureModel(writeVaultPath: { vaultPathWrites.record($0) })
+        let selfWikilinkWrites = Recorder<String>()
+        let configure = makeConfigureModel(
+            writeVaultPath: { vaultPathWrites.record($0) },
+            writeSelfWikilink: { selfWikilinkWrites.record($0) },
+        )
         try configure.selectVaultPath(vaultDirectory)
+        try configure.confirmSelfWikilink()
 
         let coordinator = OnboardingCoordinator(
             checker: FakePermissionChecker(),
@@ -396,6 +447,7 @@ struct OnboardingCoordinatorTests {
         try coordinator.completeOnboarding()
         #expect(OnboardingMarker.exists(applicationSupportDirectory: applicationSupportDirectory))
         #expect(vaultPathWrites.values == [vaultDirectory])
+        #expect(selfWikilinkWrites.values == ["[[Jordan Lee]]"])
     }
 
     @Test func completeOnboardingPropagatesAMissingVaultPath() {

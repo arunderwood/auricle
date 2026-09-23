@@ -1,5 +1,6 @@
 import AppKit
 import AppUI
+import Core
 import SwiftUI
 
 /// Renders the current `ConfigureSubStep` and forwards user actions to
@@ -45,14 +46,36 @@ struct ConfigureStepView: View {
         }
     }
 
-    /// Inert until a real sub-step is registered here — see
-    /// `ConfigureSubStep.selfWikilink`'s doc comment.
     private var selfWikilinkSubStep: some View {
-        Button("Continue") {
-            coordinator.configure.advancePastSelfWikilinkPlaceholder()
+        @Bindable var configure = coordinator.configure
+        return VStack(spacing: 12) {
+            Text("How should your notes link to you?")
+                .font(.title2)
+            Text("Pick the page in your vault that is you, or type a name.")
+                .foregroundStyle(.secondary)
+            TextField("[[Your Name]]", text: $configure.selfWikilinkText)
+                .accessibilityLabel("Your wikilink")
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 320)
+                .onSubmit { confirmSelfWikilink() }
+            ForEach(configure.selfWikilinkSuggestions, id: \.self) { name in
+                Button(name) {
+                    configure.selectSuggestion(name)
+                }
+                .accessibilityLabel("Use \(name)")
+                .buttonStyle(.link)
+            }
+            if let selfWikilinkError = configure.selfWikilinkError {
+                Text(message(for: selfWikilinkError))
+                    .foregroundStyle(.red)
+            }
+            Button("Continue") { confirmSelfWikilink() }
+                .accessibilityLabel("Continue")
+                .buttonStyle(.borderedProminent)
         }
-        .accessibilityLabel("Continue")
-        .buttonStyle(.borderedProminent)
+        .task {
+            await configure.loadVaultTerms()
+        }
     }
 
     private var obsidianSubStep: some View {
@@ -130,11 +153,26 @@ struct ConfigureStepView: View {
         try? coordinator.configure.selectVaultPath(url)
     }
 
+    private func confirmSelfWikilink() {
+        // `confirmSelfWikilink` records a failure on `selfWikilinkError`,
+        // which `selfWikilinkSubStep` renders; staying on this sub-step is the point.
+        try? coordinator.configure.confirmSelfWikilink()
+    }
+
     private func saveAPIKey() {
         do {
             try coordinator.configure.setAPIKey(apiKeyText)
         } catch {
             apiKeyError = "Couldn't save the API key. Try again."
+        }
+    }
+
+    private func message(for error: SelfWikilinkError) -> String {
+        switch error {
+        case .empty:
+            "Enter a name to link to."
+        case .malformed:
+            "Use a single page name like [[Your Name]], without an alias or any of [ ] | # ^ \\."
         }
     }
 

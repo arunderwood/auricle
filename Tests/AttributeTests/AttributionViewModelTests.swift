@@ -62,13 +62,15 @@ private func calendar(title: String = "Weekly sync", attendees: [CalendarAttende
 @MainActor
 private func makeModel(
     inputs: AttributionInputs = AttributionInputs(diarization: threeSpeakerDiarization),
+    configuredSelfWikilink: String? = nil,
     glossary: Glossary = Glossary(),
     previous: any PreviousLabelings = NoPreviousLabelings(),
     sleeper: ManualSleeper = ManualSleeper(),
     log: WriteLog = WriteLog(),
 ) -> AttributionViewModel {
     AttributionViewModel(
-        meetingID: MeetingID.generate(), inputs: inputs, glossary: glossary, previous: previous,
+        meetingID: MeetingID.generate(), inputs: inputs, configuredSelfWikilink: configuredSelfWikilink,
+        glossary: glossary, previous: previous,
         sleep: { try await sleeper.sleep($0) },
         writer: { log.append($0) },
     )
@@ -109,6 +111,20 @@ private struct FixedLabelings: PreviousLabelings {
     model.markThisIsMe()
     #expect(model.name(forSpeaker: "Speaker_2") == "Sara")
     #expect(model.name(forSpeaker: "Speaker_1") == nil)
+}
+
+@MainActor @Test func aConfiguredSelfWikilinkBeatsTheCalendarSelf() {
+    let inputs = AttributionInputs(diarization: threeSpeakerDiarization, calendar: calendar(attendees: [attendee("Ben"), attendee("Sara", isSelf: true)]))
+    let model = makeModel(inputs: inputs, configuredSelfWikilink: "[[Me]]")
+    #expect(model.selfName == "Me")
+    model.markThisIsMe()
+    #expect(model.name(forSpeaker: "Speaker_2") == "Me")
+}
+
+@MainActor @Test func withoutAConfiguredSelfWikilinkTheCalendarSelfStands() {
+    let inputs = AttributionInputs(diarization: threeSpeakerDiarization, calendar: calendar(attendees: [attendee("Ben"), attendee("Sara", isSelf: true)]))
+    let model = makeModel(inputs: inputs, configuredSelfWikilink: nil)
+    #expect(model.selfName == "Sara")
 }
 
 @MainActor @Test func thisIsMeDoesNothingWithoutACalendarSelf() {

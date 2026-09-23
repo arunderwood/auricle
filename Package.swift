@@ -318,7 +318,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppUITests",
-            dependencies: ["AppUI", "Permissions", "Capture", "Core"],
+            dependencies: ["AppUI", "Permissions", "Capture", "Core", "VaultGlossary"],
             path: "Tests/AppUITests",
         ),
     ],
