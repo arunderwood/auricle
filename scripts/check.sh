@@ -3,7 +3,7 @@
 # runs. `make check` and ci.yml both call this; there is exactly one copy of
 # the sequence, so the local gate and the CI gate cannot drift apart.
 #
-# The phases exist because CI runs them as three independent jobs in parallel.
+# The phases exist because CI runs each one as an independent job in parallel.
 # With no argument every phase runs in order, which is what a developer wants
 # before pushing.
 #
