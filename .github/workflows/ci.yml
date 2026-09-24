@@ -1,4 +1,4 @@
-# The gate chain, split across three jobs that run in parallel. Each one calls
+# The gate chain, split across jobs that run in parallel. Each one calls
 # a phase of scripts/check.sh — the same script `make check` runs locally, so
 # the two cannot drift apart. A later story's CI gate extends a job here
 # rather than adding a new workflow file.
@@ -13,6 +13,9 @@ on:
   # exists to avoid.
   push:
     branches: [main]
+  # A retargeted stacked PR can end up with no run for its new head SHA; this
+  # produces one against the branch without closing and reopening the PR.
+  workflow_dispatch:
 
 concurrency:
   # A fixup push to an open PR should replace that PR's in-flight run. A push
@@ -36,11 +39,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # Workspace-relative, not GitHub's newer $/ self-repository form: the
-      # pinned actionlint rejects $/ as malformed, and nothing between the
-      # checkout and this step can write to .github/actions/, which is the
-      # tampering the self-repository form exists to prevent.
-      - uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
+      # $/ resolves to this repository at the commit that is running, so a
+      # step that writes to the workspace cannot substitute the action.
+      - uses: $/.github/actions/setup-build-env
 
       - run: scripts/check.sh lint
 
@@ -53,7 +54,7 @@ jobs:
           persist-credentials: false
 
       - id: toolchain
-        uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
+        uses: $/.github/actions/setup-build-env
 
       # SwiftPM's shared fetch cache, and nothing else. It holds the bare
       # mirrors every resolve would otherwise clone from GitHub, which is the
@@ -74,11 +75,31 @@ jobs:
 
       - run: scripts/check.sh swift
 
-      # The release build catches optimizer-level breakage only, which does not
-      # need to gate every fixup push to an open PR. main is the backstop, and
-      # it is also the run whose cache every PR starts from.
-      - if: github.event_name == 'push'
-        run: scripts/check.sh release
+  # The release build catches optimizer-level breakage only, which does not
+  # need to gate every fixup push to an open PR, so it runs on main alone.
+  # It is a job rather than a step after `swift` because both compile the whole
+  # package and are CPU-bound: on one 3-vCPU runner they can only run back to
+  # back, and on separate runners they overlap.
+  release:
+    if: github.event_name == 'push'
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: toolchain
+        uses: $/.github/actions/setup-build-env
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ steps.toolchain.outputs.xcode-version }}-
+
+      - run: scripts/check.sh release
 
   app:
     runs-on: macos-26
@@ -89,11 +110,11 @@ jobs:
           persist-credentials: false
 
       - id: toolchain
-        uses: ./.github/actions/setup-build-env # zizmor: ignore[self-repository]
+        uses: $/.github/actions/setup-build-env
 
       # Xcode and Tuist read the same shared fetch cache SwiftPM writes, so
-      # this is the same entry the swift job uses, under the same key —
-      # whichever job finishes first saves it and the other logs that it
+      # this is the same entry the swift and release jobs use, under the same
+      # key — whichever job finishes first saves it and the others log that it
       # already exists. This is what keeps `tuist generate`'s package
       # resolution off the network.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
