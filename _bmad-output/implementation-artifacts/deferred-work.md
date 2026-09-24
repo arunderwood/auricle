@@ -568,3 +568,34 @@ Story 3.8's spec was renamed to `spec-3-8-strategy-comparison-rig-scaffold.md`. 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-process-tap-avaudioengine-capture-session-audiomixer.md`
   summary: `CaptureSession.drainOnce` calls `writer.write(pcm)` inline on the consumer task, so a slow disk delays the next drain of both rings rather than running off a separate queue.
   evidence: Verified against `Sources/Capture/CaptureSession+Consumer.swift`'s `drainOnce`. Acceptable per the PR #118 post-merge review (`aSlowWriterNeverBlocksTheProducerSideOrTheRealRingBuffer`): the two `AudioRingBuffer`s absorb a slow write (`ProcessTapSource`'s ring holds ~5.5s as of this pass, `micRing` holds ~5.5s at the mic tap's typical buffer size), so a write stall shorter than that never blocks a real-time callback, only delays how soon already-published chunks reach the mixer. A write stall longer than the ring's headroom would still drop chunks (counted now, per the same review's `ringLossStats`/`RingLossStats` fix) rather than corrupt anything. Moving `write(_:)` off the consumer task onto its own queue would close this fully but adds a second queue and its own ordering-with-`finalize()` question; left for a future pass since nothing today depends on it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-recordingindicator-atomic-component.md`
+  summary: `Package.swift`'s header comment claims "26 modular targets," which was already wrong before Story 5.5 (28 non-test targets at its baseline, 29 with `AppUI`).
+  evidence: Copied from the Story 5.5 spec's frontmatter `deferred`, which never reached this file. Location `Package.swift:2`. Severity low. Logged from the Epic 5 retrospective (S5).
+
+- closes: `_bmad-output/implementation-artifacts/spec-5-5-recordingindicator-atomic-component.md`, "`Package.swift`'s header comment claims \"26 modular targets,\""
+  resolution: The header no longer states a target count, so it cannot drift as targets are added. Fixed in `Package.swift:2` by the Epic 5 retro action-items change (`spec-epic-5-retro-action-items.md`).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-10-configwriter-self-wikilink-key.md`
+  summary: `ConfigVerb.Set.run()`'s do/catch to `writeStderr`/`ExitCode` wiring has no automated test.
+  evidence: Copied from the Story 5.10 spec's frontmatter `deferred`. `App/`-only logic is not reachable by `swift test` (the AGENTS.md pitfall), and no test references `ConfigVerb`. Every other verb with the same wiring is equally untested. The error text it prints now comes from `ConfigWriter.WriterError.message`, which `Tests/CoreTests/ConfigWriterTests.swift` covers. Location `App/auricle-cli/Verbs/ConfigVerb.swift`. Severity low. Logged from the Epic 5 retrospective (S5).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-10-configwriter-self-wikilink-key.md`
+  summary: `ConfigWriter.set` does not edit a table written in inline form (`self = { wikilink = "x" }`); it refuses the edit with `wouldProduceInvalidConfig` and leaves the file untouched.
+  evidence: A documented scope limit in the Story 5.10 spec's Design Notes and review log, never copied here. Nothing auricle writes uses inline tables, so only a hand-edited file hits it, and the user gets a refusal, not a corrupted file. Location `Sources/Core/ConfigWriter.swift`. Severity low. Logged from the Epic 5 retrospective (S5).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-action-items.md`
+  summary: `ConfigWriter`'s scan for a bracketed array or inline-table value (`endOfValueToken`'s nesting depth) is no longer reachable through `set`.
+  evidence: `set` now accepts only `Config.settableKeys`, all of them scalars, and refuses a file `Config` cannot already read. An array under a settable key is such a file, so `set` stops before the scan runs. The test that pinned array replacement now pins the refusal. Removing the scan is a small cleanup; keeping it costs nothing at runtime. Location `Sources/Core/ConfigWriter.swift`. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-action-items.md`
+  summary: A capture stopped in the first moments after launch could be run twice: once by `CaptureStage`'s `onCaptured` and once by `CapturePipelineLauncher.resumeStrandedCaptures()`, if the stop lands before the launch sweep reads the `captured` rows.
+  evidence: maybe-false in practice. The sweep runs right after launch recovery, and a capture has to start and stop before its `fetchPending` returns. What the second run does depends on the state the first has reached when it reads the row; that path was not traced. Fix, if the live run ever shows it: skip the meetings the stage has handed to `onCaptured` since launch. Location `Sources/Pipeline/CapturePipelineLauncher.swift`. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-action-items.md`
+  summary: The onboarding hand-off (Done → Continue → main window), the notification delegate built on that first main-window appearance, and the Debug menu's disabled state during onboarding have no automated test and no live run yet.
+  evidence: `OnboardingProgress`, `OnboardingCoordinator.enterApp()` and `DebugCaptureTrigger.isAvailable` are covered by `Tests/AppUITests`. The SwiftUI wiring in `App/Auricle/AuricleApp.swift` and `DoneStepView.swift` needs a GUI session, which the maintainer's live run (Epic 5 retro item 47) covers. Severity low.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-epic-5-retro-action-items.md`
+  summary: The capture test doubles are still duplicated: `FakeSystemAudioSource` (2 copies), `FakeRecording` and `FakeCaptureRecording`, `RecordingNotifier` (3 copies) and `Recorder` (3 copies).
+  evidence: This duplication existed before the change. The change moved `FakePermissionChecker`, the five-copy fake, into `TestSupport`. Moving the capture doubles would make `TestSupport` depend on `Capture`, and nearly every test target links `TestSupport`. A separate capture test-support target avoids that edge. Location `Tests/CaptureTests/`, `Tests/AppUITests/`. Severity low. Logged from the Epic 5 retro action-items review (A2).

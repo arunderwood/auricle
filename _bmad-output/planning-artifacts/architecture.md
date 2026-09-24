@@ -459,7 +459,7 @@ Alternatives rejected:
 - AAC / m4a — codec dependency adds complexity to snippet playback; non-byte-sliceable for snippets
 - CAF — codec dependency; less universal than WAV; no meaningful advantage
 
-**Capture backend.** System audio comes from a Core Audio global process tap (`CATapDescription(monoGlobalTapButExcludeProcesses:)` excluding auricle's own process) read through a private aggregate device and an IOProc; the microphone comes from `AVAudioEngine`. Both sit behind `AudioMixer`, which resamples to 16kHz with `AVAudioConverter`. System audio is behind a `SystemAudioSource` protocol so a ScreenCaptureKit source can replace the tap without touching `AudioMixer`, `WAVWriter` or `CaptureStage`. A watchdog rebuilds the tap, aggregate device and IOProc after 30s of exact-zero buffers, at most once per 30s, and never fails the capture, because exact zeros also mean silence or a missing grant. The selection evidence is `research/technical-scstream-vs-core-audio-process-taps-2026-09-22/research.md`.
+**Capture backend.** System audio comes from a Core Audio global process tap (`CATapDescription(monoGlobalTapButExcludeProcesses:)` excluding auricle's own process) read through a private aggregate device and an IOProc; the microphone comes from `AVAudioEngine`. Both sit behind `AudioMixer`, which resamples to 16kHz with `AVAudioConverter`. System audio is behind a `SystemAudioSource` protocol so a ScreenCaptureKit source can replace the tap without touching `AudioMixer`, `WAVWriter` or `CaptureStage`. A watchdog rebuilds the tap, aggregate device and IOProc after 30s of exact-zero buffers, at most once per 30s, and never fails the capture, because exact zeros also mean silence or a missing grant. It also rebuilds when the IOProc stops calling back for 5s, since a dead IOProc (its output device removed or changed) delivers no buffers at all and the zero check cannot see it. Faults are counted per source, three within 30s each. The third system-audio fault degrades the capture to microphone-only instead of failing it, and a 5s / 15s / 30s / 60s backoff keeps trying to bring system audio back; the third microphone fault fails the capture, as does losing system audio with no microphone in the mix (`all_sources_lost`). The selection evidence is `research/technical-scstream-vs-core-audio-process-taps-2026-09-22/research.md`.
 
 **`WAVWriter` is the one exemption from `AtomicWriter`.** A 115 MB stream that must survive a crash partially cannot be written by temp-and-rename. `WAVWriter` creates `audio.wav` 0600 in a 0700 directory, appends through a `FileHandle`, and patches the RIFF and data sizes on finalize and during capture recovery.
 
@@ -2344,14 +2344,23 @@ auricle/
 │   │   └── GatekeeperTrust.swift          # spctl assessment-policy probe (Distribution Model)
 │   │
 │   ├── Capture/                           # FR1–FR10
-│   │   ├── CaptureSession.swift           # process tap + AVAudioEngine pipeline
+│   │   ├── CaptureSession.swift           # process tap + AVAudioEngine pipeline, one lock discipline
+│   │   ├── CaptureSession+Consumer.swift  # consumer task: drains the rings off the real-time thread, feeds mixer + watchdog
+│   │   ├── LiveCaptureSession.swift       # CaptureRecording seam + production session; engine config-change classifier
 │   │   ├── SystemAudioSource.swift        # seam: ProcessTapSource now, ScreenCaptureKit fallback (Dec 1.4)
-│   │   ├── ProcessTapSource.swift         # global exclude-self tap, private aggregate device, IOProc, zero watchdog
-│   │   ├── CaptureStage.swift             # beginCapture / finishCapture / recovery (Dec 1.2)
+│   │   ├── ProcessTapSource.swift         # global exclude-self tap, private aggregate device, IOProc
+│   │   ├── RebuildCoordinator.swift       # serializes overlapping tap teardown/rebuild triggers
+│   │   ├── AudioRingBuffer.swift          # real-time-safe hand-off from callbacks to the consumer
+│   │   ├── ConsumerAlignmentState.swift   # consumer loop state: stream alignment, effective-rate probe
+│   │   ├── CaptureWatchdog.swift          # exact-zero and no-callback rebuild triggers; watchdog stats
+│   │   ├── CaptureFaults.swift            # fault types + per-source transient restart policy
+│   │   ├── CaptureStage.swift             # beginCapture / finishCapture, fault policy (Dec 1.2)
+│   │   ├── CaptureStage+SystemAudioLoss.swift  # mic-only degradation and system-audio backoff
+│   │   ├── CaptureStage+Recovery.swift    # launch recovery; WAV header repair after a failed finalize
 │   │   ├── AudioMixer.swift               # mic + system audio → mono 16kHz PCM via AVAudioConverter (Dec 1.4)
 │   │   ├── WAVWriter.swift                # streaming PCM16 WAV via FileHandle; the AtomicWriter exemption (Dec 1.4)
-│   │   ├── CaptureError.swift
-│   │   └── CaptureMetadata.swift          # StageMetadata.capture payload
+│   │   ├── AudioImporter.swift            # `auricle import`: an existing recording → a `captured` meeting
+│   │   └── SystemAudioPermissionProbe.swift  # 1-second tap that raises the System Audio Recording prompt
 │   │
 │   ├── TranscriberInterface/              # protocol-only target
 │   │   ├── TranscriberStrategy.swift

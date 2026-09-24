@@ -4,13 +4,13 @@ import Foundation
 import os
 import Permissions
 import Testing
+import TestSupport
 
 // MARK: - Test doubles
 
 /// Records every value handed to it under a lock, so a `@Sendable` closure
 /// captured by `OnboardingConfigureModel`/`OnboardingCoordinator` can report
-/// back without a data race, matching `PermissionCheckedNotificationAuthorizationTests`'s
-/// own `FakePermissionChecker` pattern in `Tests/NotificationsTests`.
+/// back without a data race.
 private final class Recorder<Value: Sendable>: Sendable {
     private let lock = OSAllocatedUnfairLock<[Value]>(initialState: [])
 
@@ -20,34 +20,6 @@ private final class Recorder<Value: Sendable>: Sendable {
 
     var values: [Value] {
         lock.withLock { $0 }
-    }
-}
-
-private final class FakePermissionChecker: PermissionChecking {
-    private let requestResult: PermissionStatus
-    private let requestedCategories = Recorder<TCCCategory>()
-
-    init(requestResult: PermissionStatus = .granted) {
-        self.requestResult = requestResult
-    }
-
-    var categoriesRequested: [TCCCategory] {
-        requestedCategories.values
-    }
-
-    func check(_: TCCCategory) async -> PermissionStatus {
-        .notDetermined
-    }
-
-    func request(_ category: TCCCategory) async -> PermissionStatus {
-        requestedCategories.record(category)
-        return requestResult
-    }
-
-    func refresh() async {}
-
-    func remediationDeepLink(for _: TCCCategory) -> URL? {
-        nil
     }
 }
 
@@ -345,6 +317,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
         #expect(coordinator.step == .welcome)
@@ -356,6 +329,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
 
@@ -377,6 +351,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
         for _ in OnboardingStep.allCases {
@@ -396,6 +371,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
         coordinator.advance() // welcome -> microphone
@@ -412,6 +388,7 @@ struct OnboardingCoordinatorTests {
             checker: checker,
             configure: makeConfigureModel(),
             applicationSupportDirectory: makeTestDirectory(),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
 
@@ -440,6 +417,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: configure,
             applicationSupportDirectory: applicationSupportDirectory,
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
 
@@ -458,6 +436,7 @@ struct OnboardingCoordinatorTests {
             checker: FakePermissionChecker(),
             configure: makeConfigureModel(),
             applicationSupportDirectory: applicationSupportDirectory,
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
         )
 
@@ -465,5 +444,58 @@ struct OnboardingCoordinatorTests {
             try coordinator.completeOnboarding()
         }
         #expect(!OnboardingMarker.exists(applicationSupportDirectory: applicationSupportDirectory))
+    }
+
+    @Test func enterAppAfterCompletingOnboardingMarksProgressComplete() throws {
+        let applicationSupportDirectory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: applicationSupportDirectory) }
+        let vaultDirectory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: vaultDirectory) }
+        let configure = makeConfigureModel()
+        try configure.selectVaultPath(vaultDirectory)
+        let progress = OnboardingProgress(isComplete: false)
+        let coordinator = OnboardingCoordinator(
+            checker: FakePermissionChecker(),
+            configure: configure,
+            applicationSupportDirectory: applicationSupportDirectory,
+            progress: progress,
+            opener: { _ in true },
+        )
+
+        try coordinator.completeOnboarding()
+        #expect(!progress.isComplete)
+        coordinator.enterApp()
+
+        #expect(progress.isComplete)
+    }
+
+    @Test func enterAppBeforeOnboardingCompletedLeavesProgressIncomplete() {
+        let applicationSupportDirectory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: applicationSupportDirectory) }
+        let progress = OnboardingProgress(isComplete: false)
+        let coordinator = OnboardingCoordinator(
+            checker: FakePermissionChecker(),
+            configure: makeConfigureModel(),
+            applicationSupportDirectory: applicationSupportDirectory,
+            progress: progress,
+            opener: { _ in true },
+        )
+
+        coordinator.enterApp()
+        #expect(throws: OnboardingConfigureModel.FinishError.self) {
+            try coordinator.completeOnboarding()
+        }
+        coordinator.enterApp()
+
+        #expect(!progress.isComplete)
+    }
+
+    @Test func progressReadsTheMarkerOnce() throws {
+        let applicationSupportDirectory = makeTestDirectory()
+        defer { try? FileManager.default.removeItem(at: applicationSupportDirectory) }
+
+        #expect(!OnboardingProgress(applicationSupportDirectory: applicationSupportDirectory).isComplete)
+        try OnboardingMarker.write(applicationSupportDirectory: applicationSupportDirectory)
+        #expect(OnboardingProgress(applicationSupportDirectory: applicationSupportDirectory).isComplete)
     }
 }

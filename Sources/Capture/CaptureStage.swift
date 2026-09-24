@@ -53,9 +53,17 @@ public enum CaptureStageError: Error, Sendable, Equatable {
 ///
 /// A row left `recording` by a crash has no live session. Launch recovery
 /// repairs its WAV header and moves it to `captured` when audio made it to
-/// disk, and to `capture_failed` (`interrupted`) when none did. It never
-/// starts the pipeline for a recovered meeting: that audio ended where the
-/// crash ended it, and the user decides whether it is worth processing.
+/// disk, and to `capture_failed` (`interrupted`) when none did.
+///
+/// Only a capture that `stop()` landed in `captured` is handed to the
+/// pipeline, through `onCaptured`. A meeting launch recovery relabels
+/// `recovered_after_interruption` waits for the user, and so does a stopped
+/// capture whose `captured` write failed, since recovery relabels that one
+/// too: its audio ended where the interruption ended it, and the user
+/// decides whether it is worth processing.
+///
+/// `endedCaptures` yields a meeting's id each time it stops being live, by
+/// whatever path: a stop, a fault that failed it, or a start that failed.
 public actor CaptureStage {
     public typealias SessionFactory = @Sendable (MeetingID) -> any CaptureRecording
 
@@ -121,13 +129,13 @@ public actor CaptureStage {
     }
 
     static let log = Log(category: "capture-stage")
-    private static let wavHeaderBytes: UInt64 = 44
+    static let wavHeaderBytes: UInt64 = 44
 
-    private let stateStore: StateStore
-    private let stageEventLogger: StageEventLogger
+    let stateStore: StateStore
+    let stageEventLogger: StageEventLogger
     private let notifier: any Notifier
     private let makeSession: SessionFactory
-    private let cacheDirectory: @Sendable (MeetingID) throws -> URL
+    let cacheDirectory: @Sendable (MeetingID) throws -> URL
     let now: @Sendable () -> Date
     private let timeZone: @Sendable () -> TimeZone
     private let onCaptured: @Sendable (MeetingID) async -> Void
@@ -135,6 +143,12 @@ public actor CaptureStage {
     let sleep: @Sendable (Duration) async throws -> Void
 
     var live: [MeetingID: LiveCapture] = [:]
+
+    /// Single consumer: an `AsyncStream` delivers each element to one
+    /// iterator. Buffers only the newest few, because a Release build has no
+    /// consumer and a capture's end is only news while it is recent.
+    public nonisolated let endedCaptures: AsyncStream<MeetingID>
+    private let endedContinuation: AsyncStream<MeetingID>.Continuation
 
     /// `makeSession` defaults to a `LiveCaptureSession` writing under
     /// `cacheDirectory`, so the path stored in `audio_cache_path` is the path
@@ -166,6 +180,14 @@ public actor CaptureStage {
         self.onCaptured = onCaptured
         self.systemAudioRetryDelay = systemAudioRetryDelay
         self.sleep = sleep
+        (endedCaptures, endedContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(8))
+    }
+
+    /// The one way a meeting leaves `live`, so `endedCaptures` hears of
+    /// every exit.
+    func endLive(_ meetingID: MeetingID) {
+        guard live.removeValue(forKey: meetingID) != nil else { return }
+        endedContinuation.yield(meetingID)
     }
 
     // MARK: - Start
@@ -193,7 +215,7 @@ public actor CaptureStage {
                 occurredAt: stamp,
             )
         } catch {
-            live[meetingID] = nil
+            endLive(meetingID)
             throw error
         }
 
@@ -206,7 +228,7 @@ public actor CaptureStage {
             // tap; stopping it releases whatever it got to.
             _ = try? await session.stop()
             await finishFailed(meetingID, startedAt: startedAt, errorClass: ErrorClass.startFailed, error: error)
-            live[meetingID] = nil
+            endLive(meetingID)
             throw error
         }
 
@@ -282,20 +304,24 @@ public actor CaptureStage {
         do {
             audioURL = try await capture.session.stop()
         } catch {
-            await finishFailed(meetingID, startedAt: capture.startedAt, errorClass: ErrorClass.interrupted, loss: loss, error: error)
-            live[meetingID] = nil
+            repairAudioAfterFailedFinalize(meetingID)
+            await finishFailed(
+                meetingID,
+                startedAt: capture.startedAt,
+                errorClass: ErrorClass.interrupted,
+                loss: loss,
+                stats: capture.session.watchdogStats,
+                error: error,
+            )
+            endLive(meetingID)
             return .captureFailed
         }
 
         // Read after `stop()`: its final drain can still add to the counters.
         let stats = capture.session.watchdogStats
         let endedAt = now()
-        let meta = Self.withLoss(loss, CaptureMeta(
-            micIncluded: capture.micIncluded,
-            exactZeroSeconds: stats.exactZeroSeconds,
-            tapRebuilds: stats.rebuildCount,
-        ))
-        defer { live[meetingID] = nil }
+        let meta = Self.withLoss(loss, Self.withStats(stats, CaptureMeta(micIncluded: capture.micIncluded)))
+        defer { endLive(meetingID) }
         try await stageEventLogger.recordCaptureFinished(
             meetingID: meetingID,
             kind: .completed,
@@ -406,6 +432,7 @@ extension CaptureStage {
                 "meeting_id": .publicSafe(meetingID.rawValue),
                 "reason": .sensitive(String(describing: error)),
             ])
+            repairAudioAfterFailedFinalize(meetingID)
         }
         await finishFailed(
             meetingID,
@@ -413,86 +440,15 @@ extension CaptureStage {
             errorClass: errorClass,
             source: source,
             loss: capture.systemAudioLoss,
+            stats: capture.session.watchdogStats,
             error: error,
         )
-        live[meetingID] = nil
+        endLive(meetingID)
     }
 }
 
-/// Launch recovery, the row writes every path shares, and the helpers they use.
+/// The row writes every path shares, and the helpers they use.
 extension CaptureStage {
-    // MARK: - Recovery
-
-    /// Settles every `recording` row this process has no live capture for.
-    /// A WAV holding audio past its header is repaired and the row moves to
-    /// `captured` with `reason: recovered_after_interruption`; a missing,
-    /// header-only or unrepairable WAV moves it to `capture_failed`
-    /// (`interrupted`). A row another writer settled first is skipped.
-    public func recoverInterruptedCaptures() async throws -> [CaptureRecoveryOutcome] {
-        let orphans = try await stateStore.fetchPending().filter { meeting in
-            meeting.state == PipelineState.recording.rawValue
-                && MeetingID(ulid: meeting.id).map { live[$0] == nil } ?? false
-        }
-        var outcomes: [CaptureRecoveryOutcome] = []
-        for meeting in orphans {
-            guard let meetingID = MeetingID(ulid: meeting.id) else { continue }
-            do {
-                try await outcomes.append(recover(meeting, meetingID: meetingID))
-            } catch {
-                Self.log.warn("could not recover an interrupted capture", [
-                    "meeting_id": .publicSafe(meeting.id),
-                    "reason": .sensitive(String(describing: error)),
-                ])
-            }
-        }
-        return outcomes
-    }
-
-    private func recover(_ meeting: Meeting, meetingID: MeetingID) async throws -> CaptureRecoveryOutcome {
-        let stamp = ISO8601UTC.string(from: now())
-        if let duration = Self.repairedDuration(of: meeting) {
-            let startedAt = meeting.captureStartedAt.flatMap(ISO8601UTC.date(from:))
-            let endedAt = startedAt.map { ISO8601UTC.string(from: $0.addingTimeInterval(duration)) } ?? stamp
-            try await stageEventLogger.recordCaptureFinished(
-                meetingID: meetingID,
-                kind: .completed,
-                targetState: .captured,
-                occurredAt: stamp,
-                endedAt: endedAt,
-                durationSeconds: Int(duration.rounded()),
-                metadataJSON: Self.encode(CaptureMeta(reason: Self.recoveredReason)),
-            )
-            Self.log.info("recovered an interrupted capture", ["meeting_id": .publicSafe(meeting.id)])
-            return CaptureRecoveryOutcome(meetingID: meetingID, state: .captured)
-        }
-
-        try await stageEventLogger.recordCaptureFinished(
-            meetingID: meetingID,
-            kind: .failed,
-            targetState: .captureFailed,
-            occurredAt: stamp,
-            endedAt: stamp,
-            durationSeconds: nil,
-            errorMessage: "capture was interrupted before any audio reached disk",
-            metadataJSON: Self.encode(CaptureMeta(errorClass: ErrorClass.interrupted)),
-        )
-        Self.log.warn("an interrupted capture had no audio", ["meeting_id": .publicSafe(meeting.id)])
-        return CaptureRecoveryOutcome(meetingID: meetingID, state: .captureFailed)
-    }
-
-    /// The recovered duration when the row's WAV holds at least one sample
-    /// past its header and the header could be repaired; `nil` otherwise.
-    private static func repairedDuration(of meeting: Meeting) -> TimeInterval? {
-        guard
-            let path = meeting.audioCachePath,
-            let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? UInt64,
-            size > wavHeaderBytes,
-            let duration = try? WAVWriter.repairHeader(at: URL(fileURLWithPath: path)),
-            duration > 0
-        else { return nil }
-        return duration
-    }
-
     // MARK: - Writes
 
     /// Moves the row to `capture_failed`. A write that cannot land is logged,
@@ -504,8 +460,13 @@ extension CaptureStage {
         errorClass: String,
         source: CaptureSource? = nil,
         loss: SystemAudioLoss = SystemAudioLoss(),
+        stats: CaptureWatchdogStats? = nil,
         error: Error,
     ) async {
+        var meta = CaptureMeta(errorClass: errorClass, source: source?.rawValue)
+        if let stats {
+            meta = Self.withStats(stats, meta)
+        }
         let endedAt = now()
         do {
             try await stageEventLogger.recordCaptureFinished(
@@ -517,7 +478,7 @@ extension CaptureStage {
                 durationSeconds: Self.wholeSeconds(from: startedAt, to: endedAt),
                 durationMS: Self.milliseconds(from: startedAt, to: endedAt),
                 errorMessage: String(describing: error),
-                metadataJSON: Self.encode(Self.withLoss(loss, CaptureMeta(errorClass: errorClass, source: source?.rawValue))),
+                metadataJSON: Self.encode(Self.withLoss(loss, meta)),
             )
         } catch {
             Self.log.error("could not record a failed capture", [
@@ -542,6 +503,20 @@ extension CaptureStage {
     }
 
     // MARK: - Helpers
+
+    /// `meta` with the session's watchdog counters and its first write
+    /// error. `write_error` stays absent when every write succeeded.
+    private static func withStats(_ stats: CaptureWatchdogStats, _ meta: CaptureMeta) -> CaptureMeta {
+        var meta = meta
+        meta.exactZeroSeconds = stats.exactZeroSeconds
+        meta.tapRebuilds = stats.rebuildCount
+        meta.systemRingDroppedChunks = stats.systemRingDroppedChunkCount
+        meta.systemRingTruncatedChunks = stats.systemRingTruncatedChunkCount
+        meta.micRingDroppedChunks = stats.micRingDroppedChunkCount
+        meta.micRingTruncatedChunks = stats.micRingTruncatedChunkCount
+        meta.writeError = stats.firstWriteErrorDescription
+        return meta
+    }
 
     /// `meta` with the system-audio loss fields, when there was a loss.
     private static func withLoss(_ loss: SystemAudioLoss, _ meta: CaptureMeta) -> CaptureMeta {
@@ -571,7 +546,7 @@ extension CaptureStage {
         }
     }
 
-    private static func encode(_ meta: CaptureMeta) -> String? {
+    static func encode(_ meta: CaptureMeta) -> String? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         return (try? encoder.encode(meta)).flatMap { String(bytes: $0, encoding: .utf8) }

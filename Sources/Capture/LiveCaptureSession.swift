@@ -132,20 +132,39 @@ public final class LiveCaptureSession: CaptureRecording, @unchecked Sendable {
         }
     }
 
-    /// A configuration change on an engine the microphone never started is
-    /// not a microphone fault, and neither is one the engine rode out.
     private func engineConfigurationChanged() {
-        guard lock.withLock({ micIncluded && observer != nil }), !engine.isRunning else { return }
+        let (includesMic, observing): (Bool, Bool) = lock.withLock { (self.micIncluded, self.observer != nil) }
+        let engineRunning = engine.isRunning
         let checker = permissionChecker
         let continuation = continuation
         Task {
-            await checker.refresh()
-            let status = await checker.check(.microphone)
-            continuation.yield(
-                status == .denied
-                    ? .permissionRevoked(.microphone)
-                    : .transient(.microphone, reason: "microphone engine stopped after a configuration change"),
-            )
+            if let fault = await Self.configurationChangeFault(
+                engineRunning: engineRunning,
+                micIncluded: includesMic,
+                observing: observing,
+                checker: checker,
+            ) {
+                continuation.yield(fault)
+            }
         }
+    }
+
+    /// What one `AVAudioEngineConfigurationChange` means for the capture. A
+    /// change on an engine the microphone never started is not a microphone
+    /// fault, nor is one that arrives after `stop()` removed the observer, nor
+    /// one the engine rode out. Otherwise a refreshed check decides: `.denied`
+    /// is a revocation, and anything else is transient, because a device
+    /// switch also stops the engine.
+    static func configurationChangeFault(
+        engineRunning: Bool,
+        micIncluded: Bool,
+        observing: Bool,
+        checker: any PermissionChecking,
+    ) async -> CaptureStreamFault? {
+        guard micIncluded, observing, !engineRunning else { return nil }
+        await checker.refresh()
+        return await checker.check(.microphone) == .denied
+            ? .permissionRevoked(.microphone)
+            : .transient(.microphone, reason: "microphone engine stopped after a configuration change")
     }
 }

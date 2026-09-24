@@ -13,9 +13,10 @@ import Telemetry
 import UserNotifications
 import VaultGlossary
 
-/// Notification authorization is requested at runtime via UNUserNotificationCenter
-/// and gated by NSUserNotificationsUsageDescription in Info.plist — macOS has no
-/// entitlement key for it, so none appears in Auricle.entitlements.
+/// Notification authorization is requested at runtime through
+/// `PermissionChecker`. macOS has no entitlement key for it, and Info.plist
+/// needs no usage string for it, so neither Auricle.entitlements nor
+/// Info.plist mentions notifications.
 @main
 struct AuricleApp: App {
     /// Shared for the process so its per-category memo (AR-PAT-4) reflects
@@ -25,7 +26,26 @@ struct AuricleApp: App {
     /// database cannot be opened, which leaves capture and notification clicks
     /// unavailable rather than crashing the app.
     private static let stateStore = makeStateStore()
-    private static let notificationDelegate = makeNotificationDelegate()
+    private static let notifier = makeNotifier()
+    /// Kept here because `UNUserNotificationCenter.delegate` is weak. `nil`
+    /// until a vault path is configured; the main window builds it when it
+    /// appears without one, so finishing onboarding enables notification
+    /// clicks without a relaunch.
+    @MainActor private static var notificationDelegate: NotificationDelegate?
+    /// Whether onboarding is done. The window and the Debug menu both switch
+    /// on it, so the Done step's Continue moves both at once.
+    @MainActor static let onboardingProgress = OnboardingProgress(applicationSupportDirectory: .applicationSupportDirectory)
+    /// Runs each captured meeting to `awaiting_attribution`, and at launch
+    /// any stopped capture that never got its run. `nil` when the state store
+    /// could not be opened.
+    private static let capturePipelineLauncher = stateStore.map { store in
+        CapturePipelineLauncher(
+            stateStore: store,
+            launcher: SubprocessStageLauncher(dispatcher: SubprocessDispatcher()),
+            notifier: notifier,
+        )
+    }
+
     /// The process's one capture stage: it owns every recording the GUI makes,
     /// and hands each captured meeting to the pipeline. `nil` when the state
     /// store could not be opened.
@@ -39,23 +59,16 @@ struct AuricleApp: App {
     #endif
 
     init() {
-        UNUserNotificationCenter.current().delegate = Self.notificationDelegate
+        Self.installNotificationDelegateIfNeeded()
         if let stage = Self.captureStage {
-            Task { await Self.recoverInterruptedCaptures(stage) }
+            let launcher = Self.capturePipelineLauncher
+            Task { await Self.settleCapturesFromEarlierRuns(stage, launcher: launcher) }
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            if OnboardingMarker.exists(applicationSupportDirectory: .applicationSupportDirectory) {
-                #if DEBUG
-                    AuricleRootView(debugCaptureTrigger: Self.debugCaptureTrigger)
-                #else
-                    AuricleRootView()
-                #endif
-            } else {
-                OnboardingRootView(coordinator: Self.makeOnboardingCoordinator())
-            }
+            WindowRootView(progress: Self.onboardingProgress)
         }
         #if DEBUG
         .commands {
@@ -66,7 +79,7 @@ struct AuricleApp: App {
                 }
                 .accessibilityLabel(title)
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(Self.debugCaptureTrigger == nil)
+                .disabled(Self.debugCaptureTrigger?.isAvailable != true)
             }
         }
         #endif
@@ -80,7 +93,7 @@ struct AuricleApp: App {
     /// directory — a test builds its own `OnboardingConfigureModel` instead
     /// of relying on a default that could silently touch any of them.
     @MainActor
-    private static func makeOnboardingCoordinator() -> OnboardingCoordinator {
+    fileprivate static func makeOnboardingCoordinator() -> OnboardingCoordinator {
         let opener: URLOpener = { url in
             await (try? NotificationDelegate.openInDefaultApp(url)) != nil
         }
@@ -90,7 +103,7 @@ struct AuricleApp: App {
                 do {
                     try VaultWriter.validateVaultPath(url)
                 } catch let error as VaultWriter.WriteError {
-                    throw vaultPathValidationError(from: error)
+                    throw VaultPathValidationError(error)
                 }
             },
             writeVaultPath: { try ConfigWriter.set("vault_path", to: $0.path) },
@@ -109,6 +122,7 @@ struct AuricleApp: App {
             checker: permissionChecker,
             configure: configure,
             applicationSupportDirectory: .applicationSupportDirectory,
+            progress: onboardingProgress,
             opener: opener,
             permissionSteps: [
                 .microphone: MicrophonePermissionStep(),
@@ -116,17 +130,6 @@ struct AuricleApp: App {
                 .notifications: NotificationsPermissionStep(),
             ],
         )
-    }
-
-    private static func vaultPathValidationError(from error: VaultWriter.WriteError) -> VaultPathValidationError {
-        switch error {
-        case let .vaultPathMissing(path):
-            .missing(path: path)
-        case let .vaultPathNotWritable(path):
-            .notWritable(path: path)
-        default:
-            .other(String(describing: error))
-        }
     }
 
     /// The GUI's `Notifier` is a `UserNotificationNotifier`. The GUI's pipeline
@@ -149,8 +152,7 @@ struct AuricleApp: App {
     }
 
     private static func makeCaptureStage() -> CaptureStage? {
-        guard let store = stateStore else { return nil }
-        let notifier = makeNotifier()
+        guard let store = stateStore, let launcher = capturePipelineLauncher else { return nil }
         let checker = permissionChecker
         return CaptureStage(
             stateStore: store,
@@ -158,39 +160,9 @@ struct AuricleApp: App {
             notifier: notifier,
             makeSession: { LiveCaptureSession(meetingID: $0, permissionChecker: checker) },
             onCaptured: { meetingID in
-                await runPipelineAfterCapture(meetingID, store: store, notifier: notifier)
+                await launcher.runAfterCapture(meetingID)
             },
         )
-    }
-
-    /// A captured meeting runs as far as `review-diarization`, which leaves it
-    /// `awaiting_attribution` for the user. `nonisolated`, so reading the
-    /// config and waiting on the worker subprocesses stays off the main actor.
-    /// No glossary: only attribute reads it, and this run stops before
-    /// attribute.
-    private nonisolated static func runPipelineAfterCapture(_ meetingID: MeetingID, store: StateStore, notifier: any Notifier) async {
-        let log = Log(category: "app")
-        let config: Config
-        do {
-            config = try Config.load()
-        } catch {
-            log.warn("config unreadable; the captured meeting was not processed", ["meetingID": .publicSafe(meetingID)])
-            return
-        }
-        let runner = PipelineRunner(environment: PipelineRunner.Environment(
-            stateStore: store,
-            launcher: SubprocessStageLauncher(dispatcher: SubprocessDispatcher()),
-            notifier: notifier,
-            vaultPath: config.vaultPath,
-            meetingsSubdir: config.meetingsSubdir,
-        ))
-        let result = await runner.run(meetingID: meetingID, options: RunOptions(to: .reviewDiarization))
-        if result.exitCode != WorkerExitCode.success {
-            log.warn("the pipeline stopped after capture", [
-                "meetingID": .publicSafe(meetingID),
-                "exitCode": .publicSafe(result.exitCode),
-            ])
-        }
     }
 
     #if DEBUG
@@ -203,16 +175,32 @@ struct AuricleApp: App {
             let opener: URLOpener = { url in
                 await (try? NotificationDelegate.openInDefaultApp(url)) != nil
             }
-            return DebugCaptureTrigger(stage: stage, checker: permissionChecker, opener: opener)
+            return DebugCaptureTrigger(
+                stage: stage,
+                endedCaptures: stage.endedCaptures,
+                progress: onboardingProgress,
+                checker: permissionChecker,
+                opener: opener,
+            )
         }
     #endif
 
-    private static func recoverInterruptedCaptures(_ stage: CaptureStage) async {
+    /// Recovery first: it relabels orphaned `recording` rows, and the resume
+    /// that follows must see those as recovered, not as stopped captures.
+    private static func settleCapturesFromEarlierRuns(_ stage: CaptureStage, launcher: CapturePipelineLauncher?) async {
         do {
             _ = try await stage.recoverInterruptedCaptures()
         } catch {
             Log(category: "app").error("interrupted-capture recovery failed", ["reason": .sensitive(String(describing: error))])
         }
+        await launcher?.resumeStrandedCaptures()
+    }
+
+    @MainActor
+    fileprivate static func installNotificationDelegateIfNeeded() {
+        guard notificationDelegate == nil, let delegate = makeNotificationDelegate() else { return }
+        notificationDelegate = delegate
+        UNUserNotificationCenter.current().delegate = delegate
     }
 
     private static func makeNotificationDelegate() -> NotificationDelegate? {
@@ -230,6 +218,27 @@ struct AuricleApp: App {
             stateStore: store,
             opener: NotificationDelegate.openInDefaultApp,
         ))
+    }
+}
+
+/// Onboarding until `progress` is complete, then the main window. A view
+/// rather than a branch in `AuricleApp.body`, so SwiftUI re-renders it when
+/// `progress` changes and the Done step's Continue needs no relaunch.
+private struct WindowRootView: View {
+    let progress: OnboardingProgress
+
+    var body: some View {
+        if progress.isComplete {
+            #if DEBUG
+                AuricleRootView(debugCaptureTrigger: AuricleApp.debugCaptureTrigger)
+                    .onAppear { AuricleApp.installNotificationDelegateIfNeeded() }
+            #else
+                AuricleRootView()
+                    .onAppear { AuricleApp.installNotificationDelegateIfNeeded() }
+            #endif
+        } else {
+            OnboardingRootView(coordinator: AuricleApp.makeOnboardingCoordinator())
+        }
     }
 }
 

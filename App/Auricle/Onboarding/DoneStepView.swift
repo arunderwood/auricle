@@ -8,6 +8,8 @@ import SwiftUI
 /// (`OnboardingConfigureModel.finish()`, `OnboardingMarker.write`) are
 /// idempotent, so a failure here shows a retry rather than silently leaving
 /// the user on a "You're set up" screen onboarding never actually finished.
+/// Continue swaps this window to the main one in place; `enterApp()`
+/// ignores it until both writes have landed.
 struct DoneStepView: View {
     let coordinator: OnboardingCoordinator
 
@@ -30,8 +32,15 @@ struct DoneStepView: View {
                     .buttonStyle(.borderedProminent)
                 }
             } else {
-                Text("You're set up")
-                    .font(.title2)
+                VStack(spacing: 12) {
+                    Text("You're set up")
+                        .font(.title2)
+                    Button("Continue") {
+                        coordinator.enterApp()
+                    }
+                    .accessibilityLabel("Continue")
+                    .buttonStyle(.borderedProminent)
+                }
             }
         }
         .padding(32)
@@ -46,7 +55,10 @@ struct DoneStepView: View {
             failureMessage = nil
         } catch {
             failureMessage = String(describing: error)
-            log.error("failed to complete onboarding", ["error": .publicSafe(String(describing: error))])
+            log.error("failed to complete onboarding", [
+                "error_type": .publicSafe(String(describing: type(of: error))),
+                "error": .sensitive(String(describing: error)),
+            ])
         }
     }
 }

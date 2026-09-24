@@ -1,9 +1,10 @@
 import Foundation
 import TOMLKit
 
-/// Edits a single key in `~/.auricle/config.toml` (FR59) by rewriting the raw
-/// file text, not by parsing the document into a `TOMLTable` and
-/// reserializing it. `TOMLKit`'s backend discards comment tokens while
+/// Edits a single key in the config file (FR59), `Config.defaultFileURL()`:
+/// `~/.auricle/config.toml` unless `AURICLE_CONFIG` names another. It edits
+/// by rewriting the raw file text, not by parsing the document into a
+/// `TOMLTable` and reserializing it. `TOMLKit`'s backend discards comment tokens while
 /// parsing (`consume_comment()` in its vendored `toml.hpp`) and nothing in
 /// its node model stores them, so a parse/mutate/reserialize round trip would
 /// silently delete every comment in a file this app promises is safe to
@@ -26,8 +27,15 @@ public enum ConfigWriter {
         /// `key` looks credential-shaped (matches NFR-S1's secret patterns)
         /// and isn't the one documented exception, `google_calendar.client_secret`.
         case secretRejected(key: String)
+        /// `key` is well formed but is not one `Config` reads
+        /// (`Config.settableKeys`).
+        case unknownKey(key: String)
         /// The existing file's contents are not valid UTF-8.
         case malformed
+        /// The file was already unreadable before this edit. Reported apart
+        /// from `wouldProduceInvalidConfig` so the message sends the user to
+        /// the file, not to the value they tried to set.
+        case existingConfigInvalid(ConfigError)
         /// Applying the edit would leave `Config.parse` unable to read the
         /// file — the file is left untouched when this is thrown.
         case wouldProduceInvalidConfig(ConfigError)
@@ -38,8 +46,12 @@ public enum ConfigWriter {
                 "\"\(key)\" is not a valid config key."
             case let .secretRejected(key):
                 "\"\(key)\" looks like a credential; store it in Keychain, not config.toml."
+            case let .unknownKey(key):
+                "\"\(key)\" is not a setting auricle reads. Settable keys: \(Config.settableKeys.joined(separator: ", "))."
             case .malformed:
                 "the existing config file is not valid UTF-8."
+            case let .existingConfigInvalid(underlying):
+                "the existing config file is already unreadable (\(underlying)); fix or remove it, then try again. It was left untouched."
             case let .wouldProduceInvalidConfig(underlying):
                 "this edit would make the config unreadable (\(underlying)) — the file was left untouched."
             }
@@ -53,14 +65,19 @@ public enum ConfigWriter {
     private static let secretKeyPatterns = ["api_key", "token", "secret", "password"]
     private static let secretKeyExceptions: Set<String> = ["google_calendar.client_secret"]
 
-    /// `fileURL`/`homeDirectory` mirror `Config.load`'s own test-seam
-    /// parameters, so a caller passing neither writes exactly where
-    /// `Config.load` reads, and a test never touches the real `~/.auricle`.
+    /// `fileURL`, `homeDirectory` and `environment` mirror `Config.load`'s
+    /// own test-seam parameters, so a caller passing none of them writes
+    /// exactly where `Config.load` reads, and a test never touches the real
+    /// `~/.auricle`.
+    ///
+    /// The credential check runs before the settable-key check, so a
+    /// credential-shaped key is always refused as a credential.
     public static func set(
         _ key: String,
         to value: String,
         fileURL: URL? = nil,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
     ) throws {
         guard !key.isEmpty, !key.hasPrefix("."), !key.hasSuffix(".") else {
             throw WriterError.invalidKey(key: key)
@@ -71,9 +88,17 @@ public enum ConfigWriter {
         guard !isSecretShaped(key) else {
             throw WriterError.secretRejected(key: key)
         }
+        guard Config.settableKeys.contains(key) else {
+            throw WriterError.unknownKey(key: key)
+        }
 
-        let url = fileURL ?? Config.defaultFileURL(homeDirectory: homeDirectory)
+        let url = fileURL ?? Config.defaultFileURL(homeDirectory: homeDirectory, environment: environment)
         let existingText = try readExistingText(at: url)
+        do {
+            _ = try Config.parse(existingText, homeDirectory: homeDirectory)
+        } catch let error as ConfigError {
+            throw WriterError.existingConfigInvalid(error)
+        }
         let literal = try formattedLiteral(for: normalizedValue(value, key: key), key: key)
         let updatedText = apply(key: key, literal: literal, to: existingText)
 
@@ -122,9 +147,9 @@ public enum ConfigWriter {
     }
 
     /// The non-`String` fields `Config`'s schema declares today. Every other
-    /// key -- including any key this schema doesn't recognize -- is written
-    /// as a string; the `wouldProduceInvalidConfig` guard in `set` catches a
-    /// value that doesn't actually parse as its schema type.
+    /// settable key is written as a string; the `wouldProduceInvalidConfig`
+    /// guard in `set` catches a value that doesn't actually parse as its
+    /// schema type.
     private enum LiteralKind {
         case bool, int, string
     }

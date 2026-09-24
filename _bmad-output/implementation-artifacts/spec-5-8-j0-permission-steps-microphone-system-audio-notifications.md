@@ -149,6 +149,8 @@ deferred: []
 - After a user grants Microphone in System Settings and returns, the screen still shows denied copy. Skip still advances, and capture reads the real grant at record time.
 - Try Again cannot appear in production, because the real checker never returns `.notDetermined` from a microphone request.
 
+**Deferral reconciliation:** "Deferred: none" above and `deferred: []` in the frontmatter describe this run's own review only. The PR #119 review later logged five Story 5.8 items to `deferred-work.md` (commit `f7a45f7`): the unreachable Microphone [Try Again], the stale denied copy after Open Settings, the untested production step map, [Skip] as the prominent button on a denied Microphone step, and the real 1 s waits in two System Audio tests. Those five entries are this story's open deferrals.
+
 ## Design Notes
 
 **Notifications "denied → advances" reading.** Advancing immediately would hide the NFR-R8 copy before it renders. Story 5.7's review fixed that same bug class for the Obsidian message. So a denied Notifications step remains, shows the copy, and offers only `[Continue]`. Nothing blocks.

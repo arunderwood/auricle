@@ -12,7 +12,7 @@ private func makeFakeHome() throws -> URL {
 }
 
 private func writeConfig(_ text: String, inHome home: URL) throws -> URL {
-    let file = Config.defaultFileURL(homeDirectory: home)
+    let file = Config.defaultFileURL(homeDirectory: home, environment: [:])
     try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
     try AtomicWriter.write(Data(text.utf8), to: file)
     return file
@@ -21,7 +21,7 @@ private func writeConfig(_ text: String, inHome home: URL) throws -> URL {
 private let home = URL(fileURLWithPath: "/fake/home", isDirectory: true)
 
 @Test func defaultFileLivesUnderDotAuricleInTheGivenHome() {
-    let url = Config.defaultFileURL(homeDirectory: home)
+    let url = Config.defaultFileURL(homeDirectory: home, environment: [:])
 
     #expect(url.path == "/fake/home/.auricle/config.toml")
 }
@@ -170,7 +170,7 @@ func meetingsSubdirCannotBeAbsoluteOrClimbOutOfTheVault(value: String) {
     let fakeHome = try makeFakeHome()
     defer { try? FileManager.default.removeItem(at: fakeHome) }
 
-    let config = try Config.load(homeDirectory: fakeHome)
+    let config = try Config.load(homeDirectory: fakeHome, environment: [:])
 
     #expect(config == Config())
 }
@@ -180,7 +180,7 @@ func meetingsSubdirCannotBeAbsoluteOrClimbOutOfTheVault(value: String) {
     defer { try? FileManager.default.removeItem(at: fakeHome) }
     _ = try writeConfig(#"vault_path = "~/vault""#, inHome: fakeHome)
 
-    let config = try Config.load(homeDirectory: fakeHome)
+    let config = try Config.load(homeDirectory: fakeHome, environment: [:])
 
     #expect(config.vaultPath?.path == fakeHome.path + "/vault")
 }
@@ -202,30 +202,30 @@ func meetingsSubdirCannotBeAbsoluteOrClimbOutOfTheVault(value: String) {
     _ = try writeConfig("vault_path = ", inHome: fakeHome)
 
     #expect(throws: ConfigError.malformed(line: 1)) {
-        try Config.load(homeDirectory: fakeHome)
+        try Config.load(homeDirectory: fakeHome, environment: [:])
     }
 }
 
 @Test func loadOfNonUTF8FileThrowsMalformedWithoutALine() throws {
     let fakeHome = try makeFakeHome()
     defer { try? FileManager.default.removeItem(at: fakeHome) }
-    let file = Config.defaultFileURL(homeDirectory: fakeHome)
+    let file = Config.defaultFileURL(homeDirectory: fakeHome, environment: [:])
     try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
     try AtomicWriter.write(Data([0xFF, 0xFE, 0x00]), to: file)
 
     #expect(throws: ConfigError.malformed(line: nil)) {
-        try Config.load(homeDirectory: fakeHome)
+        try Config.load(homeDirectory: fakeHome, environment: [:])
     }
 }
 
 @Test func loadOfADirectoryAtTheConfigPathThrowsUnreadable() throws {
     let fakeHome = try makeFakeHome()
     defer { try? FileManager.default.removeItem(at: fakeHome) }
-    let file = Config.defaultFileURL(homeDirectory: fakeHome)
+    let file = Config.defaultFileURL(homeDirectory: fakeHome, environment: [:])
     try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
 
     #expect(throws: ConfigError.self) {
-        try Config.load(homeDirectory: fakeHome)
+        try Config.load(homeDirectory: fakeHome, environment: [:])
     }
 }
 
@@ -281,4 +281,43 @@ func anUnusableSnippetDurationThrowsInvalidValue(_ value: String) {
     #expect(throws: ConfigError.self) {
         try Config.parse("[diarization_review]\nenabled = \"yes\"\n", homeDirectory: home)
     }
+}
+
+// MARK: - AURICLE_CONFIG
+
+@Test func aConfigOverrideNamesTheFileInsteadOfTheHomeDefault() {
+    let url = Config.defaultFileURL(homeDirectory: home, environment: ["AURICLE_CONFIG": "/tmp/x/config.toml"])
+
+    #expect(url.path == "/tmp/x/config.toml")
+}
+
+@Test func aConfigOverrideExpandsALeadingTilde() {
+    let url = Config.defaultFileURL(homeDirectory: home, environment: ["AURICLE_CONFIG": "~/scratch/config.toml"])
+
+    #expect(url.path == "/fake/home/scratch/config.toml")
+}
+
+@Test func anEmptyConfigOverrideIsIgnored() {
+    let url = Config.defaultFileURL(homeDirectory: home, environment: ["AURICLE_CONFIG": ""])
+
+    #expect(url.path == "/fake/home/.auricle/config.toml")
+}
+
+@Test func loadReadsTheOverriddenFile() throws {
+    let fakeHome = try makeFakeHome()
+    defer { try? FileManager.default.removeItem(at: fakeHome) }
+    _ = try writeConfig("vault_path = \"/home-default\"\n", inHome: fakeHome)
+    let scratch = fakeHome.appendingPathComponent("scratch.toml")
+    try AtomicWriter.write(Data("vault_path = \"/scratch\"\n".utf8), to: scratch)
+
+    let config = try Config.load(homeDirectory: fakeHome, environment: ["AURICLE_CONFIG": scratch.path])
+
+    #expect(config.vaultPath?.path == "/scratch")
+}
+
+@Test func displayPathAbbreviatesTheHomeDirectory() {
+    #expect(Config.displayPath(of: URL(fileURLWithPath: "/fake/home/.auricle/config.toml"), homeDirectory: home) == "~/.auricle/config.toml")
+    #expect(Config.displayPath(of: URL(fileURLWithPath: "/tmp/x/config.toml"), homeDirectory: home) == "/tmp/x/config.toml")
+    // A sibling whose name only starts with the home's is not inside it.
+    #expect(Config.displayPath(of: URL(fileURLWithPath: "/fake/homer/config.toml"), homeDirectory: home) == "/fake/homer/config.toml")
 }

@@ -5,6 +5,7 @@ import Foundation
 import os
 import Permissions
 import Testing
+import TestSupport
 
 // MARK: - Test doubles
 
@@ -17,38 +18,6 @@ private final class Recorder<Value: Sendable>: Sendable {
 
     var values: [Value] {
         lock.withLock { $0 }
-    }
-}
-
-/// Answers every `request` with `requestResult` and every deep-link lookup
-/// with `deepLinks[category]`, recording each requested category.
-private final class FakePermissionChecker: PermissionChecking {
-    private let requestResult: PermissionStatus
-    private let deepLinks: [TCCCategory: URL]
-    private let requested = Recorder<TCCCategory>()
-
-    init(requestResult: PermissionStatus = .granted, deepLinks: [TCCCategory: URL] = [:]) {
-        self.requestResult = requestResult
-        self.deepLinks = deepLinks
-    }
-
-    var categoriesRequested: [TCCCategory] {
-        requested.values
-    }
-
-    func check(_: TCCCategory) async -> PermissionStatus {
-        .notDetermined
-    }
-
-    func request(_ category: TCCCategory) async -> PermissionStatus {
-        requested.record(category)
-        return requestResult
-    }
-
-    func refresh() async {}
-
-    func remediationDeepLink(for category: TCCCategory) -> URL? {
-        deepLinks[category]
     }
 }
 
@@ -166,6 +135,7 @@ private func makeCoordinator(
             vaultTerms: { _ in Glossary() },
         ),
         applicationSupportDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+        progress: OnboardingProgress(isComplete: false),
         opener: opener,
         permissionSteps: [
             .microphone: MicrophonePermissionStep(),
@@ -490,6 +460,7 @@ struct StaleRequestOutcomeTests {
                 vaultTerms: { _ in Glossary() },
             ),
             applicationSupportDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            progress: OnboardingProgress(isComplete: false),
             opener: { _ in true },
             permissionSteps: [.microphone: gated],
         )

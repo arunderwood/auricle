@@ -81,6 +81,10 @@ extension StageMetadata: Codable {
 /// optional and omitted when absent, so a row carries only what its event
 /// knows and a later capture field is an additive change: `mic_included`,
 /// `exact_zero_seconds` and `tap_rebuilds` describe a finished capture;
+/// `write_error` is the first WAV write that failed, present only when one
+/// did, and the four `*_chunks` counts are the audio each input's ring
+/// dropped or truncated before it reached the mix. Those four and
+/// `write_error` also ride on a `failed` event whose session had started.
 /// `reason` says why an interrupted capture was recovered; `error_class` is
 /// why a capture failed, the same key `StageRunner` writes for other stages;
 /// `source` names which input (`microphone`, `system_audio`) a fault came from.
@@ -102,6 +106,21 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
     public var systemAudioLostAt: String?
     public var systemAudioRestoredAt: String?
     public var systemAudioLossCount: Int?
+    public var writeError: String?
+    public var systemRingDroppedChunks: Int?
+    public var systemRingTruncatedChunks: Int?
+    public var micRingDroppedChunks: Int?
+    public var micRingTruncatedChunks: Int?
+
+    /// Whether this is the `completed` payload `CaptureStage.stop` writes:
+    /// only `stop` writes `mic_included`, launch recovery writes `reason`
+    /// instead, and `auricle import` writes a different payload whose keys
+    /// decode here as all absent. A captured meeting whose latest capture
+    /// `completed` event reads `true` here is one the pipeline should have
+    /// been handed.
+    public var isStoppedCapture: Bool {
+        micIncluded != nil && reason == nil
+    }
 
     enum CodingKeys: String, CodingKey {
         case micIncluded = "mic_included"
@@ -116,6 +135,11 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         case systemAudioLostAt = "system_audio_lost_at"
         case systemAudioRestoredAt = "system_audio_restored_at"
         case systemAudioLossCount = "system_audio_loss_count"
+        case writeError = "write_error"
+        case systemRingDroppedChunks = "system_ring_dropped_chunks"
+        case systemRingTruncatedChunks = "system_ring_truncated_chunks"
+        case micRingDroppedChunks = "mic_ring_dropped_chunks"
+        case micRingTruncatedChunks = "mic_ring_truncated_chunks"
     }
 
     public init(
@@ -131,6 +155,11 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         systemAudioLostAt: String? = nil,
         systemAudioRestoredAt: String? = nil,
         systemAudioLossCount: Int? = nil,
+        writeError: String? = nil,
+        systemRingDroppedChunks: Int? = nil,
+        systemRingTruncatedChunks: Int? = nil,
+        micRingDroppedChunks: Int? = nil,
+        micRingTruncatedChunks: Int? = nil,
     ) {
         self.micIncluded = micIncluded
         self.exactZeroSeconds = exactZeroSeconds
@@ -144,6 +173,11 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         self.systemAudioLostAt = systemAudioLostAt
         self.systemAudioRestoredAt = systemAudioRestoredAt
         self.systemAudioLossCount = systemAudioLossCount
+        self.writeError = writeError
+        self.systemRingDroppedChunks = systemRingDroppedChunks
+        self.systemRingTruncatedChunks = systemRingTruncatedChunks
+        self.micRingDroppedChunks = micRingDroppedChunks
+        self.micRingTruncatedChunks = micRingTruncatedChunks
     }
 
     public init(from decoder: Decoder) throws {
@@ -160,6 +194,11 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         systemAudioLostAt = try container.decodeIfPresent(String.self, forKey: .systemAudioLostAt)
         systemAudioRestoredAt = try container.decodeIfPresent(String.self, forKey: .systemAudioRestoredAt)
         systemAudioLossCount = try container.decodeIfPresent(Int.self, forKey: .systemAudioLossCount)
+        writeError = try container.decodeIfPresent(String.self, forKey: .writeError)
+        systemRingDroppedChunks = try container.decodeIfPresent(Int.self, forKey: .systemRingDroppedChunks)
+        systemRingTruncatedChunks = try container.decodeIfPresent(Int.self, forKey: .systemRingTruncatedChunks)
+        micRingDroppedChunks = try container.decodeIfPresent(Int.self, forKey: .micRingDroppedChunks)
+        micRingTruncatedChunks = try container.decodeIfPresent(Int.self, forKey: .micRingTruncatedChunks)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -176,6 +215,11 @@ public struct CaptureMeta: Codable, Equatable, Sendable {
         try container.encodeIfPresent(systemAudioLostAt, forKey: .systemAudioLostAt)
         try container.encodeIfPresent(systemAudioRestoredAt, forKey: .systemAudioRestoredAt)
         try container.encodeIfPresent(systemAudioLossCount, forKey: .systemAudioLossCount)
+        try container.encodeIfPresent(writeError, forKey: .writeError)
+        try container.encodeIfPresent(systemRingDroppedChunks, forKey: .systemRingDroppedChunks)
+        try container.encodeIfPresent(systemRingTruncatedChunks, forKey: .systemRingTruncatedChunks)
+        try container.encodeIfPresent(micRingDroppedChunks, forKey: .micRingDroppedChunks)
+        try container.encodeIfPresent(micRingTruncatedChunks, forKey: .micRingTruncatedChunks)
     }
 }
 
