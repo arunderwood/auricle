@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: '2026-05-02'
-last_updated: '09-22-2026 12:00'
+last_updated: '09-23-2026 17:18'
 project: auricle
 project_key: NOKEY
 tracking_system: file-system
@@ -87,18 +87,18 @@ development_status:
   4-15-summarizer-under-production-on-es2002b-and-es2004a: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-permissionchecker-tcc-categories-deep-link-urls: backlog
-  5-2-process-tap-avaudioengine-capture-session-audiomixer: backlog
-  5-3-wavwriter-streaming-pcm-16-bit-16khz-mono-wav: backlog
-  5-4-capture-stage-state-machine-integration-crash-recovery-mid-c: backlog
-  5-5-recordingindicator-atomic-component-privacy-contract-surface: backlog
-  5-6-throwaway-debug-record-trigger-epic-6-deletes-it: backlog
-  5-7-onboardingcoordinator-welcome-vault-obsidian-api-key-expecta: backlog
-  5-8-j0-permission-steps-microphone-system-audio-notifications: backlog
-  5-9-self-wikilink-setup-during-onboarding: backlog
-  5-10-configwriter-self-wikilink-key: backlog
-  epic-5-retrospective: optional
+  epic-5: done
+  5-1-permissionchecker-tcc-categories-deep-link-urls: done
+  5-2-process-tap-avaudioengine-capture-session-audiomixer: done
+  5-3-wavwriter-streaming-pcm-16-bit-16khz-mono-wav: done
+  5-4-capture-stage-state-machine-integration-crash-recovery-mid-c: done
+  5-5-recordingindicator-atomic-component-privacy-contract-surface: done
+  5-6-throwaway-debug-record-trigger-epic-6-deletes-it: done
+  5-7-onboardingcoordinator-welcome-vault-obsidian-api-key-expecta: done
+  5-8-j0-permission-steps-microphone-system-audio-notifications: done
+  5-9-self-wikilink-setup-during-onboarding: done
+  5-10-configwriter-self-wikilink-key: done
+  epic-5-retrospective: done
 
   epic-6: backlog
   6-1-designtokens-statechip-atomic-state-chip-palette: backlog
@@ -511,3 +511,37 @@ action_items:
     owner: "maintainer"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-2026-09-20.md"
+  - id: "epic-5-retro-item-46-fix-the-three-capture-bugs-that-would-sp"
+    epic: 5
+    action: "Fix the three capture bugs that would spoil the live run: debug trigger
+      out of sync after the stage ends a capture, write errors not saved in capture
+      metadata, onboarding Done needs a relaunch and Cmd-Shift-R works during onboarding
+      (F1, F2, F4)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-09-23.md"
+  - id: "epic-5-retro-item-47-record-real-meetings-teams-meet-in-chrom"
+    epic: 5
+    action: "Record real meetings (Teams, Meet in Chrome, Zoom) with Cmd-Shift-R;
+      log far-side audibility and mic_included/exact_zero_seconds/tap_rebuilds from
+      stage_events in the 5.6 spec; settle F6 and the open live checks in deferred-work.md.
+      Gate for accepting Epic 5"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-09-23.md"
+  - id: "epic-5-retro-item-48-close-recovery-and-test-gaps-recovery-fo"
+    epic: 5
+    action: "Close recovery and test gaps: recovery for stranded captured meetings,
+      move runPipelineAfterCapture into Sources with tests, CLI config-path override,
+      reject unknown keys in config set (F3, F5, F7)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-09-23.md"
+  - id: "epic-5-retro-item-49-reconcile-docs-with-the-build-epics-md-c"
+    epic: 5
+    action: "Reconcile docs with the build: epics.md capture ACs, architecture.md
+      Decision 1.4 and source tree, onboarding notification copy, 5.5/5.8/5.10 deferrals
+      into deferred-work.md, shared test fakes into TestSupport (S2, S4, S5, A2)"
+    owner: "the maintainer"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-2026-09-23.md"
