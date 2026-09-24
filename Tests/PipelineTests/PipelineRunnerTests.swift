@@ -174,6 +174,25 @@ func aPermanentFailureIsRefusedNamingForce(state: PipelineState) async throws {
     #expect(try await fixture.meeting().state == "captured")
 }
 
+@Test func theMissingVaultMessageNamesTheConfigFileInUse() async throws {
+    let fixture = try await PipelineFixture(state: .captured)
+    defer { fixture.cleanUp() }
+    try fixture.plantMapping()
+    let launcher = ScriptedLauncher(fixture.simulatedWorkers())
+    let runner = PipelineRunner(environment: PipelineRunner.Environment(
+        stateStore: fixture.store,
+        launcher: launcher,
+        notifier: fixture.notifier,
+        vaultPath: nil,
+        meetingsSubdir: "Meetings",
+        configDisplayPath: "/tmp/x/config.toml",
+    ))
+
+    let result = await runner.run(meetingID: fixture.meetingID, options: RunOptions())
+
+    #expect(result.message == "vault_path is not set in /tmp/x/config.toml.")
+}
+
 @Test func anUnknownMeetingExitsThree() async throws {
     let fixture = try await PipelineFixture(state: .captured)
     defer { fixture.cleanUp() }

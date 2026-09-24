@@ -42,6 +42,34 @@ private func roundTrip(_ metadata: StageMetadata) throws -> StageMetadata {
     #expect(object["system_audio_loss_count"] as? Int == 2)
 }
 
+@Test func captureMetaWriteErrorAndRingCountsRoundTripInSnakeCase() throws {
+    let meta = CaptureMeta(
+        writeError: "diskFull",
+        systemRingDroppedChunks: 1,
+        systemRingTruncatedChunks: 2,
+        micRingDroppedChunks: 3,
+        micRingTruncatedChunks: 4,
+    )
+    #expect(try roundTrip(.capture(meta)) == .capture(meta))
+
+    let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(meta)) as? [String: Any])
+    #expect(object["write_error"] as? String == "diskFull")
+    #expect(object["system_ring_dropped_chunks"] as? Int == 1)
+    #expect(object["system_ring_truncated_chunks"] as? Int == 2)
+    #expect(object["mic_ring_dropped_chunks"] as? Int == 3)
+    #expect(object["mic_ring_truncated_chunks"] as? Int == 4)
+}
+
+/// `stop` writes `mic_included`; recovery writes `reason`; an import writes
+/// keys this type does not have.
+@Test func onlyTheStopPayloadIsAStoppedCapture() throws {
+    #expect(CaptureMeta(micIncluded: false, exactZeroSeconds: 0, tapRebuilds: 0).isStoppedCapture)
+    #expect(!CaptureMeta(reason: "recovered_after_interruption").isStoppedCapture)
+    #expect(!CaptureMeta(micIncluded: true, reason: "recovered_after_interruption").isStoppedCapture)
+    let imported = try JSONDecoder().decode(CaptureMeta.self, from: Data(#"{"source_format":"wav","audio_duration_seconds":3}"#.utf8))
+    #expect(!imported.isStoppedCapture)
+}
+
 /// An absent field is left out, not written as null, so a row carries only
 /// what its event knew.
 @Test func captureMetaOmitsFieldsItDoesNotHave() throws {

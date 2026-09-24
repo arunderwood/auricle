@@ -5,26 +5,16 @@ import CoreAudio
 import Foundation
 import Permissions
 import Testing
+import TestSupport
 
-/// Reports a fixed status for `.microphone`, mirroring how
-/// `Tests/PermissionsTests` fakes `PermissionChecking` — no live TCC state
-/// or OS prompt involved.
-private struct FakePermissionChecker: PermissionChecking {
-    let microphoneStatus: PermissionStatus
-
-    func check(_ category: TCCCategory) async -> PermissionStatus {
-        category == .microphone ? microphoneStatus : .unknown
-    }
-
-    func request(_ category: TCCCategory) async -> PermissionStatus {
-        category == .microphone ? microphoneStatus : .unknown
-    }
-
-    func refresh() async {}
-
-    func remediationDeepLink(for _: TCCCategory) -> URL? {
-        nil
-    }
+/// Answers `status` for the microphone and `.unknown` for everything else.
+private func microphoneChecker(_ status: PermissionStatus) -> FakePermissionChecker {
+    FakePermissionChecker(
+        checkResult: .unknown,
+        requestResult: .unknown,
+        checkResults: [.microphone: status],
+        requestResults: [.microphone: status],
+    )
 }
 
 /// A `SystemAudioSource` double: no Core Audio involved, so
@@ -161,7 +151,7 @@ private struct SessionFixture {
             meetingID: meetingID,
             engine: AVAudioEngine(),
             systemAudioSource: systemAudioSource,
-            permissionChecker: FakePermissionChecker(microphoneStatus: micStatus),
+            permissionChecker: microphoneChecker(micStatus),
             cacheDirectory: { root.appendingPathComponent($0.rawValue, isDirectory: true) },
             startEngine: startEngine,
             makeWriter: makeWriter,

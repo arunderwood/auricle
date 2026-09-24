@@ -130,7 +130,7 @@ struct ConfigureStepView: View {
 
     private var expectationsSubStep: some View {
         VStack(spacing: 12) {
-            Text("Start a recording before your meeting and stop it after; you'll get a notification when the summary is ready")
+            Text("Start a recording before your meeting and stop it after. auricle transcribes it on this Mac, then waits for you to name the speakers.")
                 .font(.title2)
                 .multilineTextAlignment(.center)
             Button("Finish") {

@@ -62,7 +62,14 @@ import Testing
     let fixture = try StageFixture()
     defer { fixture.cleanUp() }
     let session = fixture.recording()
-    session.stats.value = CaptureWatchdogStats(exactZeroSeconds: 12.5, rebuildCount: 2)
+    session.stats.value = CaptureWatchdogStats(
+        exactZeroSeconds: 12.5,
+        rebuildCount: 2,
+        systemRingDroppedChunkCount: 3,
+        systemRingTruncatedChunkCount: 4,
+        micRingDroppedChunkCount: 5,
+        micRingTruncatedChunkCount: 6,
+    )
     let stage = fixture.stage(session: session)
     _ = try await stage.start(meetingID: fixture.id)
     try fixture.writeFinalizedWAV(seconds: 3, for: fixture.id)
@@ -77,7 +84,17 @@ import Testing
     #expect(meeting.durationSeconds == 3)
     let events = try await fixture.events(fixture.id)
     #expect(events.map(\.event) == ["started", "completed"])
-    #expect(try metadata(events.last) == CaptureMeta(micIncluded: true, exactZeroSeconds: 12.5, tapRebuilds: 2))
+    #expect(try metadata(events.last) == CaptureMeta(
+        micIncluded: true,
+        exactZeroSeconds: 12.5,
+        tapRebuilds: 2,
+        systemRingDroppedChunks: 3,
+        systemRingTruncatedChunks: 4,
+        micRingDroppedChunks: 5,
+        micRingTruncatedChunks: 6,
+    ))
+    // Every write succeeded, so the key is absent, not null.
+    #expect(events.last?.metadataJSON?.contains("write_error") == false)
     try await eventually { fixture.captured.value == [fixture.id] }
 }
 

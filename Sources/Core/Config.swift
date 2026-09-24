@@ -94,23 +94,72 @@ public struct Config: Sendable, Equatable {
         self.selfWikilink = selfWikilink
     }
 
-    public static func defaultFileURL(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
-        homeDirectory
+    /// Names the config file in place of `~/.auricle/config.toml`. An
+    /// environment variable rather than a CLI option: stage workers are
+    /// subprocesses that load the config themselves, and they inherit the
+    /// environment, so one variable points every verb, every worker and the
+    /// GUI at the same file. `homeDirectoryForCurrentUser` ignores `HOME`, so
+    /// this is the only way to aim auricle at a scratch config. It moves only
+    /// the config file: the state database and caches stay in their macOS
+    /// directories.
+    public static let fileOverrideVariable = "AURICLE_CONFIG"
+
+    /// Every key `set` may write, dotted for nested tables: the keys this
+    /// type reads. A key outside it would be written and then never read.
+    public static let settableKeys = [
+        "vault_path",
+        "meetings_subdir",
+        "google_calendar.client_id",
+        "google_calendar.client_secret",
+        "attribution.snippet_duration_seconds",
+        "diarization_review.enabled",
+        "diarization_review.model",
+        "self.wikilink",
+    ]
+
+    /// `~/.auricle/config.toml`, or the file a non-empty `AURICLE_CONFIG`
+    /// names, with a leading `~` expanded against `homeDirectory`.
+    public static func defaultFileURL(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+    ) -> URL {
+        if let override = environment[fileOverrideVariable], !override.isEmpty {
+            return URL(fileURLWithPath: expandingTilde(override, homeDirectory: homeDirectory), isDirectory: false)
+        }
+        return homeDirectory
             .appendingPathComponent(".auricle", isDirectory: true)
             .appendingPathComponent("config.toml", isDirectory: false)
+    }
+
+    /// `url` as a message shows it, with the home directory abbreviated to
+    /// `~`, so a message names the file actually in use without printing
+    /// the user's home path.
+    public static func displayPath(
+        of url: URL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+    ) -> String {
+        let path = url.standardizedFileURL.path
+        let home = homeDirectory.standardizedFileURL.path
+        if path == home {
+            return "~"
+        }
+        let prefix = home.hasSuffix("/") ? home : home + "/"
+        return path.hasPrefix(prefix) ? "~/" + path.dropFirst(prefix.count) : path
     }
 
     /// A missing file is the defaults, not an error: nobody has to write a
     /// config to run. A file that exists but cannot be used throws, so a typo
     /// is never silently read as "unset".
     ///
-    /// `homeDirectory` is what a leading `~` expands to. Both parameters exist
-    /// so tests never read the real `~/.auricle`.
+    /// `homeDirectory` is what a leading `~` expands to. It and `environment`
+    /// exist so tests never read the real `~/.auricle` or a developer's
+    /// `AURICLE_CONFIG`.
     public static func load(
         from fileURL: URL? = nil,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
     ) throws -> Config {
-        let url = fileURL ?? defaultFileURL(homeDirectory: homeDirectory)
+        let url = fileURL ?? defaultFileURL(homeDirectory: homeDirectory, environment: environment)
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -178,22 +227,27 @@ public struct Config: Sendable, Equatable {
         return value
     }
 
-    /// Only a bare `~` or a `~/` prefix expands. Another user's `~name` has no
-    /// meaning to a tool that reads one user's file, and falls through to the
-    /// absolute-path check.
+    /// A `~name` value is left as written, so it fails the absolute-path
+    /// check.
     private static func vaultURL(_ value: String?, homeDirectory: URL) throws -> URL? {
         guard let value = nonEmpty(value) else { return nil }
-        let expanded = if value == "~" {
+        let expanded = expandingTilde(value, homeDirectory: homeDirectory)
+        guard expanded.hasPrefix("/") else {
+            throw ConfigError.invalidValue(key: "vault_path", reason: "must be an absolute path or start with ~/")
+        }
+        return URL(fileURLWithPath: expanded, isDirectory: true)
+    }
+
+    /// Only a bare `~` or a `~/` prefix expands. Another user's `~name` has no
+    /// meaning to a tool that reads one user's file.
+    private static func expandingTilde(_ value: String, homeDirectory: URL) -> String {
+        if value == "~" {
             homeDirectory.path
         } else if value.hasPrefix("~/") {
             "\(homeDirectory.path)/\(value.dropFirst(2))"
         } else {
             value
         }
-        guard expanded.hasPrefix("/") else {
-            throw ConfigError.invalidValue(key: "vault_path", reason: "must be an absolute path or start with ~/")
-        }
-        return URL(fileURLWithPath: expanded, isDirectory: true)
     }
 
     private static func meetingsSubdir(_ value: String?) throws -> String {

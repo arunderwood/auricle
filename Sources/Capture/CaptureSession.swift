@@ -150,8 +150,9 @@ public final class CaptureSession: @unchecked Sendable {
         self.noCallbackThreshold = noCallbackThreshold
     }
 
-    /// A snapshot of the system-audio watchdog's counters, for Story 5.4's
-    /// capture metadata to read once it exists.
+    /// A snapshot of the watchdog's counters, the rings' losses and the
+    /// first write error. `CaptureStage` reads it after `stop()` for the
+    /// capture's `stage_events` metadata.
     public var watchdogStats: CaptureWatchdogStats {
         let systemRingStats = systemAudioSource.ringLossStats
         let micRingStats = micRing.snapshotDropStats()

@@ -51,6 +51,8 @@ public struct PipelineRunner: Sendable {
         public let meetingsSubdir: String
         public let glossary: Glossary
         public let clock: PersistStage.TimeSource
+        /// The config file as messages name it, home abbreviated to `~`.
+        public let configDisplayPath: String
 
         public init(
             stateStore: StateStore,
@@ -60,6 +62,7 @@ public struct PipelineRunner: Sendable {
             meetingsSubdir: String,
             glossary: Glossary = Glossary(),
             clock: PersistStage.TimeSource = PersistStage.TimeSource(),
+            configDisplayPath: String = Config.displayPath(of: Config.defaultFileURL()),
         ) {
             self.stateStore = stateStore
             self.launcher = launcher
@@ -68,6 +71,7 @@ public struct PipelineRunner: Sendable {
             self.meetingsSubdir = meetingsSubdir
             self.glossary = glossary
             self.clock = clock
+            self.configDisplayPath = configDisplayPath
         }
     }
 
@@ -140,7 +144,7 @@ public struct PipelineRunner: Sendable {
             return .stop(RunResult(exitCode: WorkerExitCode.success, message: "nothing to run from state \(state.rawValue)."))
         }
         if plan.stages.contains(.persist), environment.vaultPath == nil {
-            return .stop(RunResult(exitCode: WorkerExitCode.callerError, message: "vault_path is not set in ~/.auricle/config.toml."))
+            return .stop(RunResult(exitCode: WorkerExitCode.callerError, message: "vault_path is not set in \(environment.configDisplayPath)."))
         }
         return .ready(plan)
     }
@@ -243,7 +247,7 @@ public struct PipelineRunner: Sendable {
 
     private func runPersist(meetingID: MeetingID, expectedState: PipelineState) async throws -> RunResult? {
         guard let vaultPath = environment.vaultPath else {
-            return RunResult(exitCode: WorkerExitCode.callerError, message: "vault_path is not set in ~/.auricle/config.toml.")
+            return RunResult(exitCode: WorkerExitCode.callerError, message: "vault_path is not set in \(environment.configDisplayPath).")
         }
         let outcome = try await PersistStage.run(
             meetingID: meetingID,

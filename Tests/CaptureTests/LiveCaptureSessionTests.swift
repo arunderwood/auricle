@@ -3,23 +3,17 @@ import Core
 import Foundation
 import Permissions
 import Testing
+import TestSupport
 
 /// Reports `.denied` for the microphone, so `CaptureSession` never starts the
 /// real engine and no test needs audio hardware.
-private struct DeniedMicrophoneChecker: PermissionChecking {
-    func check(_ category: TCCCategory) async -> PermissionStatus {
-        category == .microphone ? .denied : .unknown
-    }
-
-    func request(_ category: TCCCategory) async -> PermissionStatus {
-        await check(category)
-    }
-
-    func refresh() async {}
-
-    func remediationDeepLink(for _: TCCCategory) -> URL? {
-        nil
-    }
+private func deniedMicrophoneChecker() -> FakePermissionChecker {
+    FakePermissionChecker(
+        checkResult: .unknown,
+        requestResult: .unknown,
+        checkResults: [.microphone: .denied],
+        requestResults: [.microphone: .denied],
+    )
 }
 
 private struct SourceFailure: Error, CustomStringConvertible {
@@ -68,7 +62,7 @@ private final class FailingSource: SystemAudioSource, @unchecked Sendable {
 private func makeSession(source: FailingSource, root: URL) -> LiveCaptureSession {
     LiveCaptureSession(
         meetingID: .generate(),
-        permissionChecker: DeniedMicrophoneChecker(),
+        permissionChecker: deniedMicrophoneChecker(),
         cacheDirectory: { root.appendingPathComponent($0.rawValue, isDirectory: true) },
         systemAudioSource: source,
     )
@@ -142,4 +136,44 @@ private func collectFaults(_ session: LiveCaptureSession) async -> [CaptureStrea
     try await session.restart(.systemAudio)
 
     #expect(source.rebuildCount == 0)
+}
+
+// MARK: - Configuration-change classification
+
+@Test func aConfigurationChangeThatStopsTheEngineWithTheMicrophoneDeniedIsARevocation() async {
+    let checker = FakePermissionChecker(checkResults: [.microphone: .denied])
+
+    let fault = await LiveCaptureSession.configurationChangeFault(engineRunning: false, micIncluded: true, observing: true, checker: checker)
+
+    #expect(fault == .permissionRevoked(.microphone))
+    // A refreshed answer, not the memo from when the capture started.
+    #expect(checker.calls == [.refresh, .check(.microphone)])
+}
+
+@Test(arguments: [PermissionStatus.granted, .notDetermined, .unknown])
+func aConfigurationChangeThatStopsTheEngineWithTheMicrophoneNotDeniedIsTransient(status: PermissionStatus) async {
+    let checker = FakePermissionChecker(checkResults: [.microphone: status])
+
+    let fault = await LiveCaptureSession.configurationChangeFault(engineRunning: false, micIncluded: true, observing: true, checker: checker)
+
+    #expect(fault == .transient(.microphone, reason: "microphone engine stopped after a configuration change"))
+}
+
+@Test(arguments: [
+    (engineRunning: true, micIncluded: true, observing: true),
+    (engineRunning: false, micIncluded: false, observing: true),
+    (engineRunning: false, micIncluded: true, observing: false),
+])
+func aConfigurationChangeTheCaptureRodeOutIsNoFault(engineRunning: Bool, micIncluded: Bool, observing: Bool) async {
+    let checker = FakePermissionChecker(checkResults: [.microphone: .denied])
+
+    let fault = await LiveCaptureSession.configurationChangeFault(
+        engineRunning: engineRunning,
+        micIncluded: micIncluded,
+        observing: observing,
+        checker: checker,
+    )
+
+    #expect(fault == nil)
+    #expect(checker.calls.isEmpty)
 }

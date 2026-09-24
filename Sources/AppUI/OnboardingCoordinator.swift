@@ -22,11 +22,14 @@ public final class OnboardingCoordinator {
     private let opener: URLOpener
     private let permissionSteps: [TCCCategory: any OnboardingPermissionStep]
     private let applicationSupportDirectory: URL
+    private let progress: OnboardingProgress
+    private var completed = false
 
     public init(
         checker: any PermissionChecking,
         configure: OnboardingConfigureModel,
         applicationSupportDirectory: URL,
+        progress: OnboardingProgress,
         opener: @escaping URLOpener,
         permissionSteps: [TCCCategory: any OnboardingPermissionStep]? = nil,
     ) {
@@ -39,6 +42,7 @@ public final class OnboardingCoordinator {
             .notifications: DefaultPermissionStep(category: .notifications),
         ]
         self.applicationSupportDirectory = applicationSupportDirectory
+        self.progress = progress
     }
 
     /// Moves to the next step in `OnboardingStep.allCases` order. A no-op
@@ -108,6 +112,15 @@ public final class OnboardingCoordinator {
     public func completeOnboarding() throws {
         try configure.finish()
         try OnboardingMarker.write(applicationSupportDirectory: applicationSupportDirectory)
+        completed = true
+    }
+
+    /// Hands the window over to the main app. A no-op until
+    /// `completeOnboarding()` has succeeded: without the marker on disk, the
+    /// next launch would put the user back through onboarding.
+    public func enterApp() {
+        guard completed else { return }
+        progress.markComplete()
     }
 
     private func permissionCategory(for step: OnboardingStep) -> TCCCategory? {

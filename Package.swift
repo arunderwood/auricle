@@ -1,5 +1,5 @@
 // swift-tools-version: 6.3
-// AuricleKit — single SwiftPM library, 26 modular targets per AR-INIT-5.
+// AuricleKit — single SwiftPM library, one modular target per module, per AR-INIT-5.
 // Module boundaries are the architecture: cross-target imports declared here are
 // the ONLY intended imports. Plain `swift build` does not reject an undeclared
 // cross-edge — that needs `--explicit-target-dependency-import-check error`,
@@ -165,7 +165,7 @@ let package = Package(
         .target(name: "VaultGlossary", dependencies: ["Core"], path: "Sources/VaultGlossary"),
 
         // === Test support ===
-        .target(name: "TestSupport", dependencies: ["Core"], path: "Sources/TestSupport"),
+        .target(name: "TestSupport", dependencies: ["Core", "Permissions"], path: "Sources/TestSupport"),
 
         // === GUI-facing views ===
         .target(name: "AppUI", dependencies: ["Core", "Permissions", "Capture"], path: "Sources/AppUI"),
@@ -318,7 +318,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AppUITests",
-            dependencies: ["AppUI", "Permissions", "Capture", "Core", "VaultGlossary", "State", "Telemetry", "Notifications"],
+            dependencies: ["AppUI", "TestSupport", "Permissions", "Capture", "Core", "VaultGlossary", "State", "Telemetry", "Notifications"],
             path: "Tests/AppUITests",
         ),
     ],

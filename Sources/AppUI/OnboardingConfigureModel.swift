@@ -8,15 +8,6 @@ import Observation
 /// ever actually opened.
 public typealias URLOpener = @Sendable (URL) async -> Bool
 
-/// A vault path failed `validateVaultPath`. Mirrors `VaultWriter.WriteError`'s
-/// two relevant cases without depending on `Persist` from `AppUI` — the
-/// composition root translates between them.
-public enum VaultPathValidationError: Error, Sendable, Equatable {
-    case missing(path: String)
-    case notWritable(path: String)
-    case other(String)
-}
-
 /// The Configure step's sub-steps, advanced in this order as each completes.
 public enum ConfigureSubStep: CaseIterable, Sendable, Equatable {
     case vaultPath
@@ -211,7 +202,8 @@ public final class OnboardingConfigureModel {
     }
 
     /// Writes the validated vault path, then the confirmed `self.wikilink`
-    /// when there is one, to `~/.auricle/config.toml`.
+    /// when there is one, to the config file (`Config.defaultFileURL()`:
+    /// `~/.auricle/config.toml` unless `AURICLE_CONFIG` names another).
     /// `OnboardingCoordinator.completeOnboarding()` calls this exactly once.
     public func finish() throws {
         guard let vaultPath else { throw FinishError.vaultPathNotSelected }

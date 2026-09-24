@@ -26,7 +26,7 @@ struct RunVerb: AsyncParsableCommand {
         do {
             config = try Config.load()
         } catch {
-            throw failure("~/.auricle/config.toml could not be read (\(type(of: error))).")
+            throw failure("\(Config.displayPath(of: Config.defaultFileURL())) could not be read (\(type(of: error))).")
         }
         let runner = try PipelineRunner(environment: environment(config: config))
 

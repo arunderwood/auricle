@@ -1,7 +1,10 @@
 import Foundation
 
-/// A snapshot of `CaptureSession`'s system-audio watchdog counters, for
-/// Story 5.4's capture metadata to read once it exists.
+/// A snapshot of `CaptureSession`'s watchdog counters, ring losses and
+/// first write error. `CaptureStage` copies every counter except the
+/// rate-correction count into the `completed` event's metadata, and into a
+/// `failed` event's when the session had started, so a capture that lost
+/// audio says so in `stage_events`.
 public struct CaptureWatchdogStats: Sendable, Equatable {
     public let exactZeroSeconds: Double
     public let rebuildCount: Int

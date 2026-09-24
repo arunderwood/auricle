@@ -2540,6 +2540,10 @@ So that the captured audio is Whisper-native and covers any meeting platform (Zo
 **And** it counts rebuilds and exact-zero seconds for the capture metadata (Story 5.4)
 **And** it never fails the capture: exact zeros also mean "nothing is playing" or "permission missing", and the three cannot be told apart
 
+**Given** the system-audio IOProc stops calling back entirely for 5 seconds (the aggregate device's output device was removed or changed)
+**When** the watchdog notices
+**Then** it rebuilds the tap the same way, counted in the same rebuild count: a dead IOProc delivers no buffers at all, so the exact-zero check alone can never see it
+
 **Given** Microphone permission is denied at session start
 **When** I call `CaptureSession.start()`
 **Then** the session records system audio only and reports `micIncluded == false`
@@ -2633,9 +2637,11 @@ So that capture state is canonical in SQLite and partial audio is never lost.
 **And** a System Audio Recording revocation the OS does not report shows up only as exact zeros, which the Story 5.2 metadata records
 
 **Given** transient stream errors
-**When** fewer than 3 happen within 30s (Decision 4.2)
-**Then** the stage restarts the source inline with one `stage_events.retried` row per attempt
-**And** the third within 30s moves the meeting to `capture_failed`
+**When** fewer than 3 happen on one source within 30s (Decision 4.2), each source counted on its own
+**Then** the stage restarts that source inline with one `stage_events.retried` row per attempt
+**And** the third system-audio fault within 30s does not fail the capture: it degrades to microphone-only and retries system audio with a 5s / 15s / 30s / 60s backoff (then every 60s), one `retried` row per attempt, restoring it when a rebuild succeeds; the `completed` metadata records the loss (`system_audio_lost_at`, `system_audio_restored_at`, `system_audio_loss_count`)
+**And** losing system audio with no microphone in the mix fails the capture as `all_sources_lost`
+**And** the third microphone fault within 30s moves the meeting to `capture_failed` as `transient_stream_errors`, or as `all_sources_lost` when system audio is already lost
 
 **Given** the test suite
 **When** I run `Tests/CaptureTests/CaptureStageTests.swift`
@@ -2736,7 +2742,7 @@ So that Day-1 trust is the gate to Day-30.
 - vault path picker: defaults to the configured `vault_path` or `~/checkouts/SecondBrain` (AR-DATA-9); validates per Story 2.3; never creates the vault
 - Obsidian check: opens `obsidian://open?vault=<vault name>`; success means the URL opened; no test note is written; if Obsidian is not installed, it says *"Install Obsidian to use auricle's vault output"* and does not block
 - Anthropic API key: stored with `KeychainAPIKey.write(...)` (Story 3.3); skippable, and summarization is unavailable until it is set (UX-DR41)
-- first-meeting expectations: *"Start a recording before your meeting and stop it after; you'll get a notification when the summary is ready"*
+- first-meeting expectations: *"Start a recording before your meeting and stop it after. auricle transcribes it on this Mac, then waits for you to name the speakers."*
 **And** Story 5.9's `self.wikilink` sub-step sits after the vault picker
 **And** calendar connection is not an onboarding step in this epic; it stays with Story 3.10's flow and Settings (Story 9.1)
 

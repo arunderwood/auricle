@@ -218,14 +218,14 @@ struct SelfWikilinkRoundTripTests {
 
         let model = try makeModel(
             vaultDirectory: vaultDirectory,
-            writeVaultPath: { try ConfigWriter.set("vault_path", to: $0.path, homeDirectory: home) },
-            writeSelfWikilink: { try ConfigWriter.set("self.wikilink", to: $0, homeDirectory: home) },
+            writeVaultPath: { try ConfigWriter.set("vault_path", to: $0.path, homeDirectory: home, environment: [:]) },
+            writeSelfWikilink: { try ConfigWriter.set("self.wikilink", to: $0, homeDirectory: home, environment: [:]) },
         )
         model.selfWikilinkText = "  [[Jordan]]  "
         try model.confirmSelfWikilink()
         try model.finish()
 
-        let config = try Config.load(homeDirectory: home)
+        let config = try Config.load(homeDirectory: home, environment: [:])
         #expect(config.selfWikilink == "[[Jordan]]")
         #expect(config.vaultPath?.standardizedFileURL.path == vaultDirectory.standardizedFileURL.path)
     }
