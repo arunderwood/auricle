@@ -24,7 +24,7 @@ runs:
     # single `mise install` is enough to exhaust on its own. The default token
     # raises that to 5,000/hr and needs no permission beyond contents: read.
     - name: Install the mise toolchain
-      uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
       with:
         version: 2026.9.10
         github_token: ${{ github.token }}
