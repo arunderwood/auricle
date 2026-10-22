@@ -1,5 +1,5 @@
 {
-  "originHash" : "63a0ec79d1abb198907cbbd344726e9273f2926f3c3cc158ed463a50c64e23e7",
+  "originHash" : "5e9a2a5fc33838863de602065489f15fc3a53745ed26374bfa64c27968062b41",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/argmaxinc/WhisperKit.git",
       "state" : {
-        "revision" : "1e2a163736dfa5a198e637ae44c114e1c6d5cc2d",
-        "version" : "1.1.0"
+        "revision" : "1bbc57cb7fe6410248a685b1c5a3c6d56adc2ed4",
+        "version" : "1.1.1"
       }
     },
     {
